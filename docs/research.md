@@ -1,4 +1,4 @@
-# Market research & ideas
+﻿# Market research
 
 ## What Stockline does today
 YC S25, founded by two X22 students. They describe themselves as an "AI-native ERP for food wholesalers" (fish, meat, cheese, produce, flowers).
@@ -17,14 +17,5 @@ Choco is the big one: it says it serves 21k+ distributors, sells an AI order-cap
 - **Anti-waste law:** wholesalers above €50M turnover must offer donation agreements to food charities, and donated food needs at least 48h left before its use-by date (DLC).
 - **E-invoicing:** every company must be able to receive e-invoices since 1 Sept 2026, and SMEs must issue them from Sept 2027.
 
-## Idea shortlist (final pick on Monday, after we see the real challenge)
-| # | Idea | Pitch |
-|---|---|---|
-| A | **Shortage & substitution agent** | At 4am it finds what's short for tomorrow's orders, offers each restaurant a substitute that fits its profile on WhatsApp, collects the answers and updates the orders |
-| B | **Anti-waste agent for short-dated stock** | Ranks lots by risk of expiring unsold, offers them first to the customers most likely to buy at a discount, and sends anything within 48h of its DLC to a generated donation agreement |
-| C | **Margin guard** | Loads daily Rungis/RNM prices and supplier price lists, flags customer prices below a margin floor, drafts new price lists |
-| D | **Complaints & credit-note agent** | "2kg short, cod not fresh" plus a photo leads to matching the order line and lot, a drafted credit note, and a quality score per supplier |
-| E | **Outbound voice sales rep** | Calls restaurants that haven't ordered by their usual time: "Chef, the usual?" |
-| F | **Collections + e-invoicing** | Polite payment reminders on WhatsApp, and a credit hold on the account when an order arrives |
+Our idea, built on this research: [idea.md](idea.md)
 
-Favourites: **A** or **B**, with C's price data inside.

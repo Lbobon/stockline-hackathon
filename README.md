@@ -2,8 +2,10 @@
 
 24h hackathon: **AI agents for the food supply chain**, built as an add-on to [Stockline](https://stockline.ai).
 
+**What we're building: an AI phone sales rep.** It calls restaurants in French, takes their order, sells the right products and puts everything into Stockline for a person to approve. Full spec: [docs/idea.md](docs/idea.md)
+
 - 📅 Mon 23/11 19:00 → Tue 24/11 19:00 at l'X. Finalists pitch at the X-Forum on Wed 25/11
-- 📚 Market research and idea shortlist: [docs/research.md](docs/research.md)
+- 📚 Market research: [docs/research.md](docs/research.md)
 - 🗂️ Task board: the repo's **Projects** tab ("Stockline Hackathon")
 
 ## Team
@@ -55,7 +57,7 @@ Proposed roles: **Agent/LLM lead** · **Data & integrations** · **Frontend & de
 
 | When | What |
 |---|---|
-| 19:00–20:00 | Hear the challenge, ask Stockline what hurts most, pick the idea, write the 3-minute demo script |
+| 19:00–20:00 | Hear the challenge, ask Stockline the questions in [idea.md](docs/idea.md), adjust the 3-minute demo script |
 | 20:00–21:00 | Agree on the stack, data schema and API contract, create the issues |
 | 21:00–01:00 | Ugly but working from start to finish |
 | 01:00–07:00 | Sleep in pairs (3h shifts) while the others keep building |
