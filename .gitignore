@@ -1,0 +1,29 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# hackathon data from Stockline: never push
+data/raw/*
+!data/raw/.gitkeep
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.db
+.pytest_cache/
+
+# node
+node_modules/
+.next/
+dist/
+build/
+
+# os / editors
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
