@@ -13,7 +13,7 @@
 | Name | GitHub | Role | Owns |
 |---|---|---|---|
 | Loric | @Lbobon | _TBD_ | |
-| Yuvaan | @yuvaan-d-gupta | TBD |
+| Yuvaan | @yuvaan-d-gupta | TBD | |
 | _teammate 3_ | | _TBD_ | |
 | _teammate 4_ | | _TBD_ | |
 
