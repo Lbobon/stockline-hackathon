@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Appel test · Stockline</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --card: #ffffff; --text: #1c1b19; --muted: #6b6860; --line: #e4e1da;
+    --accent: #1f6f4a; --accent-text: #ffffff; --danger: #b3261e; --agent: #eef5f1; --client: #f1f0ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151513; --card: #1f1f1c; --text: #ecebe6; --muted: #a09d94; --line: #33322e;
+      --accent: #4fb386; --accent-text: #0d1f16; --danger: #f2827a; --agent: #1d2b24; --client: #2a2925;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #151513; --card: #1f1f1c; --text: #ecebe6; --muted: #a09d94; --line: #33322e;
+    --accent: #4fb386; --accent-text: #0d1f16; --danger: #f2827a; --agent: #1d2b24; --client: #2a2925;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 1.4rem; margin: 0; }
+  a { color: var(--accent); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-top: 16px; }
+  label { font-size: .85rem; color: var(--muted); display: block; margin-bottom: 6px; }
+  select { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); font: inherit; }
+  dl { margin: 12px 0 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; font-size: .95rem; }
+  dt { color: var(--muted); }
+  dd { margin: 0; }
+  .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 999px; padding: 12px 22px; cursor: pointer; }
+  #call { background: var(--accent); color: var(--accent-text); }
+  #hangup { background: var(--danger); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  #status { color: var(--muted); font-size: .95rem; }
+  #status.live::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); margin-right: 8px; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  #transcript { display: flex; flex-direction: column; gap: 8px; min-height: 80px; }
+  .msg { padding: 8px 12px; border-radius: 10px; max-width: 85%; }
+  .msg.agent { background: var(--agent); align-self: flex-start; }
+  .msg.client { background: var(--client); align-self: flex-end; }
+  .msg small { display: block; color: var(--muted); font-size: .75rem; }
+  .empty { color: var(--muted); }
+  #order { display: none; border-color: var(--accent); }
+  #order ul { margin: 8px 0 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Appel test dans le navigateur</h1>
+    <a href="/">File de validation →</a>
+  </header>
+  <p style="color:var(--muted);margin:6px 0 0">Vous jouez le chef. L'agent vous appelle via le micro de l'ordinateur, sans ligne téléphonique.</p>
+
+  <section class="card">
+    <label for="customer">Restaurant appelé</label>
+    <select id="customer"></select>
+    <dl id="brief"></dl>
+  </section>
+
+  <section class="card controls">
+    <button id="call">Appeler</button>
+    <button id="hangup" disabled>Raccrocher</button>
+    <span id="status">Prêt</span>
+  </section>
+
+  <section class="card" id="order"></section>
+
+  <section class="card">
+    <label>Transcription</label>
+    <div id="transcript"><span class="empty">La conversation s'affichera ici.</span></div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@elevenlabs/client@1.35.0/dist/lib.iife.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let customers = [], conversation = null, transcript = [];
+
+function setStatus(text, live = false) { $('status').textContent = text; $('status').className = live ? 'live' : ''; }
+
+function showBrief() {
+  const c = customers.find((x) => x.id === $('customer').value);
+  if (!c) return;
+  $('brief').innerHTML = `<dt>Contact</dt><dd>${esc(c.contact_name)}</dd><dt>Comme d'hab</dt><dd>${esc(c.usual_order)}</dd><dt>Offre du jour</dt><dd>${esc(c.todays_offer)}</dd>`;
+}
+
+function addLine(role, text) {
+  transcript.push({ role, text });
+  if (transcript.length === 1) $('transcript').innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.innerHTML = `<small>${role === 'agent' ? 'Agent' : 'Chef'}</small>${esc(text)}`;
+  $('transcript').appendChild(div);
+  div.scrollIntoView({ block: 'nearest' });
+}
+
+function showOrder(params, orderId) {
+  const lines = (params.lines || []).map((l) => `<li>${esc(l.quantity)} ${esc(l.unit)} ${esc(l.product)}</li>`).join('');
+  $('order').style.display = 'block';
+  $('order').innerHTML = `<strong>Commande envoyée en validation</strong> (${esc(orderId)})` +
+    (lines ? `<ul>${lines}</ul>` : '<p>Aucune ligne (rappel demandé).</p>') +
+    (params.notes ? `<p><em>${esc(params.notes)}</em></p>` : '') + '<a href="/">Voir la file de validation →</a>';
+}
+
+async function start() {
+  $('call').disabled = true;
+  transcript = [];
+  $('transcript').innerHTML = '<span class="empty">La conversation s\'affichera ici.</span>';
+  $('order').style.display = 'none';
+  try {
+    setStatus('Accès au micro…');
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+    setStatus('Connexion à l\'agent…');
+    const customerId = $('customer').value;
+    const r = await fetch('/api/session?customer_id=' + encodeURIComponent(customerId));
+    const session = await r.json();
+    if (!r.ok) throw new Error(session.error || 'session refusée');
+
+    conversation = await ElevenLabsClient.Conversation.startSession({
+      signedUrl: session.signed_url,
+      dynamicVariables: session.dynamic_variables,
+      clientTools: {
+        submit_order: async (params) => {
+          const res = await fetch('/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...params, customer_id: customerId, transcript }),
+          });
+          const out = await res.json();
+          if (res.ok) showOrder(params, out.order_id);
+          return JSON.stringify(out);
+        },
+      },
+      onConnect: () => { setStatus('En ligne', true); $('hangup').disabled = false; },
+      onDisconnect: () => { setStatus('Appel terminé'); $('hangup').disabled = true; $('call').disabled = false; conversation = null; },
+      onMessage: ({ message, source }) => { if (message) addLine(source === 'ai' ? 'agent' : 'client', message); },
+      onModeChange: ({ mode }) => { if (conversation) setStatus(mode === 'speaking' ? 'L\'agent parle' : 'À vous', true); },
+      onError: (err) => { console.error(err); setStatus('Erreur : ' + (err?.message || err)); },
+    });
+  } catch (err) {
+    console.error(err);
+    setStatus('Erreur : ' + err.message);
+    $('call').disabled = false;
+  }
+}
+
+$('call').onclick = start;
+$('hangup').onclick = () => conversation?.endSession();
+$('customer').onchange = showBrief;
+
+fetch('/api/customers').then((r) => r.json()).then((list) => {
+  customers = list;
+  $('customer').innerHTML = list.map((c) => `<option value="${esc(c.id)}">${esc(c.restaurant_name)}</option>`).join('');
+  showBrief();
+});
+</script>
+</body>
+</html>
