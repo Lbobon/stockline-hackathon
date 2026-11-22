@@ -9,6 +9,11 @@ import { WebSocketServer, WebSocket } from 'ws';
 
 const EL_PORT = 18081, PORT = 18080;
 const ordersFile = path.join(os.tmpdir(), `orders-test-${process.pid}.json`);
+const customersFile = path.join(os.tmpdir(), `customers-test-${process.pid}.json`);
+fs.writeFileSync(customersFile, JSON.stringify([
+  { id: 'other', restaurant_name: 'Chez Autre', contact_name: 'Paul', phone: '', usual_order: 'x', todays_offer: 'y' },
+  { id: 'demo', restaurant_name: 'Le Petit Bouchon', contact_name: 'Marc', phone: '', usual_order: '2 colis de tomates', todays_offer: 'lotte -15 %' },
+]));
 const seen = { init: null, audioIn: 0, toolResult: null, twilioMedia: 0, twilioClear: 0 };
 
 // --- fake ElevenLabs agent ---
@@ -38,7 +43,7 @@ el.on('connection', (ws) => {
 
 // --- the server under test ---
 const srv = spawn(process.execPath, [path.join(import.meta.dirname, 'index.mjs')], {
-  env: { ...process.env, PORT: String(PORT), PUBLIC_URL: 'https://example.test', ELEVENLABS_WS_URL: `ws://localhost:${EL_PORT}`, ORDERS_FILE: ordersFile, TWILIO_ACCOUNT_SID: '', TWILIO_AUTH_TOKEN: '', TWILIO_PHONE_NUMBER: '' },
+  env: { ...process.env, PORT: String(PORT), PUBLIC_URL: 'https://example.test', ELEVENLABS_WS_URL: `ws://localhost:${EL_PORT}`, ORDERS_FILE: ordersFile, CUSTOMERS_FILE: customersFile, TWILIO_ACCOUNT_SID: '', TWILIO_AUTH_TOKEN: '', TWILIO_PHONE_NUMBER: '' },
   stdio: ['ignore', 'pipe', 'inherit'],
 });
 srv.stdout.on('data', (d) => process.stdout.write('  | ' + d));
@@ -97,4 +102,5 @@ try {
   srv.kill();
   el.close();
   fs.rmSync(ordersFile, { force: true });
+  fs.rmSync(customersFile, { force: true });
 }

@@ -23,7 +23,7 @@ const env = process.env;
 const PORT = Number(env.PORT || 8080);
 const PUBLIC_URL = (env.PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 const ORDERS_FILE = env.ORDERS_FILE || path.join(here, 'orders.json');
-const CUSTOMERS_FILE = path.join(root, 'data', 'sample', 'customers.json');
+const CUSTOMERS_FILE = env.CUSTOMERS_FILE || path.join(root, 'data', 'sample', 'customers.json');
 const WEB_DIR = path.join(root, 'web');
 
 // ---------- storage ----------
