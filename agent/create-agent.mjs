@@ -78,6 +78,15 @@ const agentBody = (toolId) => ({
       prompt: {
         prompt,
         tool_ids: [toolId],
+        // Lets the agent hang up; the bridge then closes the Twilio stream and the call ends.
+        built_in_tools: {
+          end_call: {
+            type: 'system',
+            name: 'end_call',
+            description: "Raccroche une fois l'au revoir dit : après submit_order, ou si le chef demande à être rappelé.",
+            params: { system_tool_type: 'end_call' },
+          },
+        },
         ...(env.ELEVENLABS_LLM && { llm: env.ELEVENLABS_LLM }),
       },
     },
