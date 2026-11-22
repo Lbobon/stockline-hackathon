@@ -52,6 +52,33 @@ function findCustomer(id) {
   return customers.find((c) => c.id === id) || customers[0] || FALLBACK_CUSTOMERS[0];
 }
 
+const dynamicVariables = (c) => ({
+  restaurant_name: c.restaurant_name,
+  contact_name: c.contact_name,
+  usual_order: c.usual_order,
+  todays_offer: c.todays_offer,
+});
+
+// One place that turns a submit_order call (from the phone bridge or the browser) into a queued order.
+function addOrder({ customer, params = {}, transcript = [], call_sid = null, channel }) {
+  const order = {
+    id: crypto.randomUUID().slice(0, 8),
+    status: 'pending',
+    channel,
+    customer_id: customer?.id,
+    restaurant: params.restaurant || customer?.restaurant_name,
+    lines: Array.isArray(params.lines) ? params.lines : [],
+    notes: params.notes || '',
+    call_sid,
+    transcript,
+    created_at: new Date().toISOString(),
+  };
+  const orders = loadOrders();
+  orders.push(order);
+  saveOrders(orders);
+  return order;
+}
+
 // ---------- helpers ----------
 
 const xmlEscape = (s) => String(s).replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]));
@@ -135,6 +162,26 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, order);
     }
 
+    // Browser calls (web/call.html): the page talks to ElevenLabs directly with this signed URL,
+    // so the API key never reaches the browser.
+    if (req.method === 'GET' && url.pathname === '/api/session') {
+      const customer = findCustomer(url.searchParams.get('customer_id'));
+      return send(res, 200, { signed_url: await elevenLabsUrl(), customer, dynamic_variables: dynamicVariables(customer) });
+    }
+
+    // The browser page posts here when the agent calls submit_order.
+    if (req.method === 'POST' && url.pathname === '/api/orders') {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      const order = addOrder({
+        customer: findCustomer(body.customer_id),
+        params: body,
+        transcript: Array.isArray(body.transcript) ? body.transcript : [],
+        channel: 'browser',
+      });
+      console.log(`[browser] order saved ${order.id} ${JSON.stringify(order.lines)}`);
+      return send(res, 200, { ok: true, order_id: order.id, message: 'Commande enregistrée, en attente de validation.' });
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/customers') {
       return send(res, 200, loadCustomers());
     }
@@ -178,12 +225,7 @@ wss.on('connection', (twilio) => {
       log('ElevenLabs connected');
       el.send(JSON.stringify({
         type: 'conversation_initiation_client_data',
-        dynamic_variables: {
-          restaurant_name: customer.restaurant_name,
-          contact_name: customer.contact_name,
-          usual_order: customer.usual_order,
-          todays_offer: customer.todays_offer,
-        },
+        dynamic_variables: dynamicVariables(customer),
       }));
       for (const m of pending.splice(0)) el.send(JSON.stringify(m));
     });
@@ -228,21 +270,8 @@ wss.on('connection', (twilio) => {
     const reply = (result, is_error = false) =>
       toEl({ type: 'client_tool_result', tool_call_id: call.tool_call_id, result: JSON.stringify(result), is_error });
     if (call.tool_name !== 'submit_order') return reply({ error: `unknown tool ${call.tool_name}` }, true);
-    const p = call.parameters || {};
-    const order = {
-      id: crypto.randomUUID().slice(0, 8),
-      status: 'pending',
-      customer_id: customer?.id,
-      restaurant: p.restaurant || customer?.restaurant_name,
-      lines: Array.isArray(p.lines) ? p.lines : [],
-      notes: p.notes || '',
-      call_sid: callSid,
-      transcript, // same array: keeps filling until the call ends (saved again on stop)
-      created_at: new Date().toISOString(),
-    };
-    const orders = loadOrders();
-    orders.push(order);
-    saveOrders(orders);
+    // `transcript` keeps filling until the call ends; it is saved again on stop
+    const order = addOrder({ customer, params: call.parameters, transcript, call_sid: callSid, channel: 'phone' });
     log('order saved', order.id, JSON.stringify(order.lines));
     reply({ ok: true, order_id: order.id, message: 'Commande enregistrée, en attente de validation.' });
   }

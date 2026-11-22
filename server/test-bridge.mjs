@@ -93,6 +93,18 @@ try {
   assert.deepEqual(o.lines, [{ product: 'lotte', quantity: 3, unit: 'kg' }]);
   assert.equal(o.transcript.length, 2, 'transcript saved');
 
+  // browser mode: session for the page, and the order it posts when the agent calls submit_order
+  const session = await (await fetch(`${base}/api/session?customer_id=demo`)).json();
+  assert.equal(session.signed_url, `ws://localhost:${EL_PORT}`);
+  assert.equal(session.dynamic_variables.restaurant_name, 'Le Petit Bouchon');
+  const posted = await (await fetch(`${base}/api/orders`, { method: 'POST', body: JSON.stringify({ customer_id: 'demo', lines: [{ product: 'beurre', quantity: 5, unit: 'kg' }], notes: '', transcript: [{ role: 'client', text: 'comme d\'hab' }] }) })).json();
+  assert.equal(posted.ok, true);
+  const all = await (await fetch(`${base}/api/orders`)).json();
+  assert.equal(all.length, 2);
+  assert.equal(all[0].channel, 'browser');
+  assert.equal(all[0].restaurant, 'Le Petit Bouchon');
+  assert.equal(all[1].channel, 'phone');
+
   const ok = await (await fetch(`${base}/api/orders/${o.id}/approve`, { method: 'POST' })).json();
   assert.equal(ok.status, 'approved');
   assert.match(await (await fetch(base + '/')).text(), /Approval queue|<html|<!doctype/i);
