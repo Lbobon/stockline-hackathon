@@ -30,6 +30,7 @@ Proposed roles: **Agent/LLM lead** · **Data & integrations** · **Frontend & de
    ```
 4. Copy `.env.example` to `.env`. Get the real keys from the team in person. **Never commit `.env`.**
 5. Add your name, GitHub handle and role to the table above (your first PR, to test the flow).
+6. **Connect your coding agent:** open Claude Code (or Codex, etc.) in your clone. It reads `CLAUDE.md`/`AGENTS.md` and offers to join [Murmur](https://murmur.afig.dev), which lets all our agents see and message each other through this repo. Say yes, then restart the agent so the tools load. Run `mur ui` to watch the agents and messages.
 
 ## How we work
 
