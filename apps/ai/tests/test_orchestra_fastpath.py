@@ -2,10 +2,12 @@
 confirm_order; a draft is handed to the big model with the reasons. Greffier sees those outcomes."""
 
 import asyncio
+import dataclasses
 
 from app.orchestra.fastpath import try_fast
 from app.orchestra.scribe import Scribe
 from app.orchestra.state import CallState
+from app.tools import TOOLS
 
 
 class FakeTool:
@@ -61,3 +63,20 @@ def test_scribe_sees_retention_outcome():
                           "result": {"status": "needs_approval", "pct": 5, "amountHt": 12.5, "offers": []}})  # fmt: skip
     line = Scribe(st, {}, None).outcomes()
     assert "retention_offer" in line and "needs_approval" in line
+
+
+def test_voice_agent_log_is_handed_to_the_scribe():
+    async def go():
+        st = state()
+        real = FakeTool({"id": "cev_1"})
+        real.name = "log_client_event"
+        scribe = Scribe(st, {"log_client_event": real}, None)
+        stub = scribe.handoff_tool(dataclasses.replace(TOOLS["log_client_event"]))  # real name and schema
+        out = await stub.fn(None, client_id="cli_0001", type="complaint", title="Merguez trop grasses", description=None)
+        await asyncio.gather(*scribe.tasks)
+        return out, real.calls, scribe.written
+
+    out, calls, written = asyncio.run(go())
+    assert out["ok"] is True
+    assert calls == [{"client_id": "cli_0001", "type": "complaint", "title": "Merguez trop grasses"}]
+    assert written == ["événement complaint : Merguez trop grasses"]
