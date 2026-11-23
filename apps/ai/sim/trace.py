@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-ORDER_TOOLS = {"create_draft_order", "add_order_line", "update_order_line", "remove_order_line", "update_order", "confirm_order", "get_order"}
+ORDER_TOOLS = {"create_draft_order", "add_order_line", "update_order_line", "remove_order_line", "update_order", "confirm_order", "apply_substitution", "get_order"}
 WRITE_TOOLS = ORDER_TOOLS - {"get_order"} | {"save_context", "log_client_event"}
 
 

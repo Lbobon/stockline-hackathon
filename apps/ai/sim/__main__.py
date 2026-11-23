@@ -525,11 +525,20 @@ async def main() -> None:
     # parallel safely, but repeat 2 must not find the order repeat 1 just took (« elle est déjà confirmée »).
     sem = asyncio.Semaphore(a.concurrency)
     recs: list[dict] = []
+    shared, alone = [s for s in picked if not s.setup], [s for s in picked if s.setup]
     for r in range(a.repeat):
         if r and not a.no_reset:
             async with httpx.AsyncClient(timeout=30) as http:
                 (await http.post(f"{erp}/api/admin/reset")).raise_for_status()
-        recs += await asyncio.gather(*(run_one(s, r + 1, sem, models) for s in picked))
+        recs += await asyncio.gather(*(run_one(s, r + 1, sem, models) for s in shared))
+        # A scenario that changes shared data (its setup) runs alone, on a freshly reset ERP, after the parallel round
+        for s in alone:
+            async with httpx.AsyncClient(timeout=30) as http:
+                if not a.no_reset:
+                    (await http.post(f"{erp}/api/admin/reset")).raise_for_status()
+                for method, path, body in s.setup:
+                    (await http.request(method, f"{erp}{path}", json=body, headers={"x-actor": "user"})).raise_for_status()
+            recs.append(await run_one(s, r + 1, sem, models))
     with (out / "calls.jsonl").open("w", encoding="utf-8") as f:
         for r in recs:
             f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")

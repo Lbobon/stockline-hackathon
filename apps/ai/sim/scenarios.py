@@ -30,6 +30,9 @@ class Scenario:
     # Outbound shortage call (Ce matin → « Lancer les appels »): the agent calls this order's client and speaks first,
     # from the same hidden brief as WS /voice (agent/outbound.shortage_brief). The caller model then answers.
     outbound_order_id: str | None = None
+    # ERP writes applied after a reset, before the call (method, path, body). A scenario with a setup changes shared
+    # data (stock), so the runner plays it alone, after the parallel round, on a freshly reset ERP.
+    setup: list[tuple[str, str, dict]] = field(default_factory=list)
 
 
 # ── check helpers ────────────────────────────────────────────────────────────────────────────────────────────
@@ -381,5 +384,25 @@ SCENARIOS: list[Scenario] = [
         checks=[writes_only_for("cli_0066"), not_called("apply_substitution")],
         tags=["sortant", "rupture", "naturel"],
         outbound_order_id="ord_029586",
+    ),
+    Scenario(
+        id="sortant_accepte",
+        title="Appel sortant : le client accepte le remplaçant",
+        client_id="cli_0066",
+        persona="c0066-chez-karine-cuisine-marocaine.md",
+        goal=(
+            "C'est Médina Viandes qui t'appelle. On t'annonce qu'il manque l'escalope de veau et on te propose de l'escalope "
+            "de dinde à la place : tu demandes le prix au kilo, puis tu acceptes (« vas-y, mets la dinde »). Tu raccroches "
+            "vite, c'est le coup de feu."
+        ),
+        expect=(
+            "Parler en premier : assistant vocal IA de Médina Viandes, 9,5 kg d'escalope de veau manquants pour la livraison "
+            "de demain, proposer l'escalope de dinde (en stock) avec son prix. Au oui : apply_substitution sur la commande "
+            "(la ligne veau remplacée par la dinde), confirmer en une phrase, sans rien changer d'autre."
+        ),
+        checks=[writes_only_for("cli_0066"), called("apply_substitution"), order_lacks("prd_0020"), order_qty("prd_0028", 9.5, 9.5)],
+        tags=["sortant", "rupture", "commande"],
+        outbound_order_id="ord_029586",
+        setup=[("POST", "/api/stock/adjust", {"productId": "prd_0028", "qty": 100, "reason": "adjustment"})],
     ),
 ]
