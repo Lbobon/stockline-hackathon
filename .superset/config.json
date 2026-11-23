@@ -1,0 +1,6 @@
+{
+  "setup": [
+    "[ -f .env ] || cp \"$SUPERSET_ROOT_PATH/.env\" .env",
+    "npm install --no-audit --no-fund"
+  ]
+}
