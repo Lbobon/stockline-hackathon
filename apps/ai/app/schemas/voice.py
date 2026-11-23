@@ -21,6 +21,7 @@ class StartMessage(WireModel):
     type: Literal["start"] = "start"
     session_id: str | None = None
     actor_name: str | None = None
+    outbound_order_id: str | None = None  # outbound shortage call: the agent calls this order's client and speaks first
 
 
 class AudioStartMessage(WireModel):
