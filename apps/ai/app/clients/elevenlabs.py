@@ -6,6 +6,9 @@ from .base import TTSClient, TTSResult
 from .http import body_chunks, http_client, post_stream
 
 
+PREVIOUS_CHARS = 300  # context for the prosody of the next sentence; no measured cost on the first byte (~0.16 s)
+
+
 class ElevenLabsTTS(TTSClient):
     name = "elevenlabs"
 
@@ -19,20 +22,24 @@ class ElevenLabsTTS(TTSClient):
     ):
         self.api_key, self.model, self.voice, self.language, self.http = api_key, model, voice, language, http
 
-    def build_body(self, text: str, stability: float | None = None) -> dict:
+    def build_body(self, text: str, stability: float | None = None, previous_text: str | None = None) -> dict:
         body: dict = {"text": text, "model_id": self.model}
         if "multilingual_v2" not in self.model:  # language_code is refused by eleven_multilingual_v2
             body["language_code"] = self.language
         if stability is not None:  # lower = more expressive, higher = steadier (default 0.5)
             body["voice_settings"] = {"stability": stability}
+        if previous_text:  # what was just said: the new sentence continues its intonation instead of restarting
+            body["previous_text"] = previous_text[-PREVIOUS_CHARS:]
         return body
 
-    async def synthesize(self, text: str, voice: str | None = None, stability: float | None = None) -> TTSResult:
+    async def synthesize(
+        self, text: str, voice: str | None = None, stability: float | None = None, previous_text: str | None = None
+    ) -> TTSResult:
         res = await post_stream(
             self.http or http_client(),
             f"https://api.elevenlabs.io/v1/text-to-speech/{voice or self.voice}/stream?output_format=mp3_44100_128",
             who="elevenlabs tts",
             headers={"xi-api-key": self.api_key},
-            json=self.build_body(text, stability),
+            json=self.build_body(text, stability, previous_text),
         )
         return TTSResult("audio/mpeg", body_chunks(res))

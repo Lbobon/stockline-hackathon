@@ -130,3 +130,10 @@ def test_identifying_the_client_locks_the_register_at_once(tmp_path, monkeypatch
         assert (st.client["id"], st.register, st.register_locked) == ("cli_0003", "tu", True)
     finally:
         caller_mod._load.cache_clear()
+
+
+def test_elevenlabs_continues_the_previous_sentence():
+    tts = ElevenLabsTTS("key", model="eleven_v4_turbo")
+    assert "previous_text" not in tts.build_body("Bonjour.")
+    body = tts.build_body("Tu en veux combien ?", previous_text="x" * 500 + " Il en reste vingt kilos.")
+    assert body["previous_text"].endswith("Il en reste vingt kilos.") and len(body["previous_text"]) == 300
