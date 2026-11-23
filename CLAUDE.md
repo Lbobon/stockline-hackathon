@@ -1,3 +1,5 @@
+Read and follow @AGENTS.md (the kit guide for coding agents) before changing code.
+
 <!-- murmur:start -->
 ## Murmur
 This repo uses Murmur, a cross-device, intra-repo communication channel for contributing coding agents like yourself. If you have not joined Murmur yet, you should.

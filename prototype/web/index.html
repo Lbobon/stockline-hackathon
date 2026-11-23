@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Commandes à valider · Stockline</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #2563eb; --ok: #15803d; --ok-bg: #dcfce7; --no: #b91c1c; --no-bg: #fee2e2;
+    --wait: #a16207; --wait-bg: #fef3c7; --new: #dbeafe;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { position: sticky; top: 0; z-index: 1; background: var(--card); border-bottom: 1px solid var(--line);
+           padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  h1 { font-size: 18px; margin: 0; flex: 1 1 auto; }
+  .conn { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--ok); } .dot.off { background: var(--no); }
+  .tabs { display: flex; gap: 4px; }
+  .tabs button { border: 1px solid var(--line); background: var(--card); padding: 5px 10px; border-radius: 6px;
+                 cursor: pointer; font: inherit; font-size: 13px; color: var(--text); }
+  .tabs button[aria-pressed="true"] { background: var(--text); color: #fff; border-color: var(--text); }
+  main { max-width: 860px; margin: 0 auto; padding: 16px; display: grid; gap: 12px; }
+  .empty { text-align: center; color: var(--muted); padding: 48px 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card.fresh { animation: fresh 3s ease-out; }
+  @keyframes fresh { from { background: var(--new); } to { background: var(--card); } }
+  .top { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
+  .top h2 { font-size: 17px; margin: 0; flex: 1 1 auto; }
+  .time { color: var(--muted); font-size: 13px; }
+  .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+  .badge.pending { background: var(--wait-bg); color: var(--wait); }
+  .badge.approved { background: var(--ok-bg); color: var(--ok); }
+  .badge.rejected { background: var(--no-bg); color: var(--no); }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 4px; }
+  th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+  td.qty { white-space: nowrap; font-variant-numeric: tabular-nums; width: 1%; padding-right: 16px; }
+  .notes { margin: 8px 0 0; padding: 8px 10px; background: var(--bg); border-radius: 6px; font-size: 14px; }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; color: var(--accent); font-size: 14px; }
+  .transcript { margin-top: 8px; display: grid; gap: 6px; max-height: 320px; overflow-y: auto; }
+  .msg { padding: 6px 10px; border-radius: 8px; max-width: 85%; font-size: 14px; }
+  .msg .who { display: block; font-size: 11px; color: var(--muted); font-weight: 600; }
+  .msg.agent { background: #eef2ff; justify-self: start; }
+  .msg.user { background: #f1f5f9; justify-self: end; }
+  .actions { display: flex; gap: 8px; margin-top: 12px; }
+  .actions button { flex: 0 0 auto; border: 0; border-radius: 6px; padding: 8px 16px; font: inherit;
+                    font-weight: 600; cursor: pointer; color: #fff; }
+  .actions .approve { background: var(--ok); }
+  .actions .reject { background: var(--card); color: var(--no); border: 1px solid var(--no); }
+  .actions button:disabled { opacity: .5; cursor: wait; }
+  .error { color: var(--no); font-size: 13px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Commandes à valider</h1>
+  <div class="tabs" role="group" aria-label="Filtre">
+    <button data-filter="pending" aria-pressed="true">À valider <span id="n-pending">0</span></button>
+    <button data-filter="all" aria-pressed="false">Toutes <span id="n-all">0</span></button>
+  </div>
+  <div class="conn"><span class="dot" id="dot"></span><span id="conn">Connexion…</span></div>
+</header>
+<main id="list"><p class="empty">Chargement…</p></main>
+
+<script>
+// Approval queue for the voice prototype. Talks to the server in server/ (same origin):
+//   GET  /api/orders              -> [{id, status, restaurant, lines, notes, transcript, created_at}]
+//   POST /api/orders/:id/approve
+//   POST /api/orders/:id/reject
+const POLL_MS = 2000;
+let orders = [];
+let filter = 'pending';
+const seen = new Set();          // order ids already shown, to highlight new ones
+const busy = new Set();          // order ids with a request in flight
+const errors = new Map();        // order id -> last action error
+const openTranscripts = new Set();
+let firstLoad = true;
+let lastText = null;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const STATUS = { pending: 'À valider', approved: 'Validée', rejected: 'Refusée' };
+
+function fmtTime(t) {
+  const d = new Date(t);
+  if (isNaN(d)) return '';
+  return d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function setConn(ok, text) {
+  $('dot').className = 'dot ' + (ok ? 'on' : 'off');
+  $('conn').textContent = text;
+}
+
+async function load() {
+  try {
+    const res = await fetch('api/orders', { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    setConn(true, 'À jour ' + new Date().toLocaleTimeString('fr-FR'));
+    if (text === lastText && !firstLoad) return;   // nothing changed: don't redraw under the user's cursor
+    lastText = text;
+    const data = JSON.parse(text);
+    orders = Array.isArray(data) ? data : [];
+    render();
+  } catch (e) {
+    setConn(false, 'Serveur injoignable');
+    if (firstLoad) $('list').innerHTML = '<p class="empty">Impossible de charger les commandes (' + esc(e.message) + ').</p>';
+  } finally {
+    setTimeout(load, POLL_MS);
+  }
+}
+
+async function act(id, action) {
+  busy.add(id); errors.delete(id); render();
+  try {
+    const res = await fetch('api/orders/' + encodeURIComponent(id) + '/' + action, { method: 'POST' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const o = orders.find((x) => x.id === id);
+    if (o) o.status = action === 'approve' ? 'approved' : 'rejected';
+  } catch (e) {
+    errors.set(id, 'Échec : ' + e.message);
+  } finally {
+    busy.delete(id); render();
+  }
+}
+
+function renderOrder(o) {
+  const lines = Array.isArray(o.lines) ? o.lines : [];
+  const transcript = Array.isArray(o.transcript) ? o.transcript : [];
+  const isNew = !firstLoad && !seen.has(o.id);
+  const rows = lines.length
+    ? lines.map((l) => `<tr><td class="qty">${esc(l.quantity)} ${esc(l.unit)}</td><td>${esc(l.product)}</td></tr>`).join('')
+    : '<tr><td colspan="2" class="time">Aucune ligne</td></tr>';
+  const talk = transcript.map((m) => {
+    const agent = m.role === 'agent' || m.role === 'assistant' || m.role === 'ai';
+    return `<div class="msg ${agent ? 'agent' : 'user'}"><span class="who">${agent ? 'Agent IA' : 'Client'}</span>${esc(m.text)}</div>`;
+  }).join('');
+  const status = STATUS[o.status] ? o.status : 'pending';
+  return `
+  <article class="card${isNew ? ' fresh' : ''}" data-id="${esc(o.id)}">
+    <div class="top">
+      <h2>${esc(o.restaurant || 'Restaurant inconnu')}</h2>
+      <span class="time">${esc(fmtTime(o.created_at))}</span>
+      <span class="badge ${status}">${STATUS[status]}</span>
+    </div>
+    <table><thead><tr><th>Qté</th><th>Produit</th></tr></thead><tbody>${rows}</tbody></table>
+    ${o.notes ? `<p class="notes">${esc(o.notes)}</p>` : ''}
+    ${transcript.length ? `<details${openTranscripts.has(o.id) ? ' open' : ''}><summary>Transcription de l'appel (${transcript.length})</summary><div class="transcript">${talk}</div></details>` : ''}
+    ${status === 'pending' ? `<div class="actions">
+      <button class="approve" data-act="approve" ${busy.has(o.id) ? 'disabled' : ''}>Valider</button>
+      <button class="reject" data-act="reject" ${busy.has(o.id) ? 'disabled' : ''}>Refuser</button>
+    </div>` : ''}
+    ${errors.has(o.id) ? `<p class="error">${esc(errors.get(o.id))}</p>` : ''}
+  </article>`;
+}
+
+function render() {
+  const sorted = [...orders].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const pending = sorted.filter((o) => (o.status || 'pending') === 'pending');
+  $('n-pending').textContent = pending.length;
+  $('n-all').textContent = sorted.length;
+  const shown = filter === 'pending' ? pending : sorted;
+  // Keep the scroll position of open transcripts across re-renders.
+  const scroll = {};
+  document.querySelectorAll('.card').forEach((c) => {
+    const t = c.querySelector('.transcript');
+    if (t) scroll[c.dataset.id] = t.scrollTop;
+  });
+  $('list').innerHTML = shown.length
+    ? shown.map(renderOrder).join('')
+    : `<p class="empty">${filter === 'pending' ? 'Aucune commande à valider.' : 'Aucune commande pour le moment.'}</p>`;
+  document.querySelectorAll('.card').forEach((c) => {
+    const t = c.querySelector('.transcript');
+    if (t && scroll[c.dataset.id] != null) t.scrollTop = scroll[c.dataset.id];
+  });
+  sorted.forEach((o) => seen.add(o.id));
+  firstLoad = false;
+}
+
+$('list').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  act(btn.closest('.card').dataset.id, btn.dataset.act);
+});
+$('list').addEventListener('toggle', (e) => {
+  const id = e.target.closest('.card')?.dataset.id;
+  if (!id) return;
+  e.target.open ? openTranscripts.add(id) : openTranscripts.delete(id);
+}, true);
+document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
+  filter = b.dataset.filter;
+  document.querySelectorAll('.tabs button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  render();
+}));
+
+load();
+</script>
+</body>
+</html>

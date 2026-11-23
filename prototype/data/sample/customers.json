@@ -1,0 +1,42 @@
+[
+  {
+    "id": "cust_001",
+    "restaurant_name": "Chez Marcel",
+    "contact_name": "Marcel",
+    "phone": "+33639980101",
+    "usual_order": "2 colis de 5 kg de tomates grappe, 1 plateau de 30 oeufs, 3 cagettes de salade batavia, 10 kg de pommes de terre",
+    "todays_offer": "Fraises de Plougastel en barquettes de 500 g, 4,50 € la barquette"
+  },
+  {
+    "id": "cust_002",
+    "restaurant_name": "Bistrot Les Halles",
+    "contact_name": "Sophie",
+    "phone": "+33639980102",
+    "usual_order": "3 colis de 5 kg de poulet fermier, 2 plateaux de 30 oeufs, 5 kg de beurre doux, 4 bouteilles de 1 L de crème fraîche",
+    "todays_offer": "Cuisses de canard confites, carton de 12 pièces à 38 €"
+  },
+  {
+    "id": "cust_003",
+    "restaurant_name": "La Table de Léa",
+    "contact_name": "Léa",
+    "phone": "+33639980103",
+    "usual_order": "1 colis de 3 kg de filets de cabillaud, 2 colis de 5 kg de champignons de Paris, 6 bottes de persil, 3 kg d'oignons jaunes",
+    "todays_offer": "Saint-Jacques fraîches de Bretagne, filet de 1 kg à 28 €"
+  },
+  {
+    "id": "cust_004",
+    "restaurant_name": "Pizzeria Da Marco",
+    "contact_name": "Marco",
+    "phone": "+33639980104",
+    "usual_order": "4 colis de 5 kg de mozzarella, 3 colis de 5 kg de tomates pelées, 2 colis de 3 kg de jambon de Parme, 1 plateau de basilic frais",
+    "todays_offer": "Burrata des Pouilles, carton de 6 pièces à 21 €"
+  },
+  {
+    "id": "cust_005",
+    "restaurant_name": "Brasserie du Port",
+    "contact_name": "Karim",
+    "phone": "+33639980105",
+    "usual_order": "2 colis de 10 kg de moules de bouchot, 3 colis de 5 kg de frites surgelées, 1 colis de 3 kg de crevettes, 5 citrons en filet",
+    "todays_offer": "Huîtres fines de claire n°3, plateau de 24 à 19 €"
+  }
+]
