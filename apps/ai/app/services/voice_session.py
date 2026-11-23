@@ -32,6 +32,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import TypeAdapter, ValidationError
 
 from app.agent import run_agent
+from app.agent.caller import load_caller
 from app.agent.loop import ms_since
 from app.agent.outbound import shortage_brief
 from app.clients import STTUpdate, TTSClient, get_llm_client, get_stt_client, get_tts_client
@@ -308,7 +309,8 @@ class VoiceConnection:
 
             # 2. The orchestra: fast path, or the voice agent briefed by the scout (history kept by the CallSession,
             #    also on barge-in). The TTS speaks the caller's language.
-            speaker = Speaker(tts_for(call.state.language), self.send, self.send_bytes)
+            card = load_caller(call.state.client["id"]) if call.state.client and call.state.client.get("id") else None
+            speaker = Speaker(tts_for(call.state.language), self.send, self.send_bytes, stability=card.stability if card else None)
             llm_start = time.perf_counter()
             async with aclosing(call.turn(heard)) as events:
                 async for ev in events:
@@ -357,14 +359,36 @@ class VoiceConnection:
                 utterance.cancel()  # interrupted while transcribing: close the provider stream
 
 
+MARKDOWN = [
+    (re.compile(r"^\s*(?:[-*•–]|\d+[.)])\s+", re.M), ""),  # list markers at line start: "- ", "• ", "1. "
+    (re.compile(r"^\s*#+\s*", re.M), ""),  # headings
+    (re.compile(r"(\*\*|__|\*|`)"), ""),  # bold, italics, code
+    (re.compile(r"\s*\n+\s*"), ", "),  # line breaks inside one spoken chunk: a short pause, not "tiret"
+]
+
+
+def speakable(text: str) -> str:
+    """What the TTS should hear: the agent's text without markdown (the prompt forbids it, but a bullet list read
+    aloud sounds broken). The screen still shows the text as written."""
+    for pattern, repl in MARKDOWN:
+        text = pattern.sub(repl, text)
+    return text.strip(" ,")
+
+
 class Speaker:
     """Buffers the streamed text, cuts it into sentences and speaks them in order, as one audio segment."""
 
     # a sentence ends with . ! ? … followed by a space ("18.50" is not a boundary)
     SENTENCE = re.compile(r"^([\s\S]*?[.!?…])\s+")
 
-    def __init__(self, tts: TTSClient, send: Callable[[WireModel], Awaitable], send_bytes: Callable[[bytes], Awaitable]):
-        self.tts, self.send, self.send_bytes = tts, send, send_bytes
+    def __init__(
+        self,
+        tts: TTSClient,
+        send: Callable[[WireModel], Awaitable],
+        send_bytes: Callable[[bytes], Awaitable],
+        stability: float | None = None,  # ElevenLabs voice stability for this caller (agent/caller.py)
+    ):
+        self.tts, self.send, self.send_bytes, self.stability = tts, send, send_bytes, stability
         self.buffer = ""
         self.sentences: asyncio.Queue[str | tuple[str, bytes] | None] = asyncio.Queue()
         self.worker: asyncio.Task | None = None  # speaks the queued sentences one after the other
@@ -379,6 +403,7 @@ class Speaker:
             self.buffer = self.buffer[m.end() :]
 
     def speak(self, sentence: str) -> None:
+        sentence = speakable(sentence)
         if not sentence.strip():
             return
         if self.worker is None:
@@ -423,7 +448,10 @@ class Speaker:
                 await self.send_bytes(audio)
                 continue
             try:
-                result = await self.tts.synthesize(sentence, settings.tts.voice or None)
+                if self.stability is not None and self.tts.name == "elevenlabs":
+                    result = await self.tts.synthesize(sentence, settings.tts.voice or None, stability=self.stability)  # type: ignore[call-arg]
+                else:
+                    result = await self.tts.synthesize(sentence, settings.tts.voice or None)
                 # aclosing: on barge-in (cancellation) the provider's HTTP stream is closed right away
                 async with aclosing(result.chunks) as chunks:  # type: ignore[type-var]
                     async for chunk in chunks:

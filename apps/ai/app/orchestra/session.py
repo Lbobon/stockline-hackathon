@@ -21,6 +21,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 
 from app.agent import run_agent, sanitize_history
+from app.agent.caller import CallerProfile, load_caller
 from app.agent.prompts import build_system_prompt
 from app.clients import LLMClient, LLMRequest, LLMUsage, get_llm_client
 from app.clients.anthropic import AnthropicLLM
@@ -124,6 +125,15 @@ class CallSession:
 
     # ── one turn ──
 
+    def caller(self) -> CallerProfile | None:
+        """The identified client's card (agent/caller.py). When the card says tu or vous, that register is locked:
+        the Linguiste no longer changes it from how one sentence sounded."""
+        st = self.state
+        card = load_caller(st.client["id"]) if st.client and st.client.get("id") else None
+        if card and card.tu is not None and not st.register_locked:
+            st.register, st.register_locked = ("tu" if card.tu else "vous"), True
+        return card
+
     def briefing(self) -> str:
         st, lines = self.state, []
         for k in [k for k in st.facts if k not in st.given]:
@@ -134,7 +144,12 @@ class CallSession:
             lang = LANG_NAMES.get(st.language, st.language)
             if st.language != "fr":
                 lines.append(f"- Linguiste : l'appelant parle {lang}. Réponds en {lang}, mêmes règles (phrases courtes, pas d'ids, nombres en toutes lettres).")
-            lines.append("- Linguiste : l'appelant te tutoie, tutoie-le aussi." if st.register == "tu" else "- Linguiste : l'appelant vouvoie, vouvoie-le.")
+            if not st.register_locked:  # a register from the client card is restated every turn, just below
+                lines.append("- Linguiste : l'appelant te tutoie, tutoie-le aussi." if st.register == "tu" else "- Linguiste : l'appelant vouvoie, vouvoie-le.")
+        if st.register_locked:  # every turn: the caller's own « vous avez… » (= the company) pulls the model to vous
+            who = (st.client or {}).get("name") or "ce client"
+            lines.append(f"- Fiche client ({who}) : {'tutoie' if st.register == 'tu' else 'vouvoie'} la personne dans toute ta réponse"
+                         + (", même si elle dit « vous » en parlant de l'entreprise." if st.register == "tu" else "."))  # fmt: skip
         if not lines and self.rules_said:
             return ""
         head = TEAM_RULES if not self.rules_said else "[Notes internes — pas dites par le client]"
@@ -186,6 +201,7 @@ class CallSession:
                 self.history = trim([*self.history, ChatMessage(role="user", content=heard)])
                 raise
         cur["settleMs"] = st.now() - before
+        caller = self.caller()  # the identified client's card: how to talk to them (agent/caller.py)
         given_before = set(st.given)
         note = self.briefing() if self.side else ""
         cur["prefetched"] = [k for k in st.given - given_before if not k.startswith("candidates:")]
@@ -193,7 +209,8 @@ class CallSession:
 
         async def produce() -> None:
             try:
-                async for ev in self.runner(working, llm=self.llm, tools=self.tools, mode="voice", actor_name=st.actor_name):
+                style = {"caller_style": caller.prompt()} if caller else {}
+                async for ev in self.runner(working, llm=self.llm, tools=self.tools, mode="voice", actor_name=st.actor_name, **style):
                     await q.put(ev)
             finally:
                 q.put_nowait(None)
