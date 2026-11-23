@@ -154,14 +154,16 @@ function ToDo({ review, complaints, gestures, today, loading, error, onRetry }: 
 // ── 3. Ruptures du jour ──
 
 function Shortages({ data, loading, error, onRetry }: { data?: ShortageOrder[]; loading: boolean; error: boolean; onRetry: () => void }) {
-  const toCall = data?.filter((o) => o.decision === "call").length ?? 0;
+  const navigate = useNavigate();
+  const calls = data?.filter((o) => o.decision === "call") ?? [];
   return (
     <Section
       title="Ruptures du jour"
       count={data?.length}
       actions={
-        <Button variant="primary" icon={PhoneCall} disabled title="Les appels automatiques arrivent bientôt. En attendant, appelez avec le numéro affiché.">
-          Lancer les appels{toCall ? ` (${toCall})` : ""}
+        // Calls run one at a time on the Voix page (the agent speaks first, PR #27); the row updates when Leïla comes back
+        <Button variant="primary" icon={PhoneCall} disabled={!calls.length} onClick={() => navigate(outboundPath(calls[0].orderId))}>
+          Lancer les appels{calls.length ? ` (${calls.length})` : ""}
         </Button>
       }
     >
@@ -175,6 +177,7 @@ function Shortages({ data, loading, error, onRetry }: { data?: ShortageOrder[]; 
 }
 
 function ShortageRow({ o }: { o: ShortageOrder }) {
+  const navigate = useNavigate();
   const tone: Tone = o.leavesToday ? "destructive" : "warning";
   const canReplace = o.lines.some((l) => l.substitute && l.substitute.available >= l.missingQty);
   const replace = useApiMutation(() => api.shortages.substitute(o.orderId, { note: "Remplacement validé depuis Ce matin" }), {
@@ -205,7 +208,7 @@ function ShortageRow({ o }: { o: ShortageOrder }) {
         {o.decision === "auto_substitute" ? (
           <Button variant="primary" icon={Replace} loading={replace.isPending} disabled={!canReplace} onClick={() => replace.mutate(undefined)}>Remplacer</Button>
         ) : (
-          <span className="text-[14px] font-medium">À appeler avant de remplacer</span>
+          <Button variant="primary" icon={PhoneCall} onClick={() => navigate(outboundPath(o.orderId))}>Appeler</Button>
         )}
         {o.phone ? (
           <a href={`tel:${o.phone.replace(/\s/g, "")}`} className="flex items-center gap-1.5 text-[15px] font-medium num hover:underline">
@@ -241,6 +244,9 @@ function Night({ events, loading }: { events: ActivityEvent[]; loading: boolean 
 }
 
 // ── helpers ──
+
+/** The Voix page starts a call where the agent speaks first about this order's shortage (PR #27). */
+const outboundPath = (orderId: string) => `/voice?outbound=${encodeURIComponent(orderId)}`;
 
 function UrgencyDot({ tone }: { tone: Tone }) {
   return (
