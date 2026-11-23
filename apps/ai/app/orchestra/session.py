@@ -44,7 +44,7 @@ FILLERS = {
 
 TEAM_RULES = """[Notes internes de l'équipe — pas dites par le client, ne les lis jamais à voix haute]
 - Des agents travaillent avec toi pendant l'appel. L'Éclaireur charge dans l'ERP ce que le client mentionne pendant qu'il parle : quand une donnée est listée dans ces notes, utilise-la directement (ids compris) au lieu de rappeler l'outil ; appelle les outils seulement pour ce qui manque ou pour écrire.
-- Le Greffier enregistre automatiquement dans la fiche client les réclamations, incidents, demandes de geste et faits durables : tu n'as pas à le faire, tu peux dire au client que c'est noté et transmis.
+- Le Greffier tient la fiche client : log_client_event et save_context répondent tout de suite (il écrit en arrière-plan), et il enregistre de lui-même les réclamations, incidents, demandes de geste et faits durables que tu n'as pas notés. Tu peux dire au client que c'est noté et transmis.
 - Une phrase d'attente est jouée automatiquement quand tu dois chercher : ne commence pas par « je regarde »."""
 
 
@@ -78,9 +78,11 @@ class CallSession:
             self.state.id = call_id
         tools = tools if tools is not None else all_tools()
         self.tool_map = {t.name: t for t in tools}
-        self.tools = [t for t in tools if t.name not in SCRIBE_TOOLS] if self.side else tools
         self.scout = Scout(self.state, self.tool_map)
         self.scribe = Scribe(self.state, self.tool_map, actor_name)
+        # The voice agent keeps its writing tools (the prompt and its instincts expect them), but in the orchestra they
+        # return at once and the Greffier does the ERP write in the background: no round trip of silence on the phone.
+        self.tools = [self.scribe.handoff_tool(t) if t.name in SCRIBE_TOOLS else t for t in tools] if self.side else tools
         self.history: list[ChatMessage] = []
         self.filler_after_ms = filler_after_ms
         self.speaking = False

@@ -5,9 +5,12 @@ Greffier (scribe): keeps the client's file up to date in the background, so the 
 After each turn a small fast model reads the new exchange and decides what to write: a complaint / quality / delivery
 issue as a client event (log_client_event), a durable fact (save_context: delivery constraint, contact, preference…).
 It never writes twice the same thing, and waits for the client to be identified.
+The voice agent keeps log_client_event / save_context, but they are handoffs (handoff_tool): they answer at once and the
+Greffier writes in the background.
 """
 
 import asyncio
+import dataclasses
 import json
 
 from app.tools import Tool
@@ -29,7 +32,7 @@ On te donne les derniers échanges de l'appel et ce qui a déjà été enregistr
   kind parmi {KINDS} ; title court ; body 1 à 2 phrases.
 Une prise de commande (même grosse, même avec une rupture ou un remplacement accepté), une question de stock ou de prix, une politesse :
 rien à enregistrer — la commande est déjà dans l'ERP. special_request = une demande inhabituelle à traiter par un humain (découpe, horaire…).
-À ENREGISTRER en revanche (l'agent vocal n'a pas d'outil pour le faire, c'est toi qui le fais) :
+À ENREGISTRER en revanche, sauf si l'agent vocal l'a déjà fait (voir « Déjà enregistré ») :
 - un remplaçant refusé et l'issue du geste commercial proposé (retention_offer : accepté, refusé, « à valider par Rachid »)
   → price_negotiation (churn_risk si le client menace de partir) ;
 - un remplaçant accepté que le système n'a pas pu appliquer (l'agent dit que Leïla ajuste la commande) → special_request.
@@ -45,6 +48,21 @@ class Scribe:
         self.written: list[str] = []
         self.tasks: set[asyncio.Task] = set()
         self.lock = asyncio.Lock()
+
+    def handoff_tool(self, real: Tool) -> Tool:
+        """The voice agent's log_client_event / save_context: same name and schema, but it only hands the write to
+        the Greffier (background task) and answers at once. The Greffier's own reading then won't write it twice."""
+
+        async def handoff(ctx, **fields):
+            args = {k: v for k, v in fields.items() if v is not None}
+            kind = args.get("type") or args.get("kind") or ""
+            label = f"{'événement' if real.name == 'log_client_event' else 'fiche'} {kind} : {args.get('title', '')}"
+            t = asyncio.create_task(self._write(real.name, args, label))
+            self.tasks.add(t)
+            t.add_done_callback(self.tasks.discard)
+            return {"ok": True, "note": "Enregistré par le Greffier (en arrière-plan)."}
+
+        return dataclasses.replace(real, fn=handoff)
 
     def outcomes(self) -> str:
         """What the watched tools returned this turn (retention offer, substitution, finalization), one line each."""
