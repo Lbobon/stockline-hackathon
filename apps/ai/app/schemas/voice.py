@@ -47,6 +47,7 @@ class TextMessage(WireModel):
     type: Literal["text"] = "text"
     text: str
     speaker: Literal["client", "leila"] = "client"
+    demo_error: bool = False  # Garde-fou demo: the agent is told to state one wrong figure, to show it being caught
 
 
 class ResetMessage(WireModel):

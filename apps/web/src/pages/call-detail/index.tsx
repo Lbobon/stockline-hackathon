@@ -9,7 +9,8 @@
  */
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowUpRight, FileText, Languages, PhoneCall, Sparkles, Timer, TriangleAlert, TrendingUp, Zap, type LucideIcon } from "lucide-react";
+import { ArrowUpRight, FileText, Languages, PhoneCall, ShieldCheck, ShieldX, Sparkles, Timer, TriangleAlert, TrendingUp, Zap, type LucideIcon } from "lucide-react";
+import type { GuardSummary } from "@kit/shared";
 import { cn } from "@/lib/cn";
 import { Badge, DateLabel, Dot, ErrorState, Money, Page, PageBody, PageHeader, SECTION_LABEL, Section, Skeleton, StatusDot, type Tone } from "@/ui";
 import { OUTCOME, useCall, type CallReport, type CallSpan, type CallTurn } from "@/features/calls/api";
@@ -93,6 +94,7 @@ function Report({ r }: { r: CallReport }) {
         </div>
         <aside className={cn("shrink-0 space-y-7 border-border bg-card px-5 py-6", wide ? "w-[392px] border-l" : "w-full border-t")}>
           <ForLeila items={ai.for_leila ?? []} />
+          {r.guard?.checked ? <GuardSection g={r.guard} /> : null}
           {r.orders.length ? <Orders r={r} /> : null}
           <Writes r={r} />
           {ai.risks?.length ? <Bullets title="Risques" items={ai.risks} icon={TriangleAlert} cls="text-destructive" /> : null}
@@ -501,6 +503,39 @@ function Writes({ r }: { r: CallReport }) {
           })}
         </ul>
       ) : <p className="text-[12.5px] text-muted-foreground">Rien à consigner pendant cet appel.</p>}
+    </Section>
+  );
+}
+
+/** Le Garde-fou: how many sentences Jev checked against the ERP, and the ones it caught. */
+function GuardSection({ g }: { g: GuardSummary }) {
+  const cell = (label: string, n: number | string, cls?: string) => (
+    <div className="flex flex-col gap-0.5 border-r border-border/70 px-2.5 py-1.5 last:border-r-0">
+      <span className={cn("num text-[15px] font-semibold leading-none", cls)}>{n}</span>
+      <span className="text-[10.5px] text-muted-foreground">{label}</span>
+    </div>
+  );
+  return (
+    <Section title="Garde-fou" actions={<span className="flex items-center gap-1 text-[11.5px] text-muted-foreground"><ShieldCheck size={12} strokeWidth={1.9} className="text-agent-guard" />Jev contre l'ERP{g.medianMs != null ? ` · ${g.medianMs} ms` : ""}</span>}>
+      <div className="mb-2.5 grid grid-cols-4 rounded-[4px] border border-border">
+        {cell("vérifiées", g.checked)}
+        {cell("conformes", g.verified, "text-success")}
+        {cell(g.mode === "block" ? "bloquées" : "contredites", g.contradicted, g.contradicted ? "text-destructive" : undefined)}
+        {cell("corrigées", g.corrections, g.corrections ? "text-agent-guard" : undefined)}
+      </div>
+      {g.flags.length ? (
+        <ul className="space-y-1.5 text-[12.5px] leading-[1.5]">
+          {g.flags.map((f, i) => (
+            <li key={i} className="flex gap-2">
+              <ShieldX size={13} strokeWidth={1.9} className="mt-[3px] shrink-0 text-destructive" />
+              <span><span className={cn(f.blocked && "text-muted-foreground line-through decoration-destructive/60")}>« {f.sentence} »</span>
+                {f.source ? <span className="text-muted-foreground"> ≠ {f.source}</span> : null}{f.blocked ? <span className="text-muted-foreground"> · jamais dite</span> : null}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[12.5px] text-muted-foreground">Aucune phrase contraire à l'ERP pendant l'appel.</p>
+      )}
     </Section>
   );
 }

@@ -16,7 +16,7 @@ import { fmtMs } from "./metrics";
 
 const WINDOW_MS = 30_000;
 
-export function OrchestraStrip({ agents, lanes, profile, notes, team = TEAM, subtitle = "5 agents en parallèle de l'appel" }: {
+export function OrchestraStrip({ agents, lanes, profile, notes, team = TEAM, subtitle = "6 agents en parallèle de l'appel" }: {
   agents: Record<string, AgentLive>; lanes: LaneSpan[]; profile: { language: string; register: "tu" | "vous" }; notes: string[];
   team?: AgentKey[]; subtitle?: string;
 }) {

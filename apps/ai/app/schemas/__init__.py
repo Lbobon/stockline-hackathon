@@ -12,6 +12,7 @@ from .chat import (
     ChatStreamEvent,
     DoneEvent,
     ErrorEvent,
+    GuardEvent,
     TextEvent,
     ToolCall,
     ToolCallEvent,

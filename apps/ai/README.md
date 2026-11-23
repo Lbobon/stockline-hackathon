@@ -198,6 +198,36 @@ if jev:
 - Copyable examples in `agent/jev_examples.py`: `pick_product(jev, utterance, search_results)` → product id or None,
   `is_yes(jev, question, answer)` → True / False / None. The default agent does not use Jev: wire it where you want.
 
+### Le Garde-fou (`app/guard/`): Jev fact-checks every sentence before it is spoken
+
+A voice agent that tells a client a wrong price, a stock it doesn't have, or a discount nobody granted costs real money.
+The Garde-fou is the 6th agent of the call orchestra. Each sentence the agent is about to say goes through it.
+
+```
+sentence ──► claim_kinds()   no price / quantity / stock / date / discount (« Je regarde. »)  → spoken at once, no Jev call
+         └─► Jev, 1 request   supported? contradicts? promises? mismatch? + source = which ERP fact (choice)   ≈ 140 ms warm
+             evidence         every tool result of the call, the Éclaireur's facts, the outbound brief, the business date
+         ──► verdict          verified ✓ · contradicted ✗ · unverified ? · unchecked (timeout: fail open)
+```
+
+- **GUARD_MODE=block**: the TTS synthesizes the sentence *while* Jev checks it, so a verified sentence costs ~0 ms.
+  A contradicted sentence is never sent. The turn stops like a barge-in (`guard.until`). The agent gets a hidden note
+  with the ERP fact and re-says it correctly, in the same audio segment (`VoiceConnection.correct`). One correction per
+  turn, then a safe line. **shadow** shows the verdicts and blocks nothing. **off** runs no checks.
+- Guard rails against false blocks:
+  - ERP keys are renamed for Jev (`prixClientHT` vs `prixCatalogueHT`, `disponibleALaVente`), so it can't mistake one price or stock for another.
+  - A number said in words that matches an ERP number, or the client's own number, rounded the way the agent is told to round, is never a contradiction (`rounded_erp_numbers`).
+  - Two or more figures quoted to the decimal off the ERP (« 382,5 kg en stock, dont 295,4 réservés ») are never flagged either (`quoted_erp_numbers`).
+- On screen:
+  - `/voice`: each sentence is marked ✓/✗/?, with the ERP source on hover, the never-said text struck through, and the correction labelled. There is a Garde-fou panel with live counters, a red alert when a sentence is caught, and a section in the call report.
+  - Chat: verdicts under each answer (`guard` SSE event, never blocking).
+- Demo: the « Provoquer une erreur » button (Garde-fou panel, `/voice`) sends the next caller line with `demoError`.
+  The server lowers the first price / stock figure of the answer by ~30 % as it streams (`hallucinate()`), the way a
+  model hallucination would look. The guard catches it, the sentence is never heard, and the agent corrects itself.
+- Measure it:
+  - `uv run python -m app.guard.eval` runs labelled sentences against real-shaped ERP results: 27/27, 0 false blocks, 140 ms median.
+  - `uv run python -m sim --guard` runs every sim call with the guard in shadow mode and prints each flag for review.
+
 ## Environment
 
 | Var | Default | Notes |

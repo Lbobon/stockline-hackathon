@@ -7,6 +7,7 @@ import { LiveTranscript } from "@/features/assistant/LiveTranscript";
 import { ToolRow } from "@/features/assistant/tools";
 import type { Activity, VoiceTurn } from "@/features/assistant/useVoiceSession";
 import { TurnChips } from "./metrics";
+import { GuardChip, GuardedText } from "@/features/guard/guard-ui";
 
 const clock = (at?: number) => (at ? new Date(at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "");
 
@@ -104,14 +105,17 @@ function TurnRows({ t, last, activity, level }: { t: VoiceTurn; last: boolean; a
                   last && activity === "speaking" && "ring-2 ring-violet/20",
                 )}
               >
-                {a.text}
+                <GuardedText text={a.text} verdicts={a.guard} correction={a.correction} />
               </div>
             ) : null}
             {a.error ? (
               <span className="flex items-start gap-1.5 text-[12px] text-destructive"><CircleAlert size={13} strokeWidth={1.75} className="mt-[2px] shrink-0" />{a.error}</span>
             ) : null}
             {a.interrupted ? <span className="text-[11.5px] text-muted-foreground">Interrompu par l'appelant</span> : null}
-            <TurnChips t={t} />
+            <span className="flex flex-wrap items-center gap-1.5">
+              <TurnChips t={t} />
+              <GuardChip verdicts={a.guard} />
+            </span>
           </div>
         </div>
       ) : null}

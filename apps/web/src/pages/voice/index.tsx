@@ -17,6 +17,7 @@ import { useVoiceSession, type Activity, type Conn } from "@/features/assistant/
 import { CommandMode } from "./command";
 import { CopilotMode } from "./copilot";
 import { LiveActivity } from "./live-activity";
+import { GuardAlertBanner, GuardPanel } from "@/features/guard/guard-ui";
 import { MetricsBar } from "./metrics";
 import { OrchestraStrip, ReportBanner } from "./orchestra";
 import { LevelBars, Timeline } from "./timeline";
@@ -29,6 +30,8 @@ const isTypingTarget = (t: EventTarget | null) => {
 const STATE_LABEL: Record<Activity, string> = { idle: "Prêt", recording: "Enregistrement", thinking: "L'agent réfléchit", speaking: "L'agent parle" };
 
 type Mode = "call" | "copilot" | "command";
+/** « Provoquer une erreur » with an empty input: a caller asking a price (fictional client of the data pack). */
+const DEMO_LINE = "Bonjour, c'est Antalya Kebab. Le gigot d'agneau, vous me le faites à combien le kilo ?";
 const MODES: { id: Mode; label: string }[] = [
   { id: "call", label: "Appel" },
   { id: "copilot", label: "Copilote" },
@@ -124,6 +127,7 @@ function CallMode({ modeSwitch }: { modeSwitch: ReactNode }) {
       <div className="flex min-h-0 flex-1">
         <section className="flex min-w-0 flex-1 flex-col">
           <ReportBanner report={v.report} onClose={v.dismissReport} />
+          <GuardAlertBanner alert={v.guardAlert} onClose={v.dismissGuardAlert} />
           <MetricsBar turns={v.turns} />
           <OrchestraStrip agents={v.agents} lanes={v.lanes} profile={v.profile} notes={v.notes} />
           <Timeline turns={v.turns} activity={v.activity} level={v.level} />
@@ -165,8 +169,18 @@ function CallMode({ modeSwitch }: { modeSwitch: ReactNode }) {
             </form>
           </div>
         </section>
-        <aside className="w-[280px] shrink-0 border-l border-border bg-card xl:w-[320px] 2xl:w-[380px]">
-          <LiveActivity />
+        <aside className="flex w-[280px] shrink-0 flex-col border-l border-border bg-card xl:w-[320px] 2xl:w-[380px]">
+          {/* Le Garde-fou: Jev checks each sentence against the ERP before it is said */}
+          <GuardPanel
+            verdicts={v.verdicts}
+            checking={v.agents.guard?.status === "busy" ? v.agents.guard.task : undefined}
+            className="max-h-[52%] shrink-0"
+            onDemo={() => { v.sendText(text.trim() || DEMO_LINE, { demoError: true }); setText(""); }}
+            demoDisabled={!ready || v.activity === "thinking"}
+          />
+          <div className="min-h-0 flex-1">
+            <LiveActivity />
+          </div>
         </aside>
       </div>
     </Page>

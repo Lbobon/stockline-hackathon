@@ -43,6 +43,7 @@ from app.agent.radar_brief import brief as radar_brief
 from app.clients import LLMRequest, LLMText, LLMUsage
 from app.clients.factory import make_llm_client
 from app.config import REPO_ROOT, LLMSettings, settings
+from app.guard import Guard, check_text
 from app.schemas import ChatMessage, DoneEvent, ErrorEvent, TextEvent, ToolCallEvent, ToolResultEvent
 from app.orchestra import CallSession, FastEvent, FillerEvent
 from app.orchestra import store as call_store
@@ -186,6 +187,8 @@ async def simulate(sc: Scenario, caller_llm, agent_llm) -> Trace:
                         add_usage(trace.usage, usage)
         opening.agent = opening.agent.strip()
         opening.total_ms = int((time.perf_counter() - started) * 1000)
+        if guard:
+            opening.guard = [v.wire() for v in await check_text(guard, opening.agent)]
         caller_view = [ChatMessage(role="user", content=ringing(opening.agent))]
 
     for _ in range(MAX_TURNS):
@@ -238,13 +241,17 @@ async def simulate_orchestra(sc: Scenario, caller_llm, agent_llm, rate: float, r
     caller_system = CALLER_RULES.format(persona=persona, goal=sc.goal, end=END)
     caller_view: list[ChatMessage] = [ChatMessage(role="user", content=PICK_UP)]
     session = CallSession(actor_name="Agent vocal", llm=agent_llm)
+    guard = Guard(session.state, mode="shadow") if os.environ.get("SIM_GUARD") == "1" else None  # --guard: Jev checks each sentence
     warm = asyncio.create_task(session.warm())  # the line rings: prompt cache written meanwhile
     if sc.outbound_order_id or sc.radar_client_id:  # the agent calls and speaks first, as WS /voice does for ?outbound=<orderId>
         await warm
         opening = Turn(caller=OUTBOUND_TURN)
         trace.turns.append(opening)
         started = time.perf_counter()
-        async for ev in session.turn(await opening_brief(sc)):
+        brief = await opening_brief(sc)
+        if guard:
+            guard.add_brief(brief)
+        async for ev in session.turn(brief):
             if isinstance(ev, TextEvent):
                 opening.first_text_ms = opening.first_text_ms or int((time.perf_counter() - started) * 1000)
                 opening.agent += ev.delta
@@ -295,6 +302,9 @@ async def simulate_orchestra(sc: Scenario, caller_llm, agent_llm, rate: float, r
         turn.total_ms = int((time.perf_counter() - started) * 1000)
         turn.agent = turn.agent.strip()
         turn.prefetched = list(session.state.turns[-1].get("prefetched") or [])
+        if guard:
+            guard.client_said(said)
+            turn.guard = [v.wire() for v in await check_text(guard, turn.agent)]
         if turn.error:
             trace.ended_by = "error"
             break
@@ -407,6 +417,12 @@ async def run_one(sc: Scenario, rep: int, sem: asyncio.Semaphore, models: dict) 
         }
         failed = [n for n, ok in graded["checks"] if not ok] + (graded["judge"].get("problems") or [])[:1]
         print(f"{'PASS' if rec['success'] else 'FAIL'}  {sc.id}#{rep}  {rec['turns']} tours, ${agent_cost:.3f}" + (dim(f"  — {'; '.join(failed)}") if not rec["success"] else ""), flush=True)
+        for t in trace.turns:  # --guard: what the Garde-fou would have blocked (review these: true or false catches?)
+            for v in t.guard:
+                if v.get("status") == "contradicted":
+                    src = (v.get("source") or {}).get("label", "—")
+                    print(dim(f"      GARDE-FOU ✗{' BLOQUERAIT' if v.get('strong') else ' (doute, dite)'} {sc.id} « {v['sentence']} »  ← {src} {', '.join((v.get('source') or {}).get('values', []))}"
+                              f"  (sup {v.get('pSupported')}, con {v.get('pContradicts')}, mm {v.get('pMismatch')}, pr {v.get('pPromises')})"), flush=True)
         return rec
 
 
@@ -499,7 +515,10 @@ async def main() -> None:
     ap.add_argument("--speech-rate", type=float, default=2.6, help="words/s of the emulated live transcript (0 = instant)")
     ap.add_argument("--reports", action="store_true", help="write the Rapporteur's report for each call (shown at /calls)")
     ap.add_argument("--agent-model", help="override the voice agent model, ex. claude-haiku-5-5")
+    ap.add_argument("--guard", action="store_true", help="le Garde-fou in shadow mode: Jev checks every agent sentence, flags are printed")
     a = ap.parse_args()
+    if a.guard:
+        os.environ["SIM_GUARD"] = "1"
 
     if a.list:
         for s in SCENARIOS:
@@ -558,6 +577,13 @@ async def main() -> None:
     text = report(list(recs), models, out)
     print("\n" + "\n".join(text.split("\n## Calls")[0].splitlines()[2:]))
     print(f"\nreport: {out / 'report.md'}")
+    verdicts = [v for r in recs for t in r.get("trace", []) for v in t.get("guard", [])]
+    if verdicts:
+        checked = [v for v in verdicts if v.get("status") != "none"]
+        ms = sorted(v["ms"] for v in checked if v.get("ms"))
+        print(f"Garde-fou : {len(verdicts)} phrases, {len(checked)} vérifiées par Jev — "
+              + ", ".join(f"{k} {sum(v.get('status') == k for v in checked)}" for k in ("verified", "unverified", "contradicted", "unchecked"))
+              + (f" · Jev médian {ms[len(ms) // 2]} ms" if ms else ""))
 
 
 if __name__ == "__main__":

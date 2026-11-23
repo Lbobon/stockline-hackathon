@@ -12,6 +12,7 @@ import { useAiHealth } from "./ai-client";
 import { chat, useChat, type ChatItem } from "./chat-store";
 import { Markdown } from "@/ui/markdown";
 import { ToolRow } from "./tools";
+import { GuardChatFooter } from "@/features/guard/guard-ui";
 
 const SUGGESTIONS: { label: string; send: boolean }[] = [
   { label: "Qu'est-ce que commande d'habitude Le Bistrot du Port ?", send: true },
@@ -194,6 +195,7 @@ function Message({ it }: { it: ChatItem }) {
         </div>
       ) : null}
       {it.status === "stopped" ? <div className="text-[11.5px] text-muted-foreground">Réponse interrompue.</div> : null}
+      <GuardChatFooter verdicts={it.guard} />
       {it.status === "done" && it.ms != null ? (
         <div className="num font-mono text-[10.5px] text-muted-foreground">{(it.ms / 1000).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} s</div>
       ) : null}
