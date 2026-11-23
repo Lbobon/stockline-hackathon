@@ -114,7 +114,7 @@ function CallMode({ modeSwitch }: { modeSwitch: ReactNode }) {
         <section className="flex min-w-0 flex-1 flex-col">
           <ReportBanner report={v.report} onClose={v.dismissReport} />
           <MetricsBar turns={v.turns} />
-          <OrchestraStrip agents={v.agents} feed={v.feed} profile={v.profile} notes={v.notes} />
+          <OrchestraStrip agents={v.agents} lanes={v.lanes} profile={v.profile} notes={v.notes} />
           <Timeline turns={v.turns} activity={v.activity} level={v.level} />
 
           {v.mic === "denied" || v.mic === "unsupported" ? (

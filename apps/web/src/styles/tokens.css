@@ -25,6 +25,12 @@
   --chart-3: 38 90% 52%;
   --chart-4: 224 64% 56%;
   --chart-5: 342 68% 56%;
+  /* call orchestra agents (validated categorical set: dataviz validate_palette, light + dark) */
+  --agent-voice: 262 83% 58%;
+  --agent-fast: 148 68% 38%;
+  --agent-scout: 224 64% 56%;
+  --agent-scribe: 33 90% 44%;
+  --agent-linguist: 342 68% 56%;
 
   --shadow-sm: 0 1px 3px 0 #24423317, 0 1px 2px -1px #24423314;
   --shadow-panel: -8px 0 24px -8px #0000001f;
@@ -58,6 +64,12 @@
   --chart-3: 40 88% 60%;
   --chart-4: 224 62% 66%;
   --chart-5: 342 66% 64%;
+  /* call orchestra agents (validated categorical set: dataviz validate_palette, light + dark) */
+  --agent-voice: 258 90% 66%;
+  --agent-fast: 151 59% 38%;
+  --agent-scout: 224 62% 63%;
+  --agent-scribe: 35 83% 42%;
+  --agent-linguist: 342 66% 64%;
 
   --shadow-sm: 0 1px 3px 0 #03070580, 0 1px 2px -1px #03070580;
   --shadow-panel: -8px 0 24px -8px #03070580;

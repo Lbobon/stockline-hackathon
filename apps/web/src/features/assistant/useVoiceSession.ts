@@ -29,6 +29,8 @@ export interface VoiceTurn {
 /** One agent of the call orchestra (app/orchestra): what it is doing now, and how much it did. */
 export interface AgentLive { agent: OrchestraAgent; label: string; task?: string; status: "idle" | "busy" | "error"; runs: number; lastMs?: number; at?: number }
 export interface OrchestraFeedItem { id: number; agent: OrchestraAgent; label: string; task: string; ms?: number; at: number }
+/** One piece of agent work on the live timeline (client clock, ms since epoch); end undefined while it runs. */
+export interface LaneSpan { id: number; agent: OrchestraAgent; task: string; start: number; end?: number; ok?: boolean }
 export interface CallReportState { id: string; status: "writing" | "ready" | "error"; headline?: string }
 
 const ORCH_AGENTS: [OrchestraAgent, string][] = [
@@ -55,6 +57,7 @@ export function useVoiceSession() {
   const [profile, setProfile] = useState<{ language: string; register: "tu" | "vous" }>({ language: "fr", register: "vous" });
   const [notes, setNotes] = useState<string[]>([]);
   const [report, setReport] = useState<CallReportState>();
+  const [lanes, setLanes] = useState<LaneSpan[]>([]);
   const feedSeq = useRef(0);
 
   const ws = useRef<WebSocket>();
@@ -212,6 +215,19 @@ export function useVoiceSession() {
               : { ...cur, status: e.status === "error" ? "error" : "idle", runs: cur.runs + 1, lastMs: e.ms };
             return { ...a, [e.agent]: next };
           });
+          if (e.status === "start") {
+            const span: LaneSpan = { id: ++feedSeq.current, agent: e.agent, task: e.task, start: Date.now() };
+            setLanes((l) => [...l.filter((x) => x.end == null || Date.now() - x.end < 60_000).slice(-80), span]);
+          } else {
+            setLanes((l) => {
+              let i = l.length - 1;
+              while (i >= 0 && !(l[i].agent === e.agent && l[i].task === e.task && l[i].end == null)) i--;
+              if (i < 0) return l;
+              const next = [...l];
+              next[i] = { ...next[i], end: Date.now(), ok: e.status === "done" };
+              return next;
+            });
+          }
           if (e.status !== "start") {
             const item: OrchestraFeedItem = { id: ++feedSeq.current, agent: e.agent, label: e.label, task: e.task, ms: e.ms, at: Date.now() };
             setFeed((f) => [item, ...f].slice(0, 40));
@@ -362,6 +378,7 @@ export function useVoiceSession() {
     setAgents(freshAgents());
     setFeed([]);
     setNotes([]);
+    setLanes([]);
     setProfile({ language: "fr", register: "vous" });
   }, []);
 
@@ -381,7 +398,7 @@ export function useVoiceSession() {
 
   return {
     conn, activity, mic, providers, turns, level, lastError,
-    agents, feed, profile, notes, report, dismissReport: () => setReport(undefined),
+    agents, feed, profile, notes, report, lanes, dismissReport: () => setReport(undefined),
     startTalking, stopTalking, sendText, stopPlayback, reset, hangup, reconnect: connect,
   };
 }
