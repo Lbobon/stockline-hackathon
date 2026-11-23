@@ -2,7 +2,7 @@
 
 from pydantic import Field
 
-from .erp import enc, pick
+from .erp import ErpError, enc, pick
 from .orders import summarize_order
 from .registry import ToolContext, tool
 
@@ -20,7 +20,14 @@ async def finalize_order(
     that Leïla validates it at 5am; a date reason is said with the next possible delivery; the credit limit is named
     tactfully with its figures, a blocked account is not detailed (see the garde-fous).
     """
-    r = await ctx.erp.post(f"/api/gates/orders/{enc(order_id)}/finalize", {"recapConfirmed": recap_confirmed})
+    try:
+        r = await ctx.erp.post(f"/api/gates/orders/{enc(order_id)}/finalize", {"recapConfirmed": recap_confirmed})
+    except ErpError:
+        # Finalizing an order that is already confirmed (the client changed a line of it): nothing to do, say so plainly.
+        order = await ctx.erp.get(f"/api/orders/{enc(order_id)}")
+        if order.get("status") == "draft":
+            raise
+        return {"decision": "already_confirmed", "reasons": [], "note": "Déjà confirmée : les changements sont enregistrés.", "order": summarize_order(order)}
     return {"decision": r["decision"], "reasons": [x["message"] for x in r["reasons"]], "order": summarize_order(r["order"])}
 
 

@@ -63,7 +63,12 @@ async def find_client(
         _safe(get_client.fn(ctx, client_id=client_id)),
         _safe(get_context.fn(ctx, entity_type="client", id=client_id)),
     )
-    return {"client": card, "context": context, **({"otherCandidates": candidates[1:]} if len(candidates) > 1 else {})}
+    # The register ("Rester formel…") sits deep in the context entries, where the model kept missing it: put it on top.
+    talk = next((e.get("body") for e in (context.get("entries") or []) if "comment leur parler" in (e.get("title") or "").lower()), None) if isinstance(context, dict) else None
+    return {
+        "client": card, **({"howToTalk": talk} if talk else {}), "context": context,
+        **({"otherCandidates": candidates[1:]} if len(candidates) > 1 else {}),
+    }
 
 
 @tool

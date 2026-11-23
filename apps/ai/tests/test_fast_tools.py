@@ -99,3 +99,29 @@ def test_a_prepared_order_shows_the_picked_weight_and_no_stock():
     prepared = summarize_order({"id": "ord_1", "status": "prepared", "lines": [{**line, "preparedQty": 90.5}]})["lines"][0]
     assert prepared["preparedQty"] == 90.5 and "available" not in prepared
     assert summarize_order({"id": "ord_2", "status": "draft", "lines": [line]})["lines"][0]["available"] == -137.0
+
+
+async def test_find_client_puts_how_to_talk_on_top():
+    entries = [{"id": "ctx_1", "kind": "procedure", "title": "Comment leur parler", "body": "- Rester formel, tout par écrit."}]
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.url.path == "/api/context/for":
+            return httpx.Response(200, json={"label": "Centre social", "entries": entries, "related": []})
+        return httpx.Response(200, json=CLIENT)
+
+    ctx = ToolContext(erp=ErpClient("voice_agent", base_url="http://erp", http=httpx.AsyncClient(transport=httpx.MockTransport(handler))), actor="voice_agent")
+    r = await TOOLS["find_client"].run({"query": "cli_0041"}, ctx)
+    assert r["howToTalk"] == "- Rester formel, tout par écrit."
+
+
+async def test_finalize_an_already_confirmed_order_is_not_an_error():
+    order = {"id": "ord_1", "number": "CMD-1", "status": "confirmed", "client": {"name": "X"}, "lines": []}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "POST":
+            return httpx.Response(400, json={"error": {"message": "Impossible de confirmer la commande CMD-1 : elle est confirmée (attendu : brouillon)"}})
+        return httpx.Response(200, json=order)
+
+    ctx = ToolContext(erp=ErpClient("voice_agent", base_url="http://erp", http=httpx.AsyncClient(transport=httpx.MockTransport(handler))), actor="voice_agent")
+    r = await TOOLS["finalize_order"].run({"orderId": "ord_1", "recapConfirmed": True}, ctx)
+    assert r["decision"] == "already_confirmed" and r["order"]["status"] == "confirmed"
