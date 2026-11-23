@@ -1,0 +1,3229 @@
+{
+ "date": "2026-11-25",
+ "depot": {
+  "name": "MIN des Arnavaux",
+  "lat": 43.333,
+  "lng": 5.387
+ },
+ "events": [
+  {
+   "id": "om-psg",
+   "kind": "sport",
+   "date": "2026-11-25",
+   "time": "21:00",
+   "title": "OM – PSG au Vélodrome",
+   "affects": {
+    "from": "2026-11-25",
+    "to": "2026-11-25"
+   },
+   "segments": [
+    "snacking"
+   ],
+   "boosts": [
+    {
+     "productId": "prd_0043",
+     "factor": 1.4,
+     "productName": "Broche kebab veau-dinde 10 kg"
+    },
+    {
+     "productId": "prd_0044",
+     "factor": 1.4,
+     "productName": "Broche kebab veau-dinde 20 kg"
+    },
+    {
+     "productId": "prd_0045",
+     "factor": 1.4,
+     "productName": "Broche poulet 10 kg"
+    },
+    {
+     "productId": "prd_0049",
+     "factor": 1.3,
+     "productName": "Frites surgelées 9 mm (carton 4 × 2,5 kg)"
+    },
+    {
+     "productId": "prd_0050",
+     "factor": 1.3,
+     "productName": "Pains kebab ronds précuits surgelés (carton 100)"
+    }
+   ],
+   "pitch": "avec le match OM–PSG demain soir, les snacks tournent à fond",
+   "special": []
+  },
+  {
+   "id": "froid",
+   "kind": "weather",
+   "date": "2026-11-25",
+   "time": null,
+   "title": "Vague de froid : 4 °C le matin",
+   "affects": {
+    "from": "2026-11-25",
+    "to": "2026-11-27"
+   },
+   "segments": [
+    "restaurants"
+   ],
+   "boosts": [
+    {
+     "productId": "prd_0007",
+     "factor": 1.25,
+     "productName": "Souris d'agneau"
+    },
+    {
+     "productId": "prd_0008",
+     "factor": 1.25,
+     "productName": "Collier d'agneau (pour tajine)"
+    },
+    {
+     "productId": "prd_0030",
+     "factor": 1.2,
+     "productName": "Merguez bœuf-agneau maison"
+    }
+   ],
+   "pitch": "avec le froid qui arrive, les tajines et les couscous repartent",
+   "special": []
+  },
+  {
+   "id": "mariages",
+   "kind": "wedding",
+   "date": "2026-11-28",
+   "time": null,
+   "title": "Mariages du week-end",
+   "affects": {
+    "from": "2026-11-25",
+    "to": "2026-11-28"
+   },
+   "segments": [
+    "traiteurs"
+   ],
+   "boosts": [
+    {
+     "productId": "prd_0004",
+     "factor": 1.5,
+     "productName": "Gigot d'agneau avec os"
+    },
+    {
+     "productId": "prd_0005",
+     "factor": 1.5,
+     "productName": "Épaule d'agneau"
+    },
+    {
+     "productId": "prd_0023",
+     "factor": 1.4,
+     "productName": "Poulet entier PAC halal (1,3 kg)"
+    }
+   ],
+   "special": [
+    {
+     "productId": "prd_0001",
+     "qty": 36,
+     "note": "2 agneaux entiers pour le méchoui du samedi : carcasses à commander la veille avant 14 h",
+     "productName": "Carcasse d'agneau de France (16-20 kg)"
+    }
+   ],
+   "pitch": "pour vos mariages de samedi"
+  },
+  {
+   "id": "marche-noel",
+   "kind": "local",
+   "date": "2026-11-27",
+   "time": null,
+   "title": "Marché de Noël du Vieux-Port",
+   "affects": {
+    "from": "2026-11-25",
+    "to": "2026-12-24"
+   },
+   "segments": [
+    "pc:13001",
+    "pc:13002"
+   ],
+   "boosts": [
+    {
+     "productId": "prd_0030",
+     "factor": 1.3,
+     "productName": "Merguez bœuf-agneau maison"
+    },
+    {
+     "productId": "prd_0034",
+     "factor": 1.3,
+     "productName": "Brochettes de poulet marinées"
+    }
+   ],
+   "pitch": "avec le marché de Noël qui ouvre au Vieux-Port",
+   "special": []
+  }
+ ],
+ "clients": [
+  {
+   "clientId": "cli_0011",
+   "name": "Antalya Kebab",
+   "type": "restaurant",
+   "city": "Marseille 1er",
+   "lat": 43.29725,
+   "lng": 5.38181,
+   "contactName": "Jordan Hervé",
+   "phone": "06 32 42 43 45",
+   "status": "predicted",
+   "probability": 1.0,
+   "lines": [
+    {
+     "productId": "prd_0023",
+     "productName": "Poulet entier PAC halal (1,3 kg)",
+     "unit": "kg",
+     "qty": 69.5,
+     "baseQty": 69.5,
+     "unitPrice": 3.95,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0043",
+     "productName": "Broche kebab veau-dinde 10 kg",
+     "unit": "piece",
+     "qty": 11,
+     "baseQty": 8,
+     "unitPrice": 62.08,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0026",
+     "productName": "Haut de cuisse de poulet désossé",
+     "unit": "kg",
+     "qty": 40.0,
+     "baseQty": 40.0,
+     "unitPrice": 6.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0049",
+     "productName": "Frites surgelées 9 mm (carton 4 × 2,5 kg)",
+     "unit": "box",
+     "qty": 16,
+     "baseQty": 13,
+     "unitPrice": 13.77,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0051",
+     "productName": "Tortillas 30 cm pour tacos (carton 144)",
+     "unit": "box",
+     "qty": 3,
+     "baseQty": 3,
+     "unitPrice": 34.92,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0050",
+     "productName": "Pains kebab ronds précuits surgelés (carton 100)",
+     "unit": "box",
+     "qty": 11,
+     "baseQty": 8,
+     "unitPrice": 26.19,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0036",
+     "productName": "Cachir à l'olive (pièce 500 g)",
+     "unit": "piece",
+     "qty": 20,
+     "baseQty": 20,
+     "unitPrice": 5.9,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0054",
+     "productName": "Harissa (boîte 760 g)",
+     "unit": "piece",
+     "qty": 18,
+     "baseQty": 18,
+     "unitPrice": 3.6,
+     "eventId": null
+    }
+   ],
+   "totalHt": 2009.38,
+   "upliftHt": 306.12,
+   "reason": "Commande 12 mercredis sur 12 ; OM – PSG au Vélodrome : avec le match OM–PSG demain soir, les snacks tournent à fond ; Marché de Noël du Vieux-Port : avec le marché de Noël qui ouvre au Vieux-Port",
+   "eventIds": [
+    "om-psg",
+    "marche-noel"
+   ],
+   "specialRequirements": []
+  },
+  {
+   "clientId": "cli_0042",
+   "name": "Boucherie Al Amana",
+   "type": "fishmonger",
+   "city": "Marseille 3e",
+   "lat": 43.31519,
+   "lng": 5.37689,
+   "contactName": "Fabrice Nicolas",
+   "phone": "06 21 30 93 95",
+   "status": "predicted",
+   "probability": 1.0,
+   "lines": [
+    {
+     "productId": "prd_0019",
+     "productName": "Viande hachée de bœuf 15 % MG (barquette 2 kg)",
+     "unit": "kg",
+     "qty": 20.5,
+     "baseQty": 20.5,
+     "unitPrice": 9.8,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0023",
+     "productName": "Poulet entier PAC halal (1,3 kg)",
+     "unit": "kg",
+     "qty": 44.5,
+     "baseQty": 44.5,
+     "unitPrice": 3.95,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0024",
+     "productName": "Filet de poulet",
+     "unit": "kg",
+     "qty": 43.5,
+     "baseQty": 43.5,
+     "unitPrice": 8.13,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0002",
+     "productName": "Carcasse d'agneau d'Espagne (12-14 kg)",
+     "unit": "kg",
+     "qty": 57.0,
+     "baseQty": 57.0,
+     "unitPrice": 8.13,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0037",
+     "productName": "Foie d'agneau",
+     "unit": "kg",
+     "qty": 11.0,
+     "baseQty": 11.0,
+     "unitPrice": 9.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0018",
+     "productName": "Minerai de bœuf à hacher (VBF)",
+     "unit": "kg",
+     "qty": 42.0,
+     "baseQty": 42.0,
+     "unitPrice": 8.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0030",
+     "productName": "Merguez bœuf-agneau maison",
+     "unit": "kg",
+     "qty": 18.0,
+     "baseQty": 18.0,
+     "unitPrice": 10.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0027",
+     "productName": "Ailes de poulet",
+     "unit": "kg",
+     "qty": 22.0,
+     "baseQty": 22.0,
+     "unitPrice": 3.5,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0058",
+     "productName": "Pois chiches secs (sac 5 kg)",
+     "unit": "piece",
+     "qty": 7,
+     "baseQty": 7,
+     "unitPrice": 9.08,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0026",
+     "productName": "Haut de cuisse de poulet désossé",
+     "unit": "kg",
+     "qty": 19.0,
+     "baseQty": 19.0,
+     "unitPrice": 6.4,
+     "eventId": null
+    }
+   ],
+   "totalHt": 2093.5,
+   "upliftHt": 0.0,
+   "reason": "Commande 12 mercredis sur 12",
+   "eventIds": [],
+   "specialRequirements": []
+  },
+  {
+   "clientId": "cli_0075",
+   "name": "Boucherie David",
+   "type": "fishmonger",
+   "city": "Marignane",
+   "lat": 43.41004,
+   "lng": 5.22157,
+   "contactName": "Gérard Diallo",
+   "phone": "06 34 51 94 93",
+   "status": "predicted",
+   "probability": 1.0,
+   "lines": [
+    {
+     "productId": "prd_0005",
+     "productName": "Épaule d'agneau",
+     "unit": "kg",
+     "qty": 41.0,
+     "baseQty": 41.0,
+     "unitPrice": 11.33,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0030",
+     "productName": "Merguez bœuf-agneau maison",
+     "unit": "kg",
+     "qty": 65.0,
+     "baseQty": 65.0,
+     "unitPrice": 10.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0023",
+     "productName": "Poulet entier PAC halal (1,3 kg)",
+     "unit": "kg",
+     "qty": 102.5,
+     "baseQty": 102.5,
+     "unitPrice": 3.79,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0037",
+     "productName": "Foie d'agneau",
+     "unit": "kg",
+     "qty": 19.5,
+     "baseQty": 19.5,
+     "unitPrice": 9.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0010",
+     "productName": "Entrecôte de bœuf sous vide",
+     "unit": "kg",
+     "qty": 21.5,
+     "baseQty": 21.5,
+     "unitPrice": 24.5,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0018",
+     "productName": "Minerai de bœuf à hacher (VBF)",
+     "unit": "kg",
+     "qty": 61.5,
+     "baseQty": 61.5,
+     "unitPrice": 8.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0016",
+     "productName": "Jarret de bœuf",
+     "unit": "kg",
+     "qty": 40.0,
+     "baseQty": 40.0,
+     "unitPrice": 9.6,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0059",
+     "productName": "Dattes Deglet Nour branchées (carton 5 kg)",
+     "unit": "box",
+     "qty": 12,
+     "baseQty": 12,
+     "unitPrice": 24.5,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0002",
+     "productName": "Carcasse d'agneau d'Espagne (12-14 kg)",
+     "unit": "kg",
+     "qty": 59.5,
+     "baseQty": 59.5,
+     "unitPrice": 8.26,
+     "eventId": null
+    }
+   ],
+   "totalHt": 3908.23,
+   "upliftHt": 0.0,
+   "reason": "Commande 12 mercredis sur 12",
+   "eventIds": [],
+   "specialRequirements": [
+    "Certificat halal du lot agrafé au bon",
+    "Aucune substitution sans accord"
+   ]
+  },
+  {
+   "clientId": "cli_0001",
+   "name": "Boucherie El Baraka Noailles",
+   "type": "fishmonger",
+   "city": "Marseille 1er",
+   "lat": 43.30271,
+   "lng": 5.38118,
+   "contactName": "Hadj Mohamed Zerrouki",
+   "phone": "06 11 47 82 30",
+   "status": "predicted",
+   "probability": 1.0,
+   "lines": [
+    {
+     "productId": "prd_0018",
+     "productName": "Minerai de bœuf à hacher (VBF)",
+     "unit": "kg",
+     "qty": 33.5,
+     "baseQty": 33.5,
+     "unitPrice": 8.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0008",
+     "productName": "Collier d'agneau (pour tajine)",
+     "unit": "kg",
+     "qty": 24.5,
+     "baseQty": 24.5,
+     "unitPrice": 8.83,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0001",
+     "productName": "Carcasse d'agneau de France (16-20 kg)",
+     "unit": "kg",
+     "qty": 90.0,
+     "baseQty": 90.0,
+     "unitPrice": 9.9,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0015",
+     "productName": "Paleron de bœuf",
+     "unit": "kg",
+     "qty": 22.5,
+     "baseQty": 22.5,
+     "unitPrice": 11.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0030",
+     "productName": "Merguez bœuf-agneau maison",
+     "unit": "kg",
+     "qty": 52.0,
+     "baseQty": 40.0,
+     "unitPrice": 10.2,
+     "eventId": "marche-noel"
+    },
+    {
+     "productId": "prd_0038",
+     "productName": "Tripes de bœuf blanchies (douara)",
+     "unit": "kg",
+     "qty": 12.0,
+     "baseQty": 12.0,
+     "unitPrice": 5.6,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0023",
+     "productName": "Poulet entier PAC halal (1,3 kg)",
+     "unit": "kg",
+     "qty": 50.5,
+     "baseQty": 50.5,
+     "unitPrice": 3.95,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0059",
+     "productName": "Dattes Deglet Nour branchées (carton 5 kg)",
+     "unit": "box",
+     "qty": 7,
+     "baseQty": 7,
+     "unitPrice": 24.5,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0037",
+     "productName": "Foie d'agneau",
+     "unit": "kg",
+     "qty": 10.5,
+     "baseQty": 10.5,
+     "unitPrice": 9.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0032",
+     "productName": "Kefta bœuf persil-oignon (boulettes)",
+     "unit": "kg",
+     "qty": 13.5,
+     "baseQty": 13.5,
+     "unitPrice": 11.6,
+     "eventId": null
+    }
+   ],
+   "totalHt": 2867.01,
+   "upliftHt": 122.4,
+   "reason": "Commande 12 mercredis sur 12 ; Marché de Noël du Vieux-Port : avec le marché de Noël qui ouvre au Vieux-Port",
+   "eventIds": [
+    "marche-noel"
+   ],
+   "specialRequirements": [
+    "Certificat halal du lot agrafé au bon"
+   ]
+  },
+  {
+   "clientId": "cli_0022",
+   "name": "Boucherie de l'Estaque",
+   "type": "fishmonger",
+   "city": "Marseille 14e",
+   "lat": 43.34498,
+   "lng": 5.39262,
+   "contactName": "Marco Dufour",
+   "phone": "06 55 90 81 07",
+   "status": "predicted",
+   "probability": 1.0,
+   "lines": [
+    {
+     "productId": "prd_0005",
+     "productName": "Épaule d'agneau",
+     "unit": "kg",
+     "qty": 13.5,
+     "baseQty": 13.5,
+     "unitPrice": 11.33,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0019",
+     "productName": "Viande hachée de bœuf 15 % MG (barquette 2 kg)",
+     "unit": "kg",
+     "qty": 17.5,
+     "baseQty": 17.5,
+     "unitPrice": 9.8,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0030",
+     "productName": "Merguez bœuf-agneau maison",
+     "unit": "kg",
+     "qty": 15.0,
+     "baseQty": 15.0,
+     "unitPrice": 10.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0001",
+     "productName": "Carcasse d'agneau de France (16-20 kg)",
+     "unit": "kg",
+     "qty": 27.0,
+     "baseQty": 27.0,
+     "unitPrice": 9.98,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0034",
+     "productName": "Brochettes de poulet marinées",
+     "unit": "kg",
+     "qty": 10.5,
+     "baseQty": 10.5,
+     "unitPrice": 12.8,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0031",
+     "productName": "Merguez de volaille",
+     "unit": "kg",
+     "qty": 9.5,
+     "baseQty": 9.5,
+     "unitPrice": 8.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0035",
+     "productName": "Émincé de poulet mariné chawarma",
+     "unit": "kg",
+     "qty": 11.5,
+     "baseQty": 11.5,
+     "unitPrice": 9.1,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0002",
+     "productName": "Carcasse d'agneau d'Espagne (12-14 kg)",
+     "unit": "kg",
+     "qty": 19.0,
+     "baseQty": 19.0,
+     "unitPrice": 8.26,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0018",
+     "productName": "Minerai de bœuf à hacher (VBF)",
+     "unit": "kg",
+     "qty": 14.0,
+     "baseQty": 14.0,
+     "unitPrice": 8.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0037",
+     "productName": "Foie d'agneau",
+     "unit": "kg",
+     "qty": 4.0,
+     "baseQty": 4.0,
+     "unitPrice": 9.2,
+     "eventId": null
+    }
+   ],
+   "totalHt": 1375.21,
+   "upliftHt": 0.0,
+   "reason": "Commande 12 mercredis sur 12",
+   "eventIds": [],
+   "specialRequirements": [
+    "Certificat halal du lot agrafé au bon"
+   ]
+  },
+  {
+   "clientId": "cli_0068",
+   "name": "Boucherie de la Gare d'Aix-en-Provence",
+   "type": "fishmonger",
+   "city": "Aix-en-Provence",
+   "lat": 43.52746,
+   "lng": 5.42288,
+   "contactName": "Ibrahim Haddad",
+   "phone": "07 94 32 00 23",
+   "status": "predicted",
+   "probability": 1.0,
+   "lines": [
+    {
+     "productId": "prd_0023",
+     "productName": "Poulet entier PAC halal (1,3 kg)",
+     "unit": "kg",
+     "qty": 48.0,
+     "baseQty": 48.0,
+     "unitPrice": 3.95,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0024",
+     "productName": "Filet de poulet",
+     "unit": "kg",
+     "qty": 13.5,
+     "baseQty": 13.5,
+     "unitPrice": 8.39,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0001",
+     "productName": "Carcasse d'agneau de France (16-20 kg)",
+     "unit": "kg",
+     "qty": 48.5,
+     "baseQty": 48.5,
+     "unitPrice": 9.98,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0032",
+     "productName": "Kefta bœuf persil-oignon (boulettes)",
+     "unit": "kg",
+     "qty": 11.0,
+     "baseQty": 11.0,
+     "unitPrice": 11.32,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0005",
+     "productName": "Épaule d'agneau",
+     "unit": "kg",
+     "qty": 14.5,
+     "baseQty": 14.5,
+     "unitPrice": 11.51,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0030",
+     "productName": "Merguez bœuf-agneau maison",
+     "unit": "kg",
+     "qty": 16.0,
+     "baseQty": 16.0,
+     "unitPrice": 10.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0009",
+     "productName": "Agneau haché (barquette 2 kg)",
+     "unit": "kg",
+     "qty": 8.0,
+     "baseQty": 8.0,
+     "unitPrice": 12.67,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0013",
+     "productName": "Bavette d'aloyau",
+     "unit": "kg",
+     "qty": 6.0,
+     "baseQty": 6.0,
+     "unitPrice": 16.9,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0022",
+     "productName": "Jarret de veau (osso buco)",
+     "unit": "kg",
+     "qty": 7.0,
+     "baseQty": 7.0,
+     "unitPrice": 14.6,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0031",
+     "productName": "Merguez de volaille",
+     "unit": "kg",
+     "qty": 13.5,
+     "baseQty": 13.5,
+     "unitPrice": 8.2,
+     "eventId": null
+    }
+   ],
+   "totalHt": 1657.17,
+   "upliftHt": 0.0,
+   "reason": "Commande 12 mercredis sur 12",
+   "eventIds": [],
+   "specialRequirements": [
+    "Certificat halal du lot agrafé au bon"
+   ]
+  },
+  {
+   "clientId": "cli_0016",
+   "name": "O'Burger Aix-en-Provence",
+   "type": "brasserie",
+   "city": "Aix-en-Provence",
+   "lat": 43.52202,
+   "lng": 5.42521,
+   "contactName": "Guillaume Berger",
+   "phone": "06 64 80 79 86",
+   "status": "predicted",
+   "probability": 1.0,
+   "lines": [
+    {
+     "productId": "prd_0023",
+     "productName": "Poulet entier PAC halal (1,3 kg)",
+     "unit": "kg",
+     "qty": 23.5,
+     "baseQty": 23.5,
+     "unitPrice": 3.79,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0046",
+     "productName": "Steaks hachés 15 % surgelés 120 g (carton 50)",
+     "unit": "box",
+     "qty": 3,
+     "baseQty": 3,
+     "unitPrice": 31.53,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0025",
+     "productName": "Cuisse de poulet",
+     "unit": "kg",
+     "qty": 26.0,
+     "baseQty": 26.0,
+     "unitPrice": 3.55,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0031",
+     "productName": "Merguez de volaille",
+     "unit": "kg",
+     "qty": 7.0,
+     "baseQty": 7.0,
+     "unitPrice": 8.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0051",
+     "productName": "Tortillas 30 cm pour tacos (carton 144)",
+     "unit": "box",
+     "qty": 2,
+     "baseQty": 2,
+     "unitPrice": 34.92,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0065",
+     "productName": "Cheddar en tranches (paquet 1 kg)",
+     "unit": "piece",
+     "qty": 11,
+     "baseQty": 11,
+     "unitPrice": 8.83,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0043",
+     "productName": "Broche kebab veau-dinde 10 kg",
+     "unit": "piece",
+     "qty": 5,
+     "baseQty": 4,
+     "unitPrice": 62.08,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0049",
+     "productName": "Frites surgelées 9 mm (carton 4 × 2,5 kg)",
+     "unit": "box",
+     "qty": 8,
+     "baseQty": 7,
+     "unitPrice": 13.77,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0018",
+     "productName": "Minerai de bœuf à hacher (VBF)",
+     "unit": "kg",
+     "qty": 25.5,
+     "baseQty": 25.5,
+     "unitPrice": 8.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0066",
+     "productName": "Fromage fondu à tartiner (seau 2 kg)",
+     "unit": "piece",
+     "qty": 4,
+     "baseQty": 4,
+     "unitPrice": 12.4,
+     "eventId": null
+    }
+   ],
+   "totalHt": 1184.69,
+   "upliftHt": 75.85,
+   "reason": "Commande 12 mercredis sur 12 ; OM – PSG au Vélodrome : avec le match OM–PSG demain soir, les snacks tournent à fond",
+   "eventIds": [
+    "om-psg"
+   ],
+   "specialRequirements": [
+    "Aucune substitution sans accord"
+   ]
+  },
+  {
+   "clientId": "cli_0065",
+   "name": "Snack Éric",
+   "type": "restaurant",
+   "city": "Marseille 11e",
+   "lat": 43.29015,
+   "lng": 5.4871,
+   "contactName": "Damien Gérard",
+   "phone": "06 63 93 11 49",
+   "status": "predicted",
+   "probability": 1.0,
+   "lines": [
+    {
+     "productId": "prd_0052",
+     "productName": "Sauce blanche kebab (seau 4,5 kg)",
+     "unit": "piece",
+     "qty": 3,
+     "baseQty": 3,
+     "unitPrice": 14.8,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0049",
+     "productName": "Frites surgelées 9 mm (carton 4 × 2,5 kg)",
+     "unit": "box",
+     "qty": 10,
+     "baseQty": 8,
+     "unitPrice": 13.44,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0043",
+     "productName": "Broche kebab veau-dinde 10 kg",
+     "unit": "piece",
+     "qty": 10,
+     "baseQty": 7,
+     "unitPrice": 60.56,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0050",
+     "productName": "Pains kebab ronds précuits surgelés (carton 100)",
+     "unit": "box",
+     "qty": 4,
+     "baseQty": 3,
+     "unitPrice": 25.55,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0066",
+     "productName": "Fromage fondu à tartiner (seau 2 kg)",
+     "unit": "piece",
+     "qty": 4,
+     "baseQty": 4,
+     "unitPrice": 11.73,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0033",
+     "productName": "Saucisse de volaille",
+     "unit": "kg",
+     "qty": 7.0,
+     "baseQty": 7.0,
+     "unitPrice": 7.6,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0054",
+     "productName": "Harissa (boîte 760 g)",
+     "unit": "piece",
+     "qty": 10,
+     "baseQty": 10,
+     "unitPrice": 3.6,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0065",
+     "productName": "Cheddar en tranches (paquet 1 kg)",
+     "unit": "piece",
+     "qty": 7,
+     "baseQty": 7,
+     "unitPrice": 8.7,
+     "eventId": null
+    }
+   ],
+   "totalHt": 1083.62,
+   "upliftHt": 234.11,
+   "reason": "Commande 12 mercredis sur 12 ; OM – PSG au Vélodrome : avec le match OM–PSG demain soir, les snacks tournent à fond",
+   "eventIds": [
+    "om-psg"
+   ],
+   "specialRequirements": []
+  },
+  {
+   "clientId": "cli_0046",
+   "name": "Boucherie Atlas",
+   "type": "fishmonger",
+   "city": "Marseille 13e",
+   "lat": 43.34925,
+   "lng": 5.43321,
+   "contactName": "Laurent Dupuis",
+   "phone": "06 76 38 27 77",
+   "status": "predicted",
+   "probability": 0.92,
+   "lines": [
+    {
+     "productId": "prd_0005",
+     "productName": "Épaule d'agneau",
+     "unit": "kg",
+     "qty": 18.0,
+     "baseQty": 18.0,
+     "unitPrice": 11.33,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0008",
+     "productName": "Collier d'agneau (pour tajine)",
+     "unit": "kg",
+     "qty": 29.5,
+     "baseQty": 29.5,
+     "unitPrice": 8.83,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0030",
+     "productName": "Merguez bœuf-agneau maison",
+     "unit": "kg",
+     "qty": 27.0,
+     "baseQty": 27.0,
+     "unitPrice": 10.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0023",
+     "productName": "Poulet entier PAC halal (1,3 kg)",
+     "unit": "kg",
+     "qty": 42.5,
+     "baseQty": 42.5,
+     "unitPrice": 3.78,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0019",
+     "productName": "Viande hachée de bœuf 15 % MG (barquette 2 kg)",
+     "unit": "kg",
+     "qty": 17.0,
+     "baseQty": 17.0,
+     "unitPrice": 9.8,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0024",
+     "productName": "Filet de poulet",
+     "unit": "kg",
+     "qty": 39.0,
+     "baseQty": 39.0,
+     "unitPrice": 8.6,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0018",
+     "productName": "Minerai de bœuf à hacher (VBF)",
+     "unit": "kg",
+     "qty": 38.5,
+     "baseQty": 38.5,
+     "unitPrice": 8.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0032",
+     "productName": "Kefta bœuf persil-oignon (boulettes)",
+     "unit": "kg",
+     "qty": 21.0,
+     "baseQty": 21.0,
+     "unitPrice": 11.11,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0004",
+     "productName": "Gigot d'agneau avec os",
+     "unit": "kg",
+     "qty": 12.0,
+     "baseQty": 12.0,
+     "unitPrice": 13.63,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0037",
+     "productName": "Foie d'agneau",
+     "unit": "kg",
+     "qty": 9.5,
+     "baseQty": 9.5,
+     "unitPrice": 8.81,
+     "eventId": null
+    }
+   ],
+   "totalHt": 2206.44,
+   "upliftHt": 0.0,
+   "reason": "Commande 11 mercredis sur 12",
+   "eventIds": [],
+   "specialRequirements": []
+  },
+  {
+   "clientId": "cli_0032",
+   "name": "Boucherie Oran-Marseille",
+   "type": "fishmonger",
+   "city": "Vitrolles",
+   "lat": 43.4536,
+   "lng": 5.2558,
+   "contactName": "Alain Ménard",
+   "phone": "06 24 38 01 68",
+   "status": "predicted",
+   "probability": 0.92,
+   "lines": [
+    {
+     "productId": "prd_0002",
+     "productName": "Carcasse d'agneau d'Espagne (12-14 kg)",
+     "unit": "kg",
+     "qty": 29.5,
+     "baseQty": 29.5,
+     "unitPrice": 8.26,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0032",
+     "productName": "Kefta bœuf persil-oignon (boulettes)",
+     "unit": "kg",
+     "qty": 15.5,
+     "baseQty": 15.5,
+     "unitPrice": 11.6,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0030",
+     "productName": "Merguez bœuf-agneau maison",
+     "unit": "kg",
+     "qty": 18.0,
+     "baseQty": 18.0,
+     "unitPrice": 10.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0005",
+     "productName": "Épaule d'agneau",
+     "unit": "kg",
+     "qty": 12.0,
+     "baseQty": 12.0,
+     "unitPrice": 11.33,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0023",
+     "productName": "Poulet entier PAC halal (1,3 kg)",
+     "unit": "kg",
+     "qty": 54.0,
+     "baseQty": 54.0,
+     "unitPrice": 3.95,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0060",
+     "productName": "Huile de tournesol friture (bidon 20 L)",
+     "unit": "piece",
+     "qty": 4,
+     "baseQty": 4,
+     "unitPrice": 37.0,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0009",
+     "productName": "Agneau haché (barquette 2 kg)",
+     "unit": "kg",
+     "qty": 7.0,
+     "baseQty": 7.0,
+     "unitPrice": 12.67,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0042",
+     "productName": "Rognons d'agneau",
+     "unit": "kg",
+     "qty": 3.5,
+     "baseQty": 3.5,
+     "unitPrice": 8.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0037",
+     "productName": "Foie d'agneau",
+     "unit": "kg",
+     "qty": 5.0,
+     "baseQty": 5.0,
+     "unitPrice": 9.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0008",
+     "productName": "Collier d'agneau (pour tajine)",
+     "unit": "kg",
+     "qty": 25.0,
+     "baseQty": 25.0,
+     "unitPrice": 8.83,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0040",
+     "productName": "Pieds de veau",
+     "unit": "kg",
+     "qty": 7.0,
+     "baseQty": 7.0,
+     "unitPrice": 4.4,
+     "eventId": null
+    }
+   ],
+   "totalHt": 1519.97,
+   "upliftHt": 0.0,
+   "reason": "Commande 11 mercredis sur 12",
+   "eventIds": [],
+   "specialRequirements": [
+    "Certificat halal du lot agrafé au bon"
+   ]
+  },
+  {
+   "clientId": "cli_0089",
+   "name": "Snack Le Ksar",
+   "type": "restaurant",
+   "city": "Marseille 1er",
+   "lat": 43.30285,
+   "lng": 5.38138,
+   "contactName": "Loïc Nicolas",
+   "phone": "06 19 56 68 19",
+   "status": "predicted",
+   "probability": 0.92,
+   "lines": [
+    {
+     "productId": "prd_0043",
+     "productName": "Broche kebab veau-dinde 10 kg",
+     "unit": "piece",
+     "qty": 14,
+     "baseQty": 10,
+     "unitPrice": 62.08,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0050",
+     "productName": "Pains kebab ronds précuits surgelés (carton 100)",
+     "unit": "box",
+     "qty": 7,
+     "baseQty": 5,
+     "unitPrice": 26.19,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0045",
+     "productName": "Broche poulet 10 kg",
+     "unit": "piece",
+     "qty": 9,
+     "baseQty": 6,
+     "unitPrice": 53.35,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0026",
+     "productName": "Haut de cuisse de poulet désossé",
+     "unit": "kg",
+     "qty": 49.5,
+     "baseQty": 49.5,
+     "unitPrice": 6.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0049",
+     "productName": "Frites surgelées 9 mm (carton 4 × 2,5 kg)",
+     "unit": "box",
+     "qty": 11,
+     "baseQty": 9,
+     "unitPrice": 13.77,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0048",
+     "productName": "Nuggets de poulet (carton 5 kg)",
+     "unit": "box",
+     "qty": 3,
+     "baseQty": 3,
+     "unitPrice": 27.16,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0031",
+     "productName": "Merguez de volaille",
+     "unit": "kg",
+     "qty": 17.5,
+     "baseQty": 17.5,
+     "unitPrice": 8.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0051",
+     "productName": "Tortillas 30 cm pour tacos (carton 144)",
+     "unit": "box",
+     "qty": 5,
+     "baseQty": 5,
+     "unitPrice": 34.92,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0065",
+     "productName": "Cheddar en tranches (paquet 1 kg)",
+     "unit": "piece",
+     "qty": 16,
+     "baseQty": 16,
+     "unitPrice": 9.2,
+     "eventId": null
+    }
+   ],
+   "totalHt": 2547.65,
+   "upliftHt": 488.29,
+   "reason": "Commande 11 mercredis sur 12 ; OM – PSG au Vélodrome : avec le match OM–PSG demain soir, les snacks tournent à fond ; Marché de Noël du Vieux-Port : avec le marché de Noël qui ouvre au Vieux-Port",
+   "eventIds": [
+    "om-psg",
+    "marche-noel"
+   ],
+   "specialRequirements": []
+  },
+  {
+   "clientId": "cli_0031",
+   "name": "Boucherie El Hilal",
+   "type": "fishmonger",
+   "city": "Marseille 2e",
+   "lat": 43.31188,
+   "lng": 5.3639,
+   "contactName": "Franck Boualem",
+   "phone": "06 56 84 94 77",
+   "status": "predicted",
+   "probability": 0.83,
+   "lines": [
+    {
+     "productId": "prd_0001",
+     "productName": "Carcasse d'agneau de France (16-20 kg)",
+     "unit": "kg",
+     "qty": 39.0,
+     "baseQty": 39.0,
+     "unitPrice": 9.98,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0030",
+     "productName": "Merguez bœuf-agneau maison",
+     "unit": "kg",
+     "qty": 14.5,
+     "baseQty": 11.5,
+     "unitPrice": 10.2,
+     "eventId": "marche-noel"
+    },
+    {
+     "productId": "prd_0002",
+     "productName": "Carcasse d'agneau d'Espagne (12-14 kg)",
+     "unit": "kg",
+     "qty": 21.0,
+     "baseQty": 21.0,
+     "unitPrice": 8.26,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0005",
+     "productName": "Épaule d'agneau",
+     "unit": "kg",
+     "qty": 17.5,
+     "baseQty": 17.5,
+     "unitPrice": 11.33,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0019",
+     "productName": "Viande hachée de bœuf 15 % MG (barquette 2 kg)",
+     "unit": "kg",
+     "qty": 9.0,
+     "baseQty": 9.0,
+     "unitPrice": 9.8,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0066",
+     "productName": "Fromage fondu à tartiner (seau 2 kg)",
+     "unit": "piece",
+     "qty": 5,
+     "baseQty": 5,
+     "unitPrice": 12.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0056",
+     "productName": "Cumin moulu (sac 1 kg)",
+     "unit": "piece",
+     "qty": 5,
+     "baseQty": 5,
+     "unitPrice": 8.4,
+     "eventId": null
+    }
+   ],
+   "totalHt": 1101.06,
+   "upliftHt": 30.6,
+   "reason": "Commande 10 mercredis sur 12 ; Marché de Noël du Vieux-Port : avec le marché de Noël qui ouvre au Vieux-Port",
+   "eventIds": [
+    "marche-noel"
+   ],
+   "specialRequirements": [
+    "Aucune substitution sans accord"
+   ]
+  },
+  {
+   "clientId": "cli_0050",
+   "name": "Boucherie Fabrice et Fils",
+   "type": "fishmonger",
+   "city": "Aix-en-Provence",
+   "lat": 43.52322,
+   "lng": 5.42778,
+   "contactName": "Julien Schneider",
+   "phone": "06 51 78 48 05",
+   "status": "predicted",
+   "probability": 0.83,
+   "lines": [
+    {
+     "productId": "prd_0023",
+     "productName": "Poulet entier PAC halal (1,3 kg)",
+     "unit": "kg",
+     "qty": 40.0,
+     "baseQty": 40.0,
+     "unitPrice": 3.95,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0015",
+     "productName": "Paleron de bœuf",
+     "unit": "kg",
+     "qty": 12.5,
+     "baseQty": 12.5,
+     "unitPrice": 11.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0030",
+     "productName": "Merguez bœuf-agneau maison",
+     "unit": "kg",
+     "qty": 12.5,
+     "baseQty": 12.5,
+     "unitPrice": 10.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0035",
+     "productName": "Émincé de poulet mariné chawarma",
+     "unit": "kg",
+     "qty": 13.0,
+     "baseQty": 13.0,
+     "unitPrice": 9.1,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0054",
+     "productName": "Harissa (boîte 760 g)",
+     "unit": "piece",
+     "qty": 10,
+     "baseQty": 10,
+     "unitPrice": 3.6,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0001",
+     "productName": "Carcasse d'agneau de France (16-20 kg)",
+     "unit": "kg",
+     "qty": 36.0,
+     "baseQty": 36.0,
+     "unitPrice": 9.98,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0018",
+     "productName": "Minerai de bœuf à hacher (VBF)",
+     "unit": "kg",
+     "qty": 17.0,
+     "baseQty": 17.0,
+     "unitPrice": 8.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0005",
+     "productName": "Épaule d'agneau",
+     "unit": "kg",
+     "qty": 16.0,
+     "baseQty": 16.0,
+     "unitPrice": 11.33,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0002",
+     "productName": "Carcasse d'agneau d'Espagne (12-14 kg)",
+     "unit": "kg",
+     "qty": 32.0,
+     "baseQty": 32.0,
+     "unitPrice": 8.26,
+     "eventId": null
+    }
+   ],
+   "totalHt": 1529.98,
+   "upliftHt": 0.0,
+   "reason": "Commande 10 mercredis sur 12",
+   "eventIds": [],
+   "specialRequirements": [
+    "Certificat halal du lot agrafé au bon"
+   ]
+  },
+  {
+   "clientId": "cli_0087",
+   "name": "Boucherie de la Capelette",
+   "type": "fishmonger",
+   "city": "Marseille 14e",
+   "lat": 43.34262,
+   "lng": 5.39183,
+   "contactName": "Malika Pham",
+   "phone": "06 26 38 70 26",
+   "status": "predicted",
+   "probability": 0.83,
+   "lines": [
+    {
+     "productId": "prd_0001",
+     "productName": "Carcasse d'agneau de France (16-20 kg)",
+     "unit": "kg",
+     "qty": 43.0,
+     "baseQty": 43.0,
+     "unitPrice": 9.98,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0024",
+     "productName": "Filet de poulet",
+     "unit": "kg",
+     "qty": 35.0,
+     "baseQty": 35.0,
+     "unitPrice": 8.6,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0059",
+     "productName": "Dattes Deglet Nour branchées (carton 5 kg)",
+     "unit": "box",
+     "qty": 10,
+     "baseQty": 10,
+     "unitPrice": 24.5,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0015",
+     "productName": "Paleron de bœuf",
+     "unit": "kg",
+     "qty": 23.5,
+     "baseQty": 23.5,
+     "unitPrice": 10.75,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0002",
+     "productName": "Carcasse d'agneau d'Espagne (12-14 kg)",
+     "unit": "kg",
+     "qty": 57.5,
+     "baseQty": 57.5,
+     "unitPrice": 8.26,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0018",
+     "productName": "Minerai de bœuf à hacher (VBF)",
+     "unit": "kg",
+     "qty": 54.5,
+     "baseQty": 54.5,
+     "unitPrice": 8.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0062",
+     "productName": "Papier boucherie paraffiné (rame 10 kg)",
+     "unit": "piece",
+     "qty": 3,
+     "baseQty": 3,
+     "unitPrice": 26.87,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0023",
+     "productName": "Poulet entier PAC halal (1,3 kg)",
+     "unit": "kg",
+     "qty": 89.0,
+     "baseQty": 89.0,
+     "unitPrice": 3.95,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0028",
+     "productName": "Escalope de dinde",
+     "unit": "kg",
+     "qty": 12.5,
+     "baseQty": 12.5,
+     "unitPrice": 8.86,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0012",
+     "productName": "Rumsteck de bœuf",
+     "unit": "kg",
+     "qty": 15.0,
+     "baseQty": 15.0,
+     "unitPrice": 17.82,
+     "eventId": null
+    }
+   ],
+   "totalHt": 2970.73,
+   "upliftHt": 0.0,
+   "reason": "Commande 10 mercredis sur 12",
+   "eventIds": [],
+   "specialRequirements": [
+    "Certificat halal du lot agrafé au bon"
+   ]
+  },
+  {
+   "clientId": "cli_0047",
+   "name": "Le Sultan",
+   "type": "restaurant",
+   "city": "Vitrolles",
+   "lat": 43.46585,
+   "lng": 5.24796,
+   "contactName": "Xavier Haddad",
+   "phone": "06 57 82 12 35",
+   "status": "predicted",
+   "probability": 0.83,
+   "lines": [
+    {
+     "productId": "prd_0050",
+     "productName": "Pains kebab ronds précuits surgelés (carton 100)",
+     "unit": "box",
+     "qty": 8,
+     "baseQty": 6,
+     "unitPrice": 25.4,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0049",
+     "productName": "Frites surgelées 9 mm (carton 4 × 2,5 kg)",
+     "unit": "box",
+     "qty": 20,
+     "baseQty": 16,
+     "unitPrice": 13.36,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0052",
+     "productName": "Sauce blanche kebab (seau 4,5 kg)",
+     "unit": "piece",
+     "qty": 8,
+     "baseQty": 8,
+     "unitPrice": 13.92,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0065",
+     "productName": "Cheddar en tranches (paquet 1 kg)",
+     "unit": "piece",
+     "qty": 14,
+     "baseQty": 14,
+     "unitPrice": 8.65,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0051",
+     "productName": "Tortillas 30 cm pour tacos (carton 144)",
+     "unit": "box",
+     "qty": 5,
+     "baseQty": 5,
+     "unitPrice": 33.87,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0028",
+     "productName": "Escalope de dinde",
+     "unit": "kg",
+     "qty": 22.5,
+     "baseQty": 22.5,
+     "unitPrice": 8.84,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0045",
+     "productName": "Broche poulet 10 kg",
+     "unit": "piece",
+     "qty": 9,
+     "baseQty": 7,
+     "unitPrice": 53.35,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0043",
+     "productName": "Broche kebab veau-dinde 10 kg",
+     "unit": "piece",
+     "qty": 12,
+     "baseQty": 9,
+     "unitPrice": 62.08,
+     "eventId": "om-psg",
+     "note": "Broche kebab veau-dinde 20 kg en rupture : proposé à la place"
+    }
+   ],
+   "totalHt": 2296.22,
+   "upliftHt": 397.18,
+   "reason": "Commande 10 mercredis sur 12 ; OM – PSG au Vélodrome : avec le match OM–PSG demain soir, les snacks tournent à fond",
+   "eventIds": [
+    "om-psg"
+   ],
+   "specialRequirements": []
+  },
+  {
+   "clientId": "cli_0073",
+   "name": "Snack Bastien",
+   "type": "restaurant",
+   "city": "Martigues",
+   "lat": 43.40151,
+   "lng": 5.05288,
+   "contactName": "Minh Pelletier",
+   "phone": "06 20 15 42 11",
+   "status": "predicted",
+   "probability": 0.83,
+   "lines": [
+    {
+     "productId": "prd_0050",
+     "productName": "Pains kebab ronds précuits surgelés (carton 100)",
+     "unit": "box",
+     "qty": 7,
+     "baseQty": 5,
+     "unitPrice": 25.35,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0049",
+     "productName": "Frites surgelées 9 mm (carton 4 × 2,5 kg)",
+     "unit": "box",
+     "qty": 13,
+     "baseQty": 10,
+     "unitPrice": 13.33,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0043",
+     "productName": "Broche kebab veau-dinde 10 kg",
+     "unit": "piece",
+     "qty": 11,
+     "baseQty": 8,
+     "unitPrice": 60.08,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0051",
+     "productName": "Tortillas 30 cm pour tacos (carton 144)",
+     "unit": "box",
+     "qty": 1,
+     "baseQty": 1,
+     "unitPrice": 33.8,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0052",
+     "productName": "Sauce blanche kebab (seau 4,5 kg)",
+     "unit": "piece",
+     "qty": 5,
+     "baseQty": 5,
+     "unitPrice": 13.89,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0024",
+     "productName": "Filet de poulet",
+     "unit": "kg",
+     "qty": 21.0,
+     "baseQty": 21.0,
+     "unitPrice": 8.6,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0026",
+     "productName": "Haut de cuisse de poulet désossé",
+     "unit": "kg",
+     "qty": 15.0,
+     "baseQty": 15.0,
+     "unitPrice": 6.01,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0053",
+     "productName": "Sauce samouraï (seau 4,5 kg)",
+     "unit": "piece",
+     "qty": 3,
+     "baseQty": 3,
+     "unitPrice": 15.6,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0065",
+     "productName": "Cheddar en tranches (paquet 1 kg)",
+     "unit": "piece",
+     "qty": 7,
+     "baseQty": 7,
+     "unitPrice": 9.2,
+     "eventId": null
+    }
+   ],
+   "totalHt": 1496.82,
+   "upliftHt": 270.93,
+   "reason": "Commande 10 mercredis sur 12 ; OM – PSG au Vélodrome : avec le match OM–PSG demain soir, les snacks tournent à fond",
+   "eventIds": [
+    "om-psg"
+   ],
+   "specialRequirements": [
+    "Aucune substitution sans accord"
+   ]
+  },
+  {
+   "clientId": "cli_0064",
+   "name": "Le Délice Marseille 1er",
+   "type": "restaurant",
+   "city": "Marseille 1er",
+   "lat": 43.30071,
+   "lng": 5.38619,
+   "contactName": "Karim Germain",
+   "phone": "06 18 78 56 51",
+   "status": "predicted",
+   "probability": 0.75,
+   "lines": [
+    {
+     "productId": "prd_0051",
+     "productName": "Tortillas 30 cm pour tacos (carton 144)",
+     "unit": "box",
+     "qty": 2,
+     "baseQty": 2,
+     "unitPrice": 34.92,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0052",
+     "productName": "Sauce blanche kebab (seau 4,5 kg)",
+     "unit": "piece",
+     "qty": 4,
+     "baseQty": 4,
+     "unitPrice": 14.8,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0026",
+     "productName": "Haut de cuisse de poulet désossé",
+     "unit": "kg",
+     "qty": 15.0,
+     "baseQty": 15.0,
+     "unitPrice": 6.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0023",
+     "productName": "Poulet entier PAC halal (1,3 kg)",
+     "unit": "kg",
+     "qty": 20.5,
+     "baseQty": 20.5,
+     "unitPrice": 3.95,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0047",
+     "productName": "Cordons bleus de dinde (carton 5 kg)",
+     "unit": "box",
+     "qty": 2,
+     "baseQty": 2,
+     "unitPrice": 30.07,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0049",
+     "productName": "Frites surgelées 9 mm (carton 4 × 2,5 kg)",
+     "unit": "box",
+     "qty": 11,
+     "baseQty": 8,
+     "unitPrice": 13.77,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0050",
+     "productName": "Pains kebab ronds précuits surgelés (carton 100)",
+     "unit": "box",
+     "qty": 4,
+     "baseQty": 3,
+     "unitPrice": 26.19,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0065",
+     "productName": "Cheddar en tranches (paquet 1 kg)",
+     "unit": "piece",
+     "qty": 8,
+     "baseQty": 8,
+     "unitPrice": 9.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0045",
+     "productName": "Broche poulet 10 kg",
+     "unit": "piece",
+     "qty": 4,
+     "baseQty": 3,
+     "unitPrice": 53.35,
+     "eventId": "om-psg"
+    }
+   ],
+   "totalHt": 909.39,
+   "upliftHt": 120.85,
+   "reason": "Commande 9 mercredis sur 12 ; OM – PSG au Vélodrome : avec le match OM–PSG demain soir, les snacks tournent à fond ; Marché de Noël du Vieux-Port : avec le marché de Noël qui ouvre au Vieux-Port",
+   "eventIds": [
+    "om-psg",
+    "marche-noel"
+   ],
+   "specialRequirements": [
+    "Aucune substitution sans accord"
+   ]
+  },
+  {
+   "clientId": "cli_0057",
+   "name": "Chicken Spot Marseille 1er",
+   "type": "restaurant",
+   "city": "Marseille 1er",
+   "lat": 43.30088,
+   "lng": 5.38721,
+   "contactName": "Youssef Simon",
+   "phone": "06 69 12 94 01",
+   "status": "upsell",
+   "probability": 1.0,
+   "existingOrderId": "ord_029558",
+   "lines": [
+    {
+     "productId": "prd_0049",
+     "productName": "Frites surgelées 9 mm (carton 4 × 2,5 kg)",
+     "unit": "box",
+     "qty": 17,
+     "baseQty": 17,
+     "unitPrice": 13.77,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0050",
+     "productName": "Pains kebab ronds précuits surgelés (carton 100)",
+     "unit": "box",
+     "qty": 7,
+     "baseQty": 7,
+     "unitPrice": 26.19,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0052",
+     "productName": "Sauce blanche kebab (seau 4,5 kg)",
+     "unit": "piece",
+     "qty": 4,
+     "baseQty": 4,
+     "unitPrice": 14.8,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0026",
+     "productName": "Haut de cuisse de poulet désossé",
+     "unit": "kg",
+     "qty": 61.5,
+     "baseQty": 61.5,
+     "unitPrice": 6.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0065",
+     "productName": "Cheddar en tranches (paquet 1 kg)",
+     "unit": "piece",
+     "qty": 9,
+     "baseQty": 9,
+     "unitPrice": 9.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0027",
+     "productName": "Ailes de poulet",
+     "unit": "kg",
+     "qty": 24,
+     "baseQty": 24,
+     "unitPrice": 3.5,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0046",
+     "productName": "Steaks hachés 15 % surgelés 120 g (carton 50)",
+     "unit": "box",
+     "qty": 8,
+     "baseQty": 8,
+     "unitPrice": 31.53,
+     "eventId": null
+    }
+   ],
+   "addLines": [
+    {
+     "productId": "prd_0049",
+     "productName": "Frites surgelées 9 mm (carton 4 × 2,5 kg)",
+     "unit": "box",
+     "qty": 5,
+     "baseQty": 0,
+     "unitPrice": 13.77,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0050",
+     "productName": "Pains kebab ronds précuits surgelés (carton 100)",
+     "unit": "box",
+     "qty": 2,
+     "baseQty": 0,
+     "unitPrice": 26.19,
+     "eventId": "om-psg"
+    }
+   ],
+   "totalHt": 1289.26,
+   "upliftHt": 121.23,
+   "reason": "Commande déjà passée ; OM – PSG au Vélodrome : avec le match OM–PSG demain soir, les snacks tournent à fond ; Marché de Noël du Vieux-Port : avec le marché de Noël qui ouvre au Vieux-Port",
+   "eventIds": [
+    "om-psg",
+    "marche-noel"
+   ],
+   "specialRequirements": []
+  },
+  {
+   "clientId": "cli_0024",
+   "name": "Halal Market Marseille 1er",
+   "type": "supermarket",
+   "city": "Marseille 1er",
+   "lat": 43.30172,
+   "lng": 5.38105,
+   "contactName": "Florian Bertrand",
+   "phone": "06 15 84 13 93",
+   "status": "upsell",
+   "probability": 1.0,
+   "existingOrderId": "ord_029559",
+   "lines": [
+    {
+     "productId": "prd_0023",
+     "productName": "Poulet entier PAC halal (1,3 kg)",
+     "unit": "kg",
+     "qty": 60.5,
+     "baseQty": 60.5,
+     "unitPrice": 3.95,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0030",
+     "productName": "Merguez bœuf-agneau maison",
+     "unit": "kg",
+     "qty": 21,
+     "baseQty": 21,
+     "unitPrice": 10.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0059",
+     "productName": "Dattes Deglet Nour branchées (carton 5 kg)",
+     "unit": "box",
+     "qty": 9,
+     "baseQty": 9,
+     "unitPrice": 22.68,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0045",
+     "productName": "Broche poulet 10 kg",
+     "unit": "piece",
+     "qty": 5,
+     "baseQty": 5,
+     "unitPrice": 55,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0028",
+     "productName": "Escalope de dinde",
+     "unit": "kg",
+     "qty": 10,
+     "baseQty": 10,
+     "unitPrice": 9.4,
+     "eventId": null
+    }
+   ],
+   "addLines": [
+    {
+     "productId": "prd_0030",
+     "productName": "Merguez bœuf-agneau maison",
+     "unit": "kg",
+     "qty": 6.5,
+     "baseQty": 0,
+     "unitPrice": 10.2,
+     "eventId": "marche-noel"
+    }
+   ],
+   "totalHt": 1026.3,
+   "upliftHt": 66.3,
+   "reason": "Commande déjà passée ; Marché de Noël du Vieux-Port : avec le marché de Noël qui ouvre au Vieux-Port",
+   "eventIds": [
+    "marche-noel"
+   ],
+   "specialRequirements": []
+  },
+  {
+   "clientId": "cli_0058",
+   "name": "Restaurant Le Carrefour",
+   "type": "brasserie",
+   "city": "Marseille 5e",
+   "lat": 43.294,
+   "lng": 5.39796,
+   "contactName": "Alain Giraud",
+   "phone": "06 84 02 48 04",
+   "status": "upsell",
+   "probability": 1.0,
+   "existingOrderId": "ord_029575",
+   "lines": [
+    {
+     "productId": "prd_0046",
+     "productName": "Steaks hachés 15 % surgelés 120 g (carton 50)",
+     "unit": "box",
+     "qty": 4,
+     "baseQty": 4,
+     "unitPrice": 31.53,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0065",
+     "productName": "Cheddar en tranches (paquet 1 kg)",
+     "unit": "piece",
+     "qty": 6,
+     "baseQty": 6,
+     "unitPrice": 9.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0049",
+     "productName": "Frites surgelées 9 mm (carton 4 × 2,5 kg)",
+     "unit": "box",
+     "qty": 7,
+     "baseQty": 7,
+     "unitPrice": 13.77,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0025",
+     "productName": "Cuisse de poulet",
+     "unit": "kg",
+     "qty": 19,
+     "baseQty": 19,
+     "unitPrice": 3.7,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0032",
+     "productName": "Kefta bœuf persil-oignon (boulettes)",
+     "unit": "kg",
+     "qty": 13,
+     "baseQty": 13,
+     "unitPrice": 11.6,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0026",
+     "productName": "Haut de cuisse de poulet désossé",
+     "unit": "kg",
+     "qty": 26.5,
+     "baseQty": 26.5,
+     "unitPrice": 6.4,
+     "eventId": null
+    }
+   ],
+   "addLines": [
+    {
+     "productId": "prd_0049",
+     "productName": "Frites surgelées 9 mm (carton 4 × 2,5 kg)",
+     "unit": "box",
+     "qty": 2,
+     "baseQty": 0,
+     "unitPrice": 13.77,
+     "eventId": "om-psg"
+    }
+   ],
+   "totalHt": 668.41,
+   "upliftHt": 27.54,
+   "reason": "Commande déjà passée ; OM – PSG au Vélodrome : avec le match OM–PSG demain soir, les snacks tournent à fond",
+   "eventIds": [
+    "om-psg"
+   ],
+   "specialRequirements": [
+    "Aucune substitution sans accord"
+   ]
+  },
+  {
+   "clientId": "cli_0095",
+   "name": "Réceptions Agnès",
+   "type": "caterer",
+   "city": "Marseille 16e",
+   "lat": 43.36131,
+   "lng": 5.31106,
+   "contactName": "Benoît Lemoine",
+   "phone": "07 23 76 21 39",
+   "status": "upsell",
+   "probability": 1.0,
+   "existingOrderId": "ord_029521",
+   "lines": [
+    {
+     "productId": "prd_0004",
+     "productName": "Gigot d'agneau avec os",
+     "unit": "kg",
+     "qty": 78,
+     "baseQty": 78,
+     "unitPrice": 14.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0011",
+     "productName": "Faux-filet de bœuf sous vide",
+     "unit": "kg",
+     "qty": 61.5,
+     "baseQty": 61.5,
+     "unitPrice": 21.4,
+     "eventId": null
+    }
+   ],
+   "addLines": [
+    {
+     "productId": "prd_0004",
+     "productName": "Gigot d'agneau avec os",
+     "unit": "kg",
+     "qty": 39.0,
+     "baseQty": 0,
+     "unitPrice": 14.2,
+     "eventId": "mariages"
+    },
+    {
+     "productId": "prd_0001",
+     "productName": "Carcasse d'agneau de France (16-20 kg)",
+     "unit": "kg",
+     "qty": 36,
+     "baseQty": 0,
+     "unitPrice": 10.4,
+     "eventId": "mariages",
+     "note": "2 agneaux entiers pour le méchoui du samedi : carcasses à commander la veille avant 14 h"
+    }
+   ],
+   "totalHt": 2423.7,
+   "upliftHt": 928.2,
+   "reason": "Commande déjà passée ; Mariages du week-end : pour vos mariages de samedi",
+   "eventIds": [
+    "mariages"
+   ],
+   "specialRequirements": []
+  },
+  {
+   "clientId": "cli_0036",
+   "name": "Snack Nordine",
+   "type": "restaurant",
+   "city": "Berre-l'Étang",
+   "lat": 43.47885,
+   "lng": 5.17327,
+   "contactName": "Quentin Giraud",
+   "phone": "06 88 14 42 29",
+   "status": "upsell",
+   "probability": 1.0,
+   "existingOrderId": "ord_029567",
+   "lines": [
+    {
+     "productId": "prd_0049",
+     "productName": "Frites surgelées 9 mm (carton 4 × 2,5 kg)",
+     "unit": "box",
+     "qty": 5,
+     "baseQty": 5,
+     "unitPrice": 13.77,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0050",
+     "productName": "Pains kebab ronds précuits surgelés (carton 100)",
+     "unit": "box",
+     "qty": 3,
+     "baseQty": 3,
+     "unitPrice": 26.19,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0052",
+     "productName": "Sauce blanche kebab (seau 4,5 kg)",
+     "unit": "piece",
+     "qty": 2,
+     "baseQty": 2,
+     "unitPrice": 14.8,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0065",
+     "productName": "Cheddar en tranches (paquet 1 kg)",
+     "unit": "piece",
+     "qty": 4,
+     "baseQty": 4,
+     "unitPrice": 9.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0032",
+     "productName": "Kefta bœuf persil-oignon (boulettes)",
+     "unit": "kg",
+     "qty": 8.5,
+     "baseQty": 8.5,
+     "unitPrice": 11.6,
+     "eventId": null
+    }
+   ],
+   "addLines": [
+    {
+     "productId": "prd_0049",
+     "productName": "Frites surgelées 9 mm (carton 4 × 2,5 kg)",
+     "unit": "box",
+     "qty": 2,
+     "baseQty": 0,
+     "unitPrice": 13.77,
+     "eventId": "om-psg"
+    },
+    {
+     "productId": "prd_0050",
+     "productName": "Pains kebab ronds précuits surgelés (carton 100)",
+     "unit": "box",
+     "qty": 1,
+     "baseQty": 0,
+     "unitPrice": 26.19,
+     "eventId": "om-psg"
+    }
+   ],
+   "totalHt": 312.42,
+   "upliftHt": 53.73,
+   "reason": "Commande déjà passée ; OM – PSG au Vélodrome : avec le match OM–PSG demain soir, les snacks tournent à fond",
+   "eventIds": [
+    "om-psg"
+   ],
+   "specialRequirements": [
+    "Aucune substitution sans accord"
+   ]
+  },
+  {
+   "clientId": "cli_0017",
+   "name": "Snack de la Plage",
+   "type": "restaurant",
+   "city": "Marseille 13e",
+   "lat": 43.35144,
+   "lng": 5.4313,
+   "contactName": "Youssef Bertrand",
+   "phone": "06 55 49 46 10",
+   "status": "upsell",
+   "probability": 1.0,
+   "existingOrderId": "ord_029581",
+   "lines": [
+    {
+     "productId": "prd_0043",
+     "productName": "Broche kebab veau-dinde 10 kg",
+     "unit": "piece",
+     "qty": 3,
+     "baseQty": 3,
+     "unitPrice": 62.08,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0051",
+     "productName": "Tortillas 30 cm pour tacos (carton 144)",
+     "unit": "box",
+     "qty": 3,
+     "baseQty": 3,
+     "unitPrice": 34.92,
+     "eventId": null
+    }
+   ],
+   "addLines": [
+    {
+     "productId": "prd_0043",
+     "productName": "Broche kebab veau-dinde 10 kg",
+     "unit": "piece",
+     "qty": 1,
+     "baseQty": 0,
+     "unitPrice": 62.08,
+     "eventId": "om-psg"
+    }
+   ],
+   "totalHt": 291.0,
+   "upliftHt": 62.08,
+   "reason": "Commande déjà passée ; OM – PSG au Vélodrome : avec le match OM–PSG demain soir, les snacks tournent à fond",
+   "eventIds": [
+    "om-psg"
+   ],
+   "specialRequirements": []
+  },
+  {
+   "clientId": "cli_0038",
+   "name": "Traiteur Oriental Marseille 15e",
+   "type": "caterer",
+   "city": "Marseille 15e",
+   "lat": 43.36022,
+   "lng": 5.3645,
+   "contactName": "Mathieu Gautier",
+   "phone": "06 93 61 46 68",
+   "status": "upsell",
+   "probability": 1.0,
+   "existingOrderId": "ord_029513",
+   "lines": [
+    {
+     "productId": "prd_0004",
+     "productName": "Gigot d'agneau avec os",
+     "unit": "kg",
+     "qty": 42.5,
+     "baseQty": 42.5,
+     "unitPrice": 14.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0027",
+     "productName": "Ailes de poulet",
+     "unit": "kg",
+     "qty": 76.5,
+     "baseQty": 76.5,
+     "unitPrice": 3.5,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0035",
+     "productName": "Émincé de poulet mariné chawarma",
+     "unit": "kg",
+     "qty": 43.5,
+     "baseQty": 43.5,
+     "unitPrice": 9.1,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0002",
+     "productName": "Carcasse d'agneau d'Espagne (12-14 kg)",
+     "unit": "kg",
+     "qty": 92.5,
+     "baseQty": 92.5,
+     "unitPrice": 8.6,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0012",
+     "productName": "Rumsteck de bœuf",
+     "unit": "kg",
+     "qty": 39.5,
+     "baseQty": 39.5,
+     "unitPrice": 18.25,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0034",
+     "productName": "Brochettes de poulet marinées",
+     "unit": "kg",
+     "qty": 21,
+     "baseQty": 21,
+     "unitPrice": 12.36,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0021",
+     "productName": "Tendron et poitrine de veau",
+     "unit": "kg",
+     "qty": 38,
+     "baseQty": 38,
+     "unitPrice": 13.8,
+     "eventId": null
+    }
+   ],
+   "addLines": [
+    {
+     "productId": "prd_0004",
+     "productName": "Gigot d'agneau avec os",
+     "unit": "kg",
+     "qty": 21.0,
+     "baseQty": 0,
+     "unitPrice": 14.2,
+     "eventId": "mariages"
+    },
+    {
+     "productId": "prd_0001",
+     "productName": "Carcasse d'agneau de France (16-20 kg)",
+     "unit": "kg",
+     "qty": 36,
+     "baseQty": 0,
+     "unitPrice": 10.4,
+     "eventId": "mariages",
+     "note": "2 agneaux entiers pour le méchoui du samedi : carcasses à commander la veille avant 14 h"
+    }
+   ],
+   "totalHt": 3567.44,
+   "upliftHt": 672.6,
+   "reason": "Commande déjà passée ; Mariages du week-end : pour vos mariages de samedi",
+   "eventIds": [
+    "mariages"
+   ],
+   "specialRequirements": []
+  },
+  {
+   "clientId": "cli_0045",
+   "name": "Traiteur Oriental Martigues",
+   "type": "caterer",
+   "city": "Martigues",
+   "lat": 43.40936,
+   "lng": 5.05757,
+   "contactName": "Yann Simon",
+   "phone": "06 86 50 93 07",
+   "status": "upsell",
+   "probability": 1.0,
+   "existingOrderId": "ord_029516",
+   "lines": [
+    {
+     "productId": "prd_0023",
+     "productName": "Poulet entier PAC halal (1,3 kg)",
+     "unit": "kg",
+     "qty": 234,
+     "baseQty": 234,
+     "unitPrice": 3.79,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0057",
+     "productName": "Semoule de blé dur moyenne (sac 10 kg)",
+     "unit": "piece",
+     "qty": 12,
+     "baseQty": 12,
+     "unitPrice": 13.83,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0004",
+     "productName": "Gigot d'agneau avec os",
+     "unit": "kg",
+     "qty": 53.5,
+     "baseQty": 53.5,
+     "unitPrice": 13.83,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0028",
+     "productName": "Escalope de dinde",
+     "unit": "kg",
+     "qty": 31,
+     "baseQty": 31,
+     "unitPrice": 9.16,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0026",
+     "productName": "Haut de cuisse de poulet désossé",
+     "unit": "kg",
+     "qty": 58,
+     "baseQty": 58,
+     "unitPrice": 6.4,
+     "eventId": null
+    }
+   ],
+   "addLines": [
+    {
+     "productId": "prd_0023",
+     "productName": "Poulet entier PAC halal (1,3 kg)",
+     "unit": "kg",
+     "qty": 93.5,
+     "baseQty": 0,
+     "unitPrice": 3.95,
+     "eventId": "mariages"
+    },
+    {
+     "productId": "prd_0004",
+     "productName": "Gigot d'agneau avec os",
+     "unit": "kg",
+     "qty": 27.0,
+     "baseQty": 0,
+     "unitPrice": 13.83,
+     "eventId": "mariages"
+    },
+    {
+     "productId": "prd_0001",
+     "productName": "Carcasse d'agneau de France (16-20 kg)",
+     "unit": "kg",
+     "qty": 36,
+     "baseQty": 0,
+     "unitPrice": 10.4,
+     "eventId": "mariages",
+     "note": "2 agneaux entiers pour le méchoui du samedi : carcasses à commander la veille avant 14 h"
+    }
+   ],
+   "totalHt": 2447.89,
+   "upliftHt": 1117.14,
+   "reason": "Commande déjà passée ; Mariages du week-end : pour vos mariages de samedi",
+   "eventIds": [
+    "mariages"
+   ],
+   "specialRequirements": [
+    "Aucune substitution sans accord"
+   ]
+  },
+  {
+   "clientId": "cli_0078",
+   "name": "Traiteur Pham",
+   "type": "caterer",
+   "city": "Marseille 15e",
+   "lat": 43.3598,
+   "lng": 5.36657,
+   "contactName": "Maxime Thomas",
+   "phone": "06 36 13 77 36",
+   "status": "upsell",
+   "probability": 1.0,
+   "existingOrderId": "ord_029510",
+   "lines": [
+    {
+     "productId": "prd_0031",
+     "productName": "Merguez de volaille",
+     "unit": "kg",
+     "qty": 27,
+     "baseQty": 27,
+     "unitPrice": 8.2,
+     "eventId": null
+    }
+   ],
+   "addLines": [
+    {
+     "productId": "prd_0001",
+     "productName": "Carcasse d'agneau de France (16-20 kg)",
+     "unit": "kg",
+     "qty": 36,
+     "baseQty": 0,
+     "unitPrice": 10.4,
+     "eventId": "mariages",
+     "note": "2 agneaux entiers pour le méchoui du samedi : carcasses à commander la veille avant 14 h"
+    }
+   ],
+   "totalHt": 221.4,
+   "upliftHt": 374.4,
+   "reason": "Commande déjà passée ; Mariages du week-end : pour vos mariages de samedi",
+   "eventIds": [
+    "mariages"
+   ],
+   "specialRequirements": []
+  },
+  {
+   "clientId": "cli_0081",
+   "name": "Alimentation Sabrina",
+   "type": "supermarket",
+   "city": "Marseille 1er",
+   "lat": 43.30041,
+   "lng": 5.38613,
+   "contactName": "Cédric Chen",
+   "phone": "06 46 35 02 95",
+   "status": "ordered",
+   "probability": 1.0,
+   "existingOrderId": "ord_029555",
+   "lines": [
+    {
+     "productId": "prd_0036",
+     "productName": "Cachir à l'olive (pièce 500 g)",
+     "unit": "piece",
+     "qty": 21,
+     "baseQty": 21,
+     "unitPrice": 5.9,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0064",
+     "productName": "Smen (beurre clarifié, pot 500 g)",
+     "unit": "piece",
+     "qty": 19,
+     "baseQty": 19,
+     "unitPrice": 6.8,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0033",
+     "productName": "Saucisse de volaille",
+     "unit": "kg",
+     "qty": 18,
+     "baseQty": 18,
+     "unitPrice": 7.6,
+     "eventId": null
+    }
+   ],
+   "addLines": [],
+   "totalHt": 389.9,
+   "upliftHt": 0.0,
+   "reason": "Commande déjà passée",
+   "eventIds": [],
+   "specialRequirements": [
+    "Aucune substitution sans accord"
+   ]
+  },
+  {
+   "clientId": "cli_0080",
+   "name": "Boucherie El Baraka Marseille 16e",
+   "type": "fishmonger",
+   "city": "Marseille 16e",
+   "lat": 43.36112,
+   "lng": 5.31255,
+   "contactName": "Pascal Barbier",
+   "phone": "06 15 02 01 94",
+   "status": "ordered",
+   "probability": 1.0,
+   "existingOrderId": "ord_029572",
+   "lines": [
+    {
+     "productId": "prd_0001",
+     "productName": "Carcasse d'agneau de France (16-20 kg)",
+     "unit": "kg",
+     "qty": 46,
+     "baseQty": 46,
+     "unitPrice": 9.98,
+     "eventId": null
+    }
+   ],
+   "addLines": [],
+   "totalHt": 459.08,
+   "upliftHt": 0.0,
+   "reason": "Commande déjà passée",
+   "eventIds": [],
+   "specialRequirements": [
+    "Aucune substitution sans accord"
+   ]
+  },
+  {
+   "clientId": "cli_0030",
+   "name": "Boucherie El Baraka Marseille 3e",
+   "type": "fishmonger",
+   "city": "Marseille 3e",
+   "lat": 43.31319,
+   "lng": 5.38364,
+   "contactName": "Bilal Bensalem",
+   "phone": "07 30 68 97 39",
+   "status": "ordered",
+   "probability": 1.0,
+   "existingOrderId": "ord_029585",
+   "lines": [
+    {
+     "productId": "prd_0001",
+     "productName": "Carcasse d'agneau de France (16-20 kg)",
+     "unit": "kg",
+     "qty": 47,
+     "baseQty": 47,
+     "unitPrice": 9.98,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0030",
+     "productName": "Merguez bœuf-agneau maison",
+     "unit": "kg",
+     "qty": 18,
+     "baseQty": 18,
+     "unitPrice": 10.2,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0034",
+     "productName": "Brochettes de poulet marinées",
+     "unit": "kg",
+     "qty": 14,
+     "baseQty": 14,
+     "unitPrice": 12.8,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0014",
+     "productName": "Filet de bœuf paré",
+     "unit": "kg",
+     "qty": 7,
+     "baseQty": 7,
+     "unitPrice": 36.5,
+     "eventId": null
+    }
+   ],
+   "addLines": [],
+   "totalHt": 1087.36,
+   "upliftHt": 0.0,
+   "reason": "Commande déjà passée",
+   "eventIds": [],
+   "specialRequirements": [
+    "Aucune substitution sans accord"
+   ]
+  },
+  {
+   "clientId": "cli_0090",
+   "name": "Boucherie Es-Salam",
+   "type": "fishmonger",
+   "city": "Marseille 16e",
+   "lat": 43.36404,
+   "lng": 5.31656,
+   "contactName": "Paolo Martinez",
+   "phone": "06 83 20 40 00",
+   "status": "ordered",
+   "probability": 1.0,
+   "existingOrderId": "ord_029584",
+   "lines": [
+    {
+     "productId": "prd_0002",
+     "productName": "Carcasse d'agneau d'Espagne (12-14 kg)",
+     "unit": "kg",
+     "qty": 24.5,
+     "baseQty": 24.5,
+     "unitPrice": 8.26,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0023",
+     "productName": "Poulet entier PAC halal (1,3 kg)",
+     "unit": "kg",
+     "qty": 33.5,
+     "baseQty": 33.5,
+     "unitPrice": 3.95,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0019",
+     "productName": "Viande hachée de bœuf 15 % MG (barquette 2 kg)",
+     "unit": "kg",
+     "qty": 16,
+     "baseQty": 16,
+     "unitPrice": 9.8,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0007",
+     "productName": "Souris d'agneau",
+     "unit": "kg",
+     "qty": 9.5,
+     "baseQty": 9.5,
+     "unitPrice": 14.02,
+     "eventId": null
+    }
+   ],
+   "addLines": [],
+   "totalHt": 624.69,
+   "upliftHt": 0.0,
+   "reason": "Commande déjà passée",
+   "eventIds": [],
+   "specialRequirements": []
+  },
+  {
+   "clientId": "cli_0060",
+   "name": "Centre social Jules Ferry",
+   "type": "canteen",
+   "city": "Salon-de-Provence",
+   "lat": 43.64678,
+   "lng": 5.08989,
+   "contactName": "Rachel Benali",
+   "phone": "06 68 49 51 87",
+   "status": "ordered",
+   "probability": 1.0,
+   "existingOrderId": "ord_029512",
+   "lines": [
+    {
+     "productId": "prd_0024",
+     "productName": "Filet de poulet",
+     "unit": "kg",
+     "qty": 103,
+     "baseQty": 103,
+     "unitPrice": 8.29,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0033",
+     "productName": "Saucisse de volaille",
+     "unit": "kg",
+     "qty": 55,
+     "baseQty": 55,
+     "unitPrice": 7.41,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0023",
+     "productName": "Poulet entier PAC halal (1,3 kg)",
+     "unit": "kg",
+     "qty": 125,
+     "baseQty": 125,
+     "unitPrice": 3.85,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0001",
+     "productName": "Carcasse d'agneau de France (16-20 kg)",
+     "unit": "kg",
+     "qty": 117.5,
+     "baseQty": 117.5,
+     "unitPrice": 10.06,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0018",
+     "productName": "Minerai de bœuf à hacher (VBF)",
+     "unit": "kg",
+     "qty": 42.5,
+     "baseQty": 42.5,
+     "unitPrice": 8.51,
+     "eventId": null
+    }
+   ],
+   "addLines": [],
+   "totalHt": 3286.4,
+   "upliftHt": 0.0,
+   "reason": "Commande déjà passée",
+   "eventIds": [],
+   "specialRequirements": []
+  },
+  {
+   "clientId": "cli_0041",
+   "name": "Centre social Louise Michel",
+   "type": "canteen",
+   "city": "Marseille 10e",
+   "lat": 43.27969,
+   "lng": 5.42239,
+   "contactName": "Samir Boyer",
+   "phone": "06 58 61 91 87",
+   "status": "ordered",
+   "probability": 1.0,
+   "existingOrderId": "ord_029511",
+   "lines": [
+    {
+     "productId": "prd_0020",
+     "productName": "Escalope de veau",
+     "unit": "kg",
+     "qty": 36.5,
+     "baseQty": 36.5,
+     "unitPrice": 26.5,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0034",
+     "productName": "Brochettes de poulet marinées",
+     "unit": "kg",
+     "qty": 64,
+     "baseQty": 64,
+     "unitPrice": 12.8,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0026",
+     "productName": "Haut de cuisse de poulet désossé",
+     "unit": "kg",
+     "qty": 135.5,
+     "baseQty": 135.5,
+     "unitPrice": 6.4,
+     "eventId": null
+    }
+   ],
+   "addLines": [],
+   "totalHt": 2653.65,
+   "upliftHt": 0.0,
+   "reason": "Commande déjà passée",
+   "eventIds": [],
+   "specialRequirements": [
+    "Aucune substitution sans accord"
+   ]
+  },
+  {
+   "clientId": "cli_0066",
+   "name": "Chez Karine – cuisine marocaine",
+   "type": "restaurant",
+   "city": "Marseille 4e",
+   "lat": 43.30667,
+   "lng": 5.40454,
+   "contactName": "Marco Perrin",
+   "phone": "06 27 01 98 52",
+   "status": "ordered",
+   "probability": 1.0,
+   "existingOrderId": "ord_029586",
+   "lines": [
+    {
+     "productId": "prd_0026",
+     "productName": "Haut de cuisse de poulet désossé",
+     "unit": "kg",
+     "qty": 44,
+     "baseQty": 44,
+     "unitPrice": 6.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0024",
+     "productName": "Filet de poulet",
+     "unit": "kg",
+     "qty": 49.5,
+     "baseQty": 49.5,
+     "unitPrice": 8.6,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0020",
+     "productName": "Escalope de veau",
+     "unit": "kg",
+     "qty": 9.5,
+     "baseQty": 9.5,
+     "unitPrice": 26.5,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0018",
+     "productName": "Minerai de bœuf à hacher (VBF)",
+     "unit": "kg",
+     "qty": 55.5,
+     "baseQty": 55.5,
+     "unitPrice": 8.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0005",
+     "productName": "Épaule d'agneau",
+     "unit": "kg",
+     "qty": 23,
+     "baseQty": 23,
+     "unitPrice": 11.8,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0062",
+     "productName": "Papier boucherie paraffiné (rame 10 kg)",
+     "unit": "piece",
+     "qty": 5,
+     "baseQty": 5,
+     "unitPrice": 28.5,
+     "eventId": null
+    }
+   ],
+   "addLines": [],
+   "totalHt": 1839.15,
+   "upliftHt": 0.0,
+   "reason": "Commande déjà passée",
+   "eventIds": [],
+   "specialRequirements": []
+  },
+  {
+   "clientId": "cli_0019",
+   "name": "Les Saveurs de l'Atlas",
+   "type": "restaurant",
+   "city": "Vitrolles",
+   "lat": 43.46135,
+   "lng": 5.24665,
+   "contactName": "Hélène Lemoine",
+   "phone": "07 79 44 42 31",
+   "status": "ordered",
+   "probability": 1.0,
+   "existingOrderId": "ord_029573",
+   "lines": [
+    {
+     "productId": "prd_0005",
+     "productName": "Épaule d'agneau",
+     "unit": "kg",
+     "qty": 19,
+     "baseQty": 19,
+     "unitPrice": 11.8,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0034",
+     "productName": "Brochettes de poulet marinées",
+     "unit": "kg",
+     "qty": 6,
+     "baseQty": 6,
+     "unitPrice": 12.8,
+     "eventId": null
+    }
+   ],
+   "addLines": [],
+   "totalHt": 301.0,
+   "upliftHt": 0.0,
+   "reason": "Commande déjà passée",
+   "eventIds": [],
+   "specialRequirements": []
+  },
+  {
+   "clientId": "cli_0043",
+   "name": "Restaurant inter-entreprises d'Aix-en-Provence",
+   "type": "canteen",
+   "city": "Aix-en-Provence",
+   "lat": 43.52471,
+   "lng": 5.42808,
+   "contactName": "Guillaume Cohen",
+   "phone": "06 31 80 37 91",
+   "status": "ordered",
+   "probability": 1.0,
+   "existingOrderId": "ord_029514",
+   "lines": [
+    {
+     "productId": "prd_0025",
+     "productName": "Cuisse de poulet",
+     "unit": "kg",
+     "qty": 106,
+     "baseQty": 106,
+     "unitPrice": 3.65,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0019",
+     "productName": "Viande hachée de bœuf 15 % MG (barquette 2 kg)",
+     "unit": "kg",
+     "qty": 55.5,
+     "baseQty": 55.5,
+     "unitPrice": 9.85,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0045",
+     "productName": "Broche poulet 10 kg",
+     "unit": "piece",
+     "qty": 7,
+     "baseQty": 7,
+     "unitPrice": 54.84,
+     "eventId": null
+    }
+   ],
+   "addLines": [],
+   "totalHt": 1317.45,
+   "upliftHt": 0.0,
+   "reason": "Commande déjà passée",
+   "eventIds": [],
+   "specialRequirements": [
+    "Aucune substitution sans accord"
+   ]
+  },
+  {
+   "clientId": "cli_0076",
+   "name": "Supermarché Le Maghreb",
+   "type": "supermarket",
+   "city": "Marseille 16e",
+   "lat": 43.36347,
+   "lng": 5.31755,
+   "contactName": "Gaël Schmitt",
+   "phone": "06 36 91 60 41",
+   "status": "ordered",
+   "probability": 1.0,
+   "existingOrderId": "ord_029557",
+   "lines": [
+    {
+     "productId": "prd_0059",
+     "productName": "Dattes Deglet Nour branchées (carton 5 kg)",
+     "unit": "box",
+     "qty": 6,
+     "baseQty": 6,
+     "unitPrice": 22.68,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0036",
+     "productName": "Cachir à l'olive (pièce 500 g)",
+     "unit": "piece",
+     "qty": 25,
+     "baseQty": 25,
+     "unitPrice": 5.9,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0062",
+     "productName": "Papier boucherie paraffiné (rame 10 kg)",
+     "unit": "piece",
+     "qty": 2,
+     "baseQty": 2,
+     "unitPrice": 26.4,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0052",
+     "productName": "Sauce blanche kebab (seau 4,5 kg)",
+     "unit": "piece",
+     "qty": 10,
+     "baseQty": 10,
+     "unitPrice": 13.68,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0055",
+     "productName": "Ras el-hanout (sac 1 kg)",
+     "unit": "piece",
+     "qty": 8,
+     "baseQty": 8,
+     "unitPrice": 9.42,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0025",
+     "productName": "Cuisse de poulet",
+     "unit": "kg",
+     "qty": 51,
+     "baseQty": 51,
+     "unitPrice": 3.7,
+     "eventId": null
+    },
+    {
+     "productId": "prd_0047",
+     "productName": "Cordons bleus de dinde (carton 5 kg)",
+     "unit": "box",
+     "qty": 5,
+     "baseQty": 5,
+     "unitPrice": 31,
+     "eventId": null
+    }
+   ],
+   "addLines": [],
+   "totalHt": 892.24,
+   "upliftHt": 0.0,
+   "reason": "Commande déjà passée",
+   "eventIds": [],
+   "specialRequirements": []
+  }
+ ],
+ "summary": {
+  "ordered": 19,
+  "predicted": 17,
+  "upsell": 9,
+  "expectedHt": 30430.68,
+  "upliftHt": 5469.55
+ }
+}
