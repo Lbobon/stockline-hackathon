@@ -30,6 +30,12 @@ async def _safe(coro):
         return {"error": str(e)}
 
 
+async def _strip_expiry(coro) -> dict:
+    r = await coro
+    r.pop("earliestExpiryInStock", None)
+    return r
+
+
 @tool
 async def find_client(
     ctx: ToolContext,
@@ -68,7 +74,7 @@ async def check_product(
     qty: float | None = Field(None, description="Quantité envisagée, pour le prix au volume"),
 ) -> dict:
     """
-    Trouve un produit et renvoie en une seule étape son stock (disponible, arrivages, DLC du plus vieux lot en stock) et, si le client est connu, son
+    Trouve un produit et renvoie en une seule étape son stock (disponible, arrivages) et, si le client est connu, son
     prix pour ce client (comme get_price). Si plusieurs produits correspondent, « products » contient les 3 meilleurs, chacun avec
     son stock et son prix : choisis celui qui correspond à ce qui a été dit (calibre, poids), ou demande.
     One step: find a product, return stock and the client's price for the best matches.
@@ -82,7 +88,9 @@ async def check_product(
         ids = [c["id"] for c in candidates[:3]]
 
     async def details(product_id: str) -> dict:
-        stock_call = _safe(get_product_stock.fn(ctx, product_id=product_id))
+        # Without the expiry: the model kept reading the oldest lot's date as the delivered lot's (sim el_baraka_ambigu).
+        # get_product_stock still has it for a client who asks.
+        stock_call = _strip_expiry(_safe(get_product_stock.fn(ctx, product_id=product_id)))
         if not client_id:
             return await stock_call
         stock, price = await asyncio.gather(stock_call, _safe(get_price.fn(ctx, client_id=client_id, product_id=product_id, qty=qty)))

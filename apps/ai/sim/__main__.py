@@ -355,8 +355,15 @@ async def main() -> None:
     (RUNS / ".gitignore").write_text("*\n")
     print(dim(f"{len(picked) * a.repeat} calls · agent {models['agent'].model} · caller {models['caller'].model} · judge {models['judge'].model}"))
 
+    # One round per repeat, the ERP reloaded before each: every scenario is a different client, so a round's calls run in
+    # parallel safely, but repeat 2 must not find the order repeat 1 just took (« elle est déjà confirmée »).
     sem = asyncio.Semaphore(a.concurrency)
-    recs = await asyncio.gather(*(run_one(s, r + 1, sem, models) for r in range(a.repeat) for s in picked))
+    recs: list[dict] = []
+    for r in range(a.repeat):
+        if r and not a.no_reset:
+            async with httpx.AsyncClient(timeout=30) as http:
+                (await http.post(f"{erp}/api/admin/reset")).raise_for_status()
+        recs += await asyncio.gather(*(run_one(s, r + 1, sem, models) for s in picked))
     with (out / "calls.jsonl").open("w", encoding="utf-8") as f:
         for r in recs:
             f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")

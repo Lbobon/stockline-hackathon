@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 
 from app import crud
 from app.core.activity import Ctx, today
-from app.core.db import Doc, per_data_version, transactional
+from app.core.db import Doc, get_meta, per_data_version, transactional
 from app.core.utils import add_days, fr_num
 from app.services import orders
 
@@ -42,8 +42,14 @@ def _client_product_stats() -> dict[tuple[str, str], Doc]:
 
 
 def _late_for_special_cut(order: Doc) -> bool:
-    """Placed on/after the delivery day, or the day before at/after 14:00 Paris time."""
-    placed = datetime.fromisoformat((order.get("createdAt") or f"{today()}T00:00:00Z").replace("Z", "+00:00")).astimezone(ZoneInfo("Europe/Paris"))
+    """Placed on/after the delivery day, or the day before at/after 14:00 Paris time.
+    An order placed on the anchored day uses the data pack's clock (meta.generatedAt, the night line's hour, which the
+    agent also reads), not the machine's wall clock: else the same call passes at 5 am and fails at 9 pm."""
+    created = order.get("createdAt") or f"{today()}T00:00:00Z"
+    clock = get_meta().get("generatedAt")
+    if clock and created[:10] == today() == clock[:10]:
+        created = clock
+    placed = datetime.fromisoformat(created.replace("Z", "+00:00")).astimezone(ZoneInfo("Europe/Paris"))
     day = placed.date().isoformat()
     return order["deliveryDate"] <= day or (order["deliveryDate"] == add_days(day, 1) and placed.hour >= CARCASS_CUTOFF_HOUR)
 
