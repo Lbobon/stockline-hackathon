@@ -21,7 +21,7 @@ with TestClient(app) as c:
     tomorrow = "2026-11-25"
     # Over its credit ceiling → stays a draft with the reason.
     r = c.get("/api/gates/orders/ord_029511").json()
-    assert r["decision"] == "draft" and [x["code"] for x in r["reasons"]] == ["credit_limit"], r
+    assert r["decision"] == "draft" and {x["code"] for x in r["reasons"]} == {"credit_limit", "short_stock"}, r  # + the veal at zero
 
     def new_order(client_id: str, lines: list[dict]) -> str:
         o = c.post("/api/orders", json={"clientId": client_id, "deliveryDate": tomorrow, "lines": lines}, headers=H)
@@ -55,5 +55,16 @@ with TestClient(app) as c:
     assert g["kind"] == "money" and 0 < g["pct"] <= 15 and g["amountHt"] == round(1220 * g["pct"] / 100, 2)
     big = c.get("/api/retention/cli_0002", params={"basisHt": 5000, "costHt": 4800}).json()
     assert big["status"] == "needs_approval" and "Rachid" in big["explanation"] and "sous le coût" in big["explanation"]
+
+    # Below the 120 € HT delivery minimum: held for Leïla.
+    small = new_order("cli_0002", [{"productId": "prd_0043", "qty": 1}])
+    assert "below_minimum" in {x["code"] for x in c.get(f"/api/gates/orders/{small}").json()["reasons"]}
+
+    # A confirmed order edited past the rules goes back to a draft; an in-stock add-on stays confirmed.
+    oid = new_order("cli_0002", [{"productId": "prd_0043", "qty": 10}])
+    assert c.post(f"/api/gates/orders/{oid}/finalize", json={"recapConfirmed": True}, headers=H).json()["order"]["status"] == "confirmed"
+    assert c.post(f"/api/orders/{oid}/lines", json={"productId": "prd_0049", "qty": 2}, headers=H).json()["status"] == "confirmed"
+    held = c.post(f"/api/orders/{oid}/lines", json={"productId": "prd_0020", "qty": 50}, headers=H).json()  # veal at zero
+    assert held["status"] == "draft" and "modifiée après confirmation" in held["note"], held
 
 print("gates + retention OK")

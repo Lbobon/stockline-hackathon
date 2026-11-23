@@ -83,6 +83,9 @@ SMART_RULES = """Garde-fous (priment sur la règle confirm_order) :
   - date (trop tard, carcasse à commander la veille avant 14 h) : dis-le avec la prochaine livraison possible ;
   - compte bloqué : ne détaille pas, dis que la comptabilité doit d'abord lever le blocage, prends le message, ne promets rien.
   - quantité inhabituelle ou nouveau produit : c'est une simple vérification, dis-le comme tel.
+  - sous le minimum de livraison (120 € HT) : propose de compléter la commande, ou l'enlèvement au quai des Arnavaux ;
+  - stock insuffisant même avec les arrivages : dis-le, propose une autre quantité ou un autre produit, n'invente pas de date d'arrivée.
+- Une commande déjà confirmée que tu modifies est revérifiée : si le résultat la montre de nouveau en attente (status draft), dis-le au client avec la raison.
 - Produit en rupture : propose le remplaçant seulement si la fiche client le permet ; jamais sans son accord.
 - Si le client refuse le remplaçant : appelle retention_offer (basis_ht = quantité × prix de la ligne perdue) et propose ses offers UNE à la fois, dans l'ordre. status "needs_approval" : « je le fais valider par Rachid », ne promets rien. status "service_only" : aucun geste financier. Enregistre l'issue avec log_client_event si tu as cet outil (sinon c'est enregistré automatiquement après ton tour).
 - Pour savoir quelles commandes sont touchées par une rupture aujourd'hui : shortage_triage."""

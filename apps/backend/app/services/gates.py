@@ -17,12 +17,16 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app import crud
-from app.core.activity import Ctx, today
+from app.core.activity import Ctx, log_event, today
 from app.core.db import Doc, get_meta, per_data_version, transactional
 from app.core.utils import add_days, fr_num
-from app.services import orders
+from app.services import orders, routing
+from app.services.stock import stock_levels
 
 BLOCKING_WARNINGS = {"client_blocked", "credit_limit", "too_late"}
+MIN_ORDER_HT = 120.0  # house rule (01-entreprise.md): below, pickup at the Arnavaux dock, no delivery
+# Re-checked when a confirmed order is edited (an add-on call may rightly add a new product or more than usual).
+HARD_REASONS = {"client_blocked", "credit_limit", "too_late", "special_cut_late", "below_minimum", "short_stock"}
 UNUSUAL_FACTOR = 3
 CARCASS_CUTOFF_HOUR = 14  # "Carcasses entières et découpes spéciales : la veille avant 14h"
 
@@ -63,6 +67,19 @@ def check(order_id: str, recap_confirmed: bool = True) -> Doc:
     reasons = [{"code": w["code"], "message": w["message"]} for w in orders.order_warnings(order) if w["code"] in BLOCKING_WARNINGS]
     if not recap_confirmed:
         reasons.append({"code": "recap_not_confirmed", "message": "Le client n'a pas clairement validé le récapitulatif"})
+    if order["lines"] and order["totalHt"] < MIN_ORDER_HT:
+        reasons.append({"code": "below_minimum", "message": f"Commande de {fr_num(round(order['totalHt'], 2))} € HT, sous le minimum de "
+                        f"{fr_num(MIN_ORDER_HT)} € HT pour la livraison : compléter, ou enlèvement au quai des Arnavaux"})  # fmt: skip
+    levels = stock_levels(order["id"])  # availability without this order's own reservation
+    demand: dict[str, float] = {}
+    for l in order["lines"]:
+        demand[l["productId"]] = demand.get(l["productId"], 0) + l["qty"]
+    for pid, qty in demand.items():
+        lv = levels.get(pid, {})
+        if lv.get("available", 0) + lv.get("incoming", 0) < qty:
+            p = crud.products.get(pid) or {"name": pid, "unit": ""}
+            reasons.append({"code": "short_stock", "productId": pid, "message": f"{p['name']} : {fr_num(qty)} {p['unit']} demandés, "
+                            f"stock et arrivages prévus insuffisants"})  # fmt: skip
     stats = _client_product_stats()
     for l in order["lines"]:
         p = crud.products.get(l["productId"]) or {"name": l["productId"], "unit": ""}
@@ -104,3 +121,19 @@ def review(day: str | None = None) -> list[Doc]:
             out.append({**r, "orderNumber": o["number"], "clientId": o["clientId"], "clientName": c.get("name", ""),
                         "deliveryDate": o["deliveryDate"], "totalHt": o["totalHt"], "createdBy": o.get("createdBy")})  # fmt: skip
     return sorted(out, key=lambda r: (r["deliveryDate"], r["clientName"]))
+
+
+def recheck_after_edit(ctx: Ctx, order_id: str) -> None:
+    """A confirmed order that was just edited is checked again on the hard rules. If one fires, it goes back to a draft
+    for Leïla (with the reason) and leaves its route: an edit can't sneak past the checks the confirmation went through."""
+    order = crud.orders.require(order_id)
+    if order["status"] != "confirmed":
+        return
+    hard = [r for r in check(order_id)["reasons"] if r["code"] in HARD_REASONS]
+    if not hard:
+        return
+    note = "À vérifier (modifiée après confirmation) : " + " · ".join(r["message"] for r in hard)
+    routing.detach_order(order)
+    rest = {k: v for k, v in order.items() if k not in ("routeRunId", "confirmedAt")}
+    crud.orders.put({**rest, "status": "draft", "note": note})
+    log_event(ctx, "order.held", "order", order_id, f"Commande {order['number']} repassée en brouillon — {note}")

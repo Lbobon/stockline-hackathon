@@ -273,6 +273,13 @@ def update_order(ctx: Ctx, id: str, patch: Doc) -> Doc:
     return order_detail(id)
 
 
+def _recheck_if_confirmed(ctx: Ctx, order: Doc, id: str) -> None:
+    if order["status"] == "confirmed":
+        from app.services import gates  # gates imports this module
+
+        gates.recheck_after_edit(ctx, id)
+
+
 @transactional
 def add_line(ctx: Ctx, id: str, input: Doc) -> Doc:
     order = crud.orders.require(id)
@@ -281,6 +288,7 @@ def add_line(ctx: Ctx, id: str, input: Doc) -> Doc:
     _save({**order, "lines": [*order["lines"], line]})
     p = crud.products.require(line["productId"])
     log_event(ctx, "order.line_added", "order", id, f"{js_str(line['qty'])} {p['unit']} de {p['name']} ajouté(s) à {order['number']}")
+    _recheck_if_confirmed(ctx, order, id)
     return order_detail(id)
 
 
@@ -305,6 +313,7 @@ def update_line(ctx: Ctx, id: str, line_id: str, patch: Doc) -> Doc:
     _save({**order, "lines": [updated if l["id"] == line_id else l for l in order["lines"]]})
     p = crud.products.get(updated["productId"])
     log_event(ctx, "order.line_updated", "order", id, f"Ligne {p['name'] if p else updated['productId']} modifiée sur {order['number']}")
+    _recheck_if_confirmed(ctx, order, id)
     return order_detail(id)
 
 

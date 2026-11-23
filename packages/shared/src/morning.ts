@@ -65,7 +65,9 @@ export type GateReasonCode =
   | "recap_not_confirmed"
   | "unusual_qty"
   | "new_product"
-  | "special_cut_late";
+  | "special_cut_late"
+  | "below_minimum" // under the 120 € HT delivery minimum: complete it, or pickup at the dock
+  | "short_stock"; // stock + incoming deliveries can't cover the quantity
 
 export interface GateReason {
   code: GateReasonCode;
