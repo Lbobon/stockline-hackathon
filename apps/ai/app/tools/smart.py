@@ -57,3 +57,16 @@ async def shortage_triage(ctx: ToolContext) -> dict:
             for o in r["orders"]
         ],
     }
+
+
+@tool
+async def apply_substitution(
+    ctx: ToolContext,
+    order_id: str,
+    note: str | None = Field(None, description="ce que le client a dit, en une phrase"),
+) -> dict:
+    """
+    Le client a accepté le remplaçant : remplace toutes les lignes en rupture de la commande par leur remplaçant
+    habituel et l'enregistre dans son historique. Only after the client explicitly agreed.
+    """
+    return summarize_order(await ctx.erp.post(f"/api/shortages/{enc(order_id)}/substitute", {"note": note}))

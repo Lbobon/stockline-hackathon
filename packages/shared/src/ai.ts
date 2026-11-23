@@ -55,7 +55,7 @@ export type ChatStreamEvent =
 // ── Voice (push-to-talk, two tracks: the human "caller" and the agent) ──
 
 export type VoiceClientMessage =
-  | { type: "start"; sessionId?: string; actorName?: string } // opens a conversation
+  | { type: "start"; sessionId?: string; actorName?: string; outboundOrderId?: string } // opens a conversation (outboundOrderId: the agent calls that order's client and speaks first)
   | { type: "audio_start"; mime: string; hint?: string } // caller pressed space (hint: optional STT vocabulary; mock STT returns it)
   | { type: "audio_end" } // caller released space; binary frames sent in between (every 100–250 ms) are the utterance, streamed to the STT as they arrive
   | { type: "text"; text: string } // typed instead of spoken (debug)

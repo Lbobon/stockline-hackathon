@@ -311,6 +311,18 @@ export function useVoiceSession() {
     setLastError(undefined);
   }, [conn, newTurn, send, stopPlayback]);
 
+  /** Outbound call (shortage triage): a fresh conversation where the agent calls this order's client and speaks first. */
+  const callOutbound = useCallback((orderId: string) => {
+    if (conn !== "ready") return;
+    stopPlayback();
+    setTurns([]);
+    newTurn({ text: "Appel sortant…", at: Date.now(), status: "final", typed: true });
+    send({ type: "start", actorName: "Agent vocal", outboundOrderId: orderId });
+    releasedAt.current = performance.now();
+    setActivity("thinking");
+    setLastError(undefined);
+  }, [conn, newTurn, send, stopPlayback]);
+
   const reset = useCallback(() => {
     stopPlayback();
     send({ type: "reset" });
@@ -322,6 +334,6 @@ export function useVoiceSession() {
 
   return {
     conn, activity, mic, providers, turns, level, lastError,
-    startTalking, stopTalking, sendText, stopPlayback, reset, reconnect: connect,
+    startTalking, stopTalking, sendText, callOutbound, stopPlayback, reset, reconnect: connect,
   };
 }
