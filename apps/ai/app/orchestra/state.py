@@ -129,6 +129,10 @@ class CallState:
         self.tool_calls.append({"agent": agent, "name": name, "args": args, "ok": ok, "ms": ms, "result": result, "turn": self.turn_no})
         if not ok or not isinstance(result, dict):
             return
+        if name == "finalize_order" and isinstance(result.get("order"), dict):
+            result = result["order"]  # {decision, reasons, order}: the ERP's confirm-or-draft gates
+        elif name == "find_client" and isinstance(result.get("client"), dict):
+            result, name = result["client"], "get_client"  # search + card + context in one step
         if name == "get_client" and result.get("id"):
             self.client = {"id": result["id"], "name": result.get("name")}
             self.candidates = []

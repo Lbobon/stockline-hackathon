@@ -27,6 +27,6 @@ async def shortage_brief(order_id: str) -> str:
         "Tu as déjà tout ce qu'il faut : ta première réponse est parlée tout de suite, SANS appeler d'outil et sans "
         "phrase d'attente. Commence l'appel maintenant : salue, présente-toi (Médina Viandes), explique la rupture en une phrase, "
         "propose le remplaçant s'il y en a un et demande son accord. S'il accepte, applique la substitution "
-        "avec apply_substitution (si l'outil refuse, enregistre l'accord avec log_client_event et dis que Leïla ajuste "
+        "avec apply_substitution (si l'outil refuse, enregistre l'accord avec log_client_event si tu as cet outil, sinon c'est enregistré automatiquement, et dis que Leïla ajuste "
         "la commande au chargement) ; s'il refuse, suis les garde-fous (retention_offer)."
     )

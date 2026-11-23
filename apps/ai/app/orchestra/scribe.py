@@ -27,21 +27,37 @@ On te donne les derniers échanges de l'appel et ce qui a déjà été enregistr
   severity low | medium | high.
 - facts : un fait DURABLE utile aux prochains appels (contrainte de livraison, nouveau contact, préférence, habitude).
   kind parmi {KINDS} ; title court ; body 1 à 2 phrases.
-Une prise de commande (même grosse, même avec une rupture ou un remplacement), une question de stock ou de prix, une politesse :
+Une prise de commande (même grosse, même avec une rupture ou un remplacement accepté), une question de stock ou de prix, une politesse :
 rien à enregistrer — la commande est déjà dans l'ERP. special_request = une demande inhabituelle à traiter par un humain (découpe, horaire…).
+À ENREGISTRER en revanche (l'agent vocal n'a pas d'outil pour le faire, c'est toi qui le fais) :
+- un remplaçant refusé et l'issue du geste commercial proposé (retention_offer : accepté, refusé, « à valider par Rachid »)
+  → price_negotiation (churn_risk si le client menace de partir) ;
+- un remplaçant accepté que le système n'a pas pu appliquer (l'agent dit que Leïla ajuste la commande) → special_request.
+Les « Outils » donnés sous un échange disent ce qui s'est vraiment passé.
 Ne répète pas ce qui est déjà enregistré. Réponds UNIQUEMENT en JSON : {{"events": [...], "facts": [...]}} (listes vides si rien)."""
+WATCHED = ("retention_offer", "apply_substitution", "finalize_order")  # outcomes the scribe must see, not only hear
 
 
 class Scribe:
     def __init__(self, state: CallState, tools: dict[str, Tool], actor_name: str | None):
         self.state, self.tools, self.actor_name = state, tools, actor_name
-        self.pending: list[tuple[str, str]] = []  # (caller, agent) not yet read
+        self.pending: list[tuple[str, str, str]] = []  # (caller, agent, outcomes of watched tools) not yet read
         self.written: list[str] = []
         self.tasks: set[asyncio.Task] = set()
         self.lock = asyncio.Lock()
 
+    def outcomes(self) -> str:
+        """What the watched tools returned this turn (retention offer, substitution, finalization), one line each."""
+        rows = []
+        for c in self.state.tool_calls:
+            if c["turn"] == self.state.turn_no and c["name"] in WATCHED:
+                r = c["result"] if isinstance(c["result"], dict) else {}
+                keep = {k: r.get(k) for k in ("status", "decision", "reasons", "pct", "amountHt", "error") if r.get(k) is not None}
+                rows.append(f"{c['name']} → {'ok' if c['ok'] else 'ÉCHEC'} {json.dumps(keep, ensure_ascii=False, default=str)}")
+        return "; ".join(rows)
+
     def after_turn(self, caller: str, agent: str) -> None:
-        self.pending.append((caller, agent))
+        self.pending.append((caller, agent, self.outcomes()))
         if self.state.client:
             t = asyncio.create_task(self._run())
             self.tasks.add(t)
@@ -60,7 +76,7 @@ class Scribe:
                 return
             batch, self.pending = self.pending, []
             st, cid = self.state, self.state.client["id"]
-            exchange = "\n".join(f"Client : {c}\nAgent : {a}" for c, a in batch)
+            exchange = "\n".join(f"Client : {c}\nAgent : {a}" + (f"\nOutils : {o}" if o else "") for c, a, o in batch)
             done = "\n".join(f"- {w}" for w in self.written) or "(rien)"
             try:
                 async with st.span("scribe", "lecture", f"{len(batch)} échange(s)"):

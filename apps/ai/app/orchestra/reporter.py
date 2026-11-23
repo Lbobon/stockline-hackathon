@@ -73,9 +73,11 @@ async def build_report(session) -> dict:
     orders = {}
     for c in st.tool_calls:
         r = c.get("result")
+        if c["name"] == "finalize_order" and isinstance(r, dict):
+            r = r.get("order")  # {decision, reasons, order}
         if c["ok"] and isinstance(r, dict) and str(r.get("id", "")).startswith("ord_") and r.get("lines") is not None:
             orders[r["id"]] = r
-    writes = [c for c in st.tool_calls if c["ok"] and c["name"] in ("log_client_event", "save_context", "create_draft_order", "confirm_order", "update_order_line", "add_order_line", "remove_order_line", "update_order")]
+    writes = [c for c in st.tool_calls if c["ok"] and c["name"] in ("log_client_event", "save_context", "create_draft_order", "confirm_order", "finalize_order", "apply_substitution", "retention_offer", "update_order_line", "add_order_line", "remove_order_line", "update_order")]
     scout_calls = [c for c in st.tool_calls if c["agent"] == "scout"]
     voice_calls = [c for c in st.tool_calls if c["agent"] == "voice"]
     spans = [
