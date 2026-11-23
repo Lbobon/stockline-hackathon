@@ -395,6 +395,7 @@ class Speaker:
         self.started = False
         self.first_byte_at: float | None = None
         self.tts_first_byte_ms: int | None = None
+        self.previous = ""  # the sentence just spoken: ElevenLabs continues its intonation (previous_text)
 
     def push(self, delta: str) -> None:
         self.buffer += delta
@@ -448,10 +449,9 @@ class Speaker:
                 await self.send_bytes(audio)
                 continue
             try:
-                if self.stability is not None and self.tts.name == "elevenlabs":
-                    result = await self.tts.synthesize(sentence, settings.tts.voice or None, stability=self.stability)  # type: ignore[call-arg]
-                else:
-                    result = await self.tts.synthesize(sentence, settings.tts.voice or None)
+                extra = {"stability": self.stability, "previous_text": self.previous or None} if self.tts.name == "elevenlabs" else {}
+                result = await self.tts.synthesize(sentence, settings.tts.voice or None, **extra)  # type: ignore[call-arg]
+                self.previous = sentence
                 # aclosing: on barge-in (cancellation) the provider's HTTP stream is closed right away
                 async with aclosing(result.chunks) as chunks:  # type: ignore[type-var]
                     async for chunk in chunks:
