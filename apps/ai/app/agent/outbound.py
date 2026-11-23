@@ -71,6 +71,7 @@ async def shortage_brief(order_id: str) -> str:
         else:
             lines.append(f"il manque {missing} de {line['name']} ; aucun remplaçant en stock")
     shortage = " ; ".join(lines)
+    first_short = f"l'{row['lines'][0]['name'].lower()}" if row["lines"][0]["name"][:1].lower() in "aeiouyéè" else f"la {row['lines'][0]['name'].lower()}"
 
     # Other lines of the same order that are short today but covered by an incoming delivery (not a shortage: the
     # triage leaves them out on purpose). Worth one sentence for a client who must hear about any change.
@@ -79,15 +80,21 @@ async def shortage_brief(order_id: str) -> str:
     except Exception:
         order = {}
     short = {line["productId"] for line in row["lines"]}
-    tight = [w["message"].split(" : ")[0].replace("Stock insuffisant pour ", "") for w in order.get("warnings") or []
-             if w.get("code") == "insufficient_stock" and w.get("productId") not in short]  # fmt: skip
+    tight = []  # (name, incoming?) for the other short lines, from the ERP: never claim an arrival that isn't there
+    for w in order.get("warnings") or []:
+        if w.get("code") == "insufficient_stock" and w.get("productId") and w["productId"] not in short:
+            try:
+                stock = (await erp.get(f"/api/products/{w['productId']}")).get("stock") or {}
+            except Exception:
+                stock = {}
+            tight.append((w["message"].split(" : ")[0].replace("Stock insuffisant pour ", ""), bool(stock.get("incoming"))))
     pending = order.get("status") == "draft"
 
     offer = (
         f"Propose ce remplaçant (et lui seul) : {'; '.join(subs)}. S'il accepte : apply_substitution."
         if subs
-        else "Il n'y a pas de remplaçant en stock : dis-le (et que le remplaçant habituel manque aussi), ne propose aucun "
-        "autre produit de toi-même et ne lui demande pas d'en trouver un."
+        else "Il n'y a pas de remplaçant en stock : dis-le simplement (le remplaçant habituel manque aussi, mais ne le "
+        "nomme que si on te pose la question), ne propose aucun autre produit de toi-même et ne lui demande pas d'en trouver un."
     )
     question = (
         "est-ce qu'il accepte le remplaçant"
@@ -95,9 +102,9 @@ async def shortage_brief(order_id: str) -> str:
         else "est-ce qu'on retire ce produit de la commande pour cette livraison, le reste partant normalement"
     )
     impossible = (
-        f"\n- Aucun arrivage n'est prévu pour {', '.join(nothing_coming)} : une livraison plus tard, en priorité ou une "
-        "quantité partielle de ce produit sont IMPOSSIBLES. Si retention_offer en propose, saute-les sans les annoncer "
-        "et passe à l'offre suivante."
+        f"\n- Aucun arrivage confirmé pour {', '.join(nothing_coming)} : une livraison plus tard ou une quantité partielle "
+        "ne peuvent PAS être promises. Si retention_offer les propose, dis-le honnêtement en une phrase (« je n'ai rien de "
+        "confirmé, je note la demande pour votre commercial ») puis passe à l'offre suivante, sans la reprendre ensuite."
         if nothing_coming
         else ""
     )
@@ -120,11 +127,16 @@ async def shortage_brief(order_id: str) -> str:
         "- N'invente jamais une date d'arrivage, une heure de livraison ou de rappel, ni un envoi de mail. Si on te "
         "demande un rappel ou une confirmation écrite : dis que la demande est enregistrée pour son commercial, sans "
         "promettre d'heure, et ne le répète pas à chaque réplique.\n"
-        "- S'il dit qu'il n'a pas entendu ou demande qui appelle : une seule phrase courte (Médina Viandes, l'assistant "
-        "vocal) + le fait principal (le produit qui manque), puis ta question. Ne répète pas ta première réplique.\n"
+        "- S'il dit qu'il n'a pas entendu ou demande qui appelle : réponds en DEUX phrases très courtes, sur ce modèle : "
+        f"« Ici l'assistant vocal de Médina Viandes. Il nous manque {first_short} pour {day} : {question} ? » "
+        "Rien d'autre (ni la cause, ni le détail), et pas ta première réplique.\n"
         "- Ne change rien d'autre dans la commande sans son accord explicite."
-        + (f"\n- Si on parle du reste de la commande : le stock est juste ce matin sur {', '.join(tight)}, un arrivage est "
-           "prévu et Leïla vérifie au chargement ; ce n'est pas une rupture, ne propose rien pour ça." if tight else "")
+        + (("\n- " + ("Ce client veut être prévenu de tout changement : après le point principal, dis-lui en une phrase que le "
+                     "stock est insuffisant ce matin aussi sur " if row.get("preference") == "refuses" else
+                     "Si le client demande pour le reste de la commande : stock insuffisant ce matin aussi sur ")
+            + ", ".join(f"{n} ({'un arrivage est prévu' if inc else 'aucun arrivage prévu'})" for n, inc in tight)
+            + ". Dis-le tel quel, sans en rajouter (ni heure, ni qui vérifie) ; ne propose rien pour ces lignes.")
+           if tight else "")
         + ("\n- La commande attend encore la validation de l'ADV : ne dis pas qu'elle est partie ni qu'elle est annulée, "
            "et ne parle pas d'encours ni de plafond (ce n'est pas l'objet de l'appel)." if pending else "")
     )
