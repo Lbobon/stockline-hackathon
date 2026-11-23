@@ -39,6 +39,7 @@ import httpx
 
 from app.agent import run_agent
 from app.agent.outbound import shortage_brief
+from app.agent.radar_brief import brief as radar_brief
 from app.clients import LLMRequest, LLMText, LLMUsage
 from app.clients.factory import make_llm_client
 from app.config import REPO_ROOT, LLMSettings, settings
@@ -58,6 +59,18 @@ MAX_TURNS = 12
 END = "[FIN]"
 PICK_UP = "(La ligne décroche : l'agent attend que vous parliez. À vous.)"
 OUTBOUND_TURN = "(appel sortant : l'agent parle en premier)"
+
+
+async def opening_brief(sc: Scenario) -> str:
+    """The hidden first turn of an outbound call: a shortage (Ce matin) or a radar call (the client's forecast row)."""
+    if sc.radar_client_id:
+        async with httpx.AsyncClient(timeout=30) as http:
+            f = (await http.get(f"{settings.erp_api_url}/api/radar/forecast", params={"date": sc.radar_date})).json()
+        row = next((r for r in f["clients"] if r["clientId"] == sc.radar_client_id), None)
+        if not row:
+            raise ValueError(f"{sc.radar_client_id} n'est pas dans le radar du {sc.radar_date}")
+        return radar_brief(row, sc.radar_date)
+    return await shortage_brief(sc.outbound_order_id)
 
 
 def ringing(opening: str) -> str:
@@ -153,10 +166,10 @@ async def simulate(sc: Scenario, caller_llm, agent_llm) -> Trace:
     caller_view: list[ChatMessage] = [ChatMessage(role="user", content=PICK_UP)]
     agent_history: list[ChatMessage] = []
     tools = all_tools()
-    if sc.outbound_order_id:  # the agent calls and speaks first, from the hidden brief (agent/outbound.py)
+    if sc.outbound_order_id or sc.radar_client_id:  # the agent calls and speaks first, from the hidden brief (agent/outbound.py, agent/radar_brief.py)
         opening = Turn(caller=OUTBOUND_TURN)
         trace.turns.append(opening)
-        agent_history.append(ChatMessage(role="user", content=await shortage_brief(sc.outbound_order_id)))
+        agent_history.append(ChatMessage(role="user", content=await opening_brief(sc)))
         started, by_id = time.perf_counter(), {}
         async for ev in run_agent(agent_history, llm=agent_llm, tools=tools, mode="voice", actor_name="Agent vocal"):
             match ev:
@@ -226,12 +239,12 @@ async def simulate_orchestra(sc: Scenario, caller_llm, agent_llm, rate: float, r
     caller_view: list[ChatMessage] = [ChatMessage(role="user", content=PICK_UP)]
     session = CallSession(actor_name="Agent vocal", llm=agent_llm)
     warm = asyncio.create_task(session.warm())  # the line rings: prompt cache written meanwhile
-    if sc.outbound_order_id:  # the agent calls and speaks first, as WS /voice does for ?outbound=<orderId>
+    if sc.outbound_order_id or sc.radar_client_id:  # the agent calls and speaks first, as WS /voice does for ?outbound=<orderId>
         await warm
         opening = Turn(caller=OUTBOUND_TURN)
         trace.turns.append(opening)
         started = time.perf_counter()
-        async for ev in session.turn(await shortage_brief(sc.outbound_order_id)):
+        async for ev in session.turn(await opening_brief(sc)):
             if isinstance(ev, TextEvent):
                 opening.first_text_ms = opening.first_text_ms or int((time.perf_counter() - started) * 1000)
                 opening.agent += ev.delta
