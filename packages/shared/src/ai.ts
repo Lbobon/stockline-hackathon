@@ -50,7 +50,54 @@ export type ChatStreamEvent =
   | { type: "tool_call"; call: ToolCall }
   | { type: "tool_result"; callId: string; name: string; ok: boolean; result: unknown; ms: number }
   | { type: "done"; message: ChatMessage; usage?: { inputTokens?: number; outputTokens?: number; cacheCreationInputTokens?: number; cacheReadInputTokens?: number }; ms: number; timings?: TurnTimings }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "guard"; verdict: GuardVerdict }; // le Garde-fou: Jev's verdict on one sentence of the answer (never blocks in the chat)
+
+/**
+ * Le Garde-fou (apps/ai/app/guard): before a sentence of the agent is spoken, Jev checks it against what the ERP said during
+ * the call (tool results, the Éclaireur's facts, the outbound brief, the business date). status:
+ *  none = nothing checkable (« Je regarde. ») · verified = the ERP backs it · contradicted = a value differs from the ERP or a promise
+ *  nobody granted · unverified = no ERP fact says either way · unchecked = Jev too slow, spoken anyway.
+ * blocked = contradicted in GUARD_MODE=block: never spoken, the agent corrects itself (guard_correction follows).
+ * start/end = offsets of the sentence in the turn's agent text (voice only).
+ */
+export interface GuardVerdict {
+  id: string;
+  turn: number;
+  sentence: string;
+  kinds: string[];
+  status: "none" | "verified" | "contradicted" | "unverified" | "unchecked";
+  blocked: boolean;
+  strong?: boolean; // clear enough to block (shadow mode: « would have been blocked »)
+  mode: "off" | "shadow" | "block";
+  start?: number;
+  end?: number;
+  pSupported?: number;
+  pContradicts?: number;
+  pPromises?: number;
+  pMismatch?: number;
+  reason?: "contredit" | "promesse";
+  source?: { label: string; tool: string; values: string[]; confidence: number };
+  said?: string[];
+  ms?: number;
+  correctedBy?: string;
+}
+
+/** End-of-call summary of the Garde-fou (in the call report). */
+export interface GuardSummary {
+  mode: string;
+  sentences: number;
+  checked: number;
+  verified: number;
+  contradicted: number;
+  blocked: number;
+  strong?: number;
+  unverified: number;
+  unchecked: number;
+  corrections: number;
+  medianMs?: number | null;
+  flags: { sentence: string; status: string; blocked: boolean; source?: string }[];
+}
 
 // ── Voice (push-to-talk, two tracks: the human "caller" and the agent) ──
 
@@ -58,7 +105,7 @@ export type VoiceClientMessage =
   | { type: "start"; sessionId?: string; actorName?: string; outboundOrderId?: string; mode?: VoiceMode } // opens a conversation (outboundOrderId: the agent calls that order's client and speaks first)
   | { type: "audio_start"; mime: string; hint?: string; speaker?: CopilotSpeaker } // caller pressed space (hint: optional STT vocabulary; mock STT returns it)
   | { type: "audio_end" } // caller released space; binary frames sent in between (every 100–250 ms) are the utterance, streamed to the STT as they arrive
-  | { type: "text"; text: string; speaker?: CopilotSpeaker } // typed instead of spoken (debug)
+  | { type: "text"; text: string; speaker?: CopilotSpeaker; demoError?: boolean } // typed instead of spoken (debug); demoError: Garde-fou demo, the agent states one wrong figure
   | { type: "reset" }
   | { type: "hangup" } // the call ends: the Rapporteur writes the report (call_report follows)
   | { type: "copilot_confirm" }; // copilot mode: Leïla clicks « Valider la commande » → finalize_order (the ERP's gates)
@@ -91,7 +138,7 @@ export type VoiceServerMessage =
   | { type: "error"; message: string };
 
 /** Agents of a call (app/orchestra): voice, scout (Éclaireur), fast (Réflexe), scribe (Greffier), linguist, reporter. */
-export type OrchestraAgent = "voice" | "scout" | "fast" | "scribe" | "linguist" | "reporter" | "warmup" | "copilot";
+export type OrchestraAgent = "voice" | "scout" | "fast" | "scribe" | "linguist" | "reporter" | "warmup" | "copilot" | "guard";
 
 export type OrchestraEvent =
   | { type: "agent_activity"; agent: OrchestraAgent; label: string; task: string; status: "start" | "done" | "error"; ms?: number }
@@ -99,6 +146,10 @@ export type OrchestraEvent =
   | { type: "scribe_note"; label: string }
   | { type: "filler"; text: string }
   | { type: "turn"; n: number; path: "llm" | "fast"; firstSoundMs?: number; firstWordMs?: number; prefetched: string[] }
+  // le Garde-fou: a verdict per sentence; in block mode a contradicted sentence is replaced by the agent's own correction,
+  // whose text starts at offset `at` of the turn's agent text
+  | ({ type: "guard" } & GuardVerdict)
+  | { type: "guard_correction"; id: string; at: number; sentence: string; erp: string[]; source?: string }
   // copilot mode (Souffleur): the order as dictated, kept in the ERP; whispers for Leïla; the client's mood (Jev)
   | { type: "copilot_order"; order: CopilotOrder | null; gate: { decision: "confirm" | "draft" | "already_confirmed"; reasons: string[] } | null; final: boolean }
   | { type: "whisper"; key: string; level: WhisperLevel; title: string; body: string; source: string }

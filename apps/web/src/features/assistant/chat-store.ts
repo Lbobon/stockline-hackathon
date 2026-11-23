@@ -3,7 +3,7 @@
  * The stream keeps running while the panel is closed.
  */
 import { useSyncExternalStore } from "react";
-import type { ChatMessage, ChatStreamEvent } from "@kit/shared";
+import type { ChatMessage, ChatStreamEvent, GuardVerdict } from "@kit/shared";
 import { AiUnavailableError, streamChat, TurnRecorder } from "./ai-client";
 import type { ToolRun } from "./tools";
 
@@ -11,7 +11,8 @@ export type Part = { kind: "text"; text: string } | { kind: "tool"; tool: ToolRu
 
 export type ChatItem =
   | { id: string; role: "user"; text: string; at: number }
-  | { id: string; role: "assistant"; parts: Part[]; status: "streaming" | "done" | "error" | "stopped"; error?: string; ms?: number; at: number };
+  | { id: string; role: "assistant"; parts: Part[]; status: "streaming" | "done" | "error" | "stopped"; error?: string; ms?: number; at: number;
+      guard?: GuardVerdict[] }; // le Garde-fou: Jev's verdict on each claim of the answer
 
 interface ChatState {
   items: ChatItem[];
@@ -59,6 +60,8 @@ function applyEvent(id: string, e: ChatStreamEvent) {
         return { ...a, parts, status: "done", ms: e.ms };
       case "error":
         return { ...a, status: "error", error: e.message };
+      case "guard":
+        return { ...a, guard: [...(a.guard ?? []).filter((v) => v.id !== e.verdict.id), e.verdict] };
     }
   });
 }

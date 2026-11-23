@@ -1,8 +1,9 @@
 /** Call reports written by the Rapporteur (AI service: GET /ai/calls, GET /ai/calls/:id, app/orchestra/reporter.py). */
+import type { GuardSummary } from "@kit/shared";
 import { useQuery } from "@tanstack/react-query";
 import { AI_BASE } from "@/lib/api";
 
-export type CallAgent = "voice" | "scout" | "fast" | "scribe" | "linguist" | "reporter";
+export type CallAgent = "voice" | "scout" | "fast" | "scribe" | "linguist" | "guard" | "reporter";
 
 export interface CallTurn {
   n: number;
@@ -67,6 +68,7 @@ export interface CallReport {
   reportModel?: string;
   source?: "voice" | "sim";
   scenario?: string;
+  guard?: GuardSummary; // le Garde-fou: sentences Jev checked against the ERP during the call
 }
 export interface CallSummary {
   id: string; startedAt: string; durationMs: number; client?: { id: string; name?: string } | null; language: string;
