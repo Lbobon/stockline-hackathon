@@ -17,7 +17,7 @@ async def finalize_order(
     Termine une commande après le récapitulatif : l'ERP la confirme si tout va bien, sinon la laisse en brouillon
     pour Leïla avec les raisons (compte bloqué, encours, trop tard, quantité inhabituelle, nouveau produit…).
     Use this instead of confirm_order. If decision is "draft", never say the order is confirmed: tell the caller kindly
-    that Leïla validates it at 5am; a date reason is said with the next possible delivery; the credit limit is named
+    that it is waiting for Leïla's validation at the ADV (no time promised); a date reason is said with the next possible delivery; the credit limit is named
     tactfully with its figures, a blocked account is not detailed (see the garde-fous).
     """
     try:

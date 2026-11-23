@@ -75,7 +75,11 @@ Simulateur, 13 appels, agent Haiku 5.5. Latence mesurée dans le processus (text
 | Sonnet 5.5 (2 × 13 appels, mesure de fuzzy-zephyr) | 19/26 | — | 3,8 s / 6,0 s | ≈ 10× Haiku |
 | Haiku 5.5 + outils composites (2 × 13) | 22/26 | — | 2,3 s / 4,0 s | ~0,005 $ |
 | Haiku 5.5, main au 23/11 avant correctifs | 10/13 | 3,5 / 3,8 | 2,3 s / 4,9 s | 0,005 $ |
-| **Haiku 5.5, main après #29** | **13/13** | **3,8 / 3,8** | **2,5 s / 4,7 s** | **0,005 $** |
+| Haiku 5.5, main après #29 | 13/13 | 3,8 / 3,8 | 2,5 s / 4,7 s | 0,005 $ |
+| Haiku 5.5 + correctifs du simulateur (#30, 2 × 13, mesure de fuzzy-zephyr) | 26/26 | 4,2 / 3,9 | 2,6 s / 5,0 s | 0,006 $ |
+| **Haiku 5.5 + orchestre (#26) + voix adaptée (#23) + prompt affiné, 2 × 14 appels** | **26/28** | **3,9 / 3,9** | **premier son 0,70 s** ; fin de tour 3,3 s | **0,010 $** |
+
+Sur ce dernier run, les deux échecs sont : une coupure réseau de l'API (corrigée ensuite par une nouvelle tentative automatique, PR #35) et une remarque du juge sur un prospect. Le coût double avec l'orchestre (agents secondaires), mais reste à 1 centime par appel.
 
 Dans l'application réelle (page Voix, Soniox + ElevenLabs), un appel sortant mesuré avant le correctif qui a retiré Istanbul Grill du tri (sa broche était déjà remplacée) :
 
@@ -83,7 +87,15 @@ Dans l'application réelle (page Voix, Soniox + ElevenLabs), un appel sortant me
 |---|---|---|---|---|
 | 920 ms | 1,5 s | 537 ms | 1,6 s | **1,7 s** |
 
-En cours, pas encore sur main : la PR #26 (« orchestre » d'agents autour de l'agent vocal : pré-chargement pendant que l'appelant parle, réflexe pour « oui c'est bon », phrase d'attente). Mesure de son auteur sur 13 appels : premier son médian **0,7 s** (contre 4,2 s), 11/13 réussis, 0,082 $ par appel (sur Sonnet).
+**L'orchestre (PR #26)** : des agents secondaires autour de l'agent vocal, qui ramènent le premier son de 4,2 s à **0,7 s**.
+- L'**Éclaireur** pré-charge la fiche client, le stock et les prix pendant que l'appelant parle encore (40 % des tours).
+- Le **Réflexe** répond à un simple « oui » au récapitulatif sans le grand modèle, en passant par `finalize_order`.
+- Une phrase d'attente pré-synthétisée part à 0,7 s si rien n'a encore été dit.
+- Le **Greffier** écrit l'historique client hors du chemin de la voix.
+- Le **Linguiste** adapte la langue et le tutoiement. La langue suit la majorité de l'appel : un « salam aleykoum » dans une commande en français reste en français (PR #34).
+- Le **Rapporteur** écrit un compte rendu d'appel à la fin (page « Appels »).
+
+**Voix adaptée à l'appelant (PR #23)** : le registre de la fiche client (tu/vous) prime, et la stabilité de la voix ElevenLabs est réglée par client.
 
 ## 5. Ce qui a marché, ce qui n'a pas marché
 
@@ -97,6 +109,7 @@ En cours, pas encore sur main : la PR #26 (« orchestre » d'agents autour de l'
 - **Cacher la raison d'un blocage d'encours au client.** On l'avait interdit par prudence, mais le juge l'a pénalisé à chaque fois (`plafond_credit` échoue). L'agent dit maintenant, avec tact, l'encours, le plafond et ce qui débloque. Le compte bloqué, lui, reste non détaillé.
 - **L'heure limite des carcasses sur l'horloge réelle de la machine.** Le même appel passait le matin et échouait le soir. Elle utilise maintenant l'horloge du jeu de données.
 - **Haiku sans réflexion** (`LLM_THINKING=disabled`). Premier mot à 0,47 s, mais seulement 15/26 réussis, et une fois il a lu son raisonnement anglais au client. Abandonné.
+- **Router chaque tour entre Haiku et Sonnet** (étudié, pas construit). Le préfixe du prompt fait 29 079 tokens et son cache est propre à chaque modèle : le premier tour Sonnet d'un appel coûte ≈ 0,06–0,07 $, soit environ 10× un appel Haiku entier. Sonnet est aussi plus lent (3,8 s contre 2,5 s au premier mot), et les blocs de réflexion ne se rejouent pas d'un modèle à l'autre. Les cas difficiles se corrigent dans le prompt et les outils, pour Haiku.
 - **Réglages de sortie ElevenLabs** (format, speaker boost, normalisation) et préchauffage de connexion : aucun gain mesurable (~155 ms au premier octet quoi qu'on fasse).
 
 **Reste à corriger (vu par le juge)**
