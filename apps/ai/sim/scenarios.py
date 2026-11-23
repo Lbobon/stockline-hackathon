@@ -72,7 +72,7 @@ def order_qty_on(order_id: str, product_id: str, lo: float, hi: float) -> Check:
 
 
 def no_delivery_on(date: str) -> Check:
-    return (f"aucune commande pour le {date}", lambda t: all(o.get("deliveryDate") != date for o in t.orders().values()))
+    return (f"aucune commande pour le {date}", lambda t: all(o.get("deliveryDate") != date for o in t.orders(written_only=True).values()))
 
 
 def no_substitution() -> Check:
