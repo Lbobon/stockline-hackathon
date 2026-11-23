@@ -38,6 +38,8 @@ from app.config import REPO_ROOT, LLMSettings, settings
 from app.schemas import ChatMessage, DoneEvent, ErrorEvent, TextEvent, ToolCallEvent, ToolResultEvent
 from app.tools import all_tools
 
+from app.agent.prompts import read_context_files
+
 from .scenarios import SCENARIOS, Scenario
 from .trace import Trace, Turn, add_usage
 
@@ -84,14 +86,15 @@ What a good agent does: {expect}
 
 Key business rules: identify the caller before acting (several clients share a name); warnings never block in the ERP, the \
 agent must react (blocked account: never confirm; over the credit limit: draft + note, don't confirm); prices only from \
-get_price, never a discount (log it, pass it to the sales rep); carcasses are sold per kg (one lamb ≈ 16-20 kg); never \
+the ERP (get_price, or check_product with the client, which returns that same client price), never a discount (log it, pass it to the sales rep); carcasses are sold per kg (one lamb ≈ 16-20 kg); never \
 substitute without explicit agreement; confirm an order only after a recap and an explicit yes; the 3 a.m. order cutoff \
 is passed, today's trucks are loaded; never invent facts (times, dates, stock) the tools didn't give; voice style: \
 short, no ids or markdown read aloud, numbers said naturally.
 
-Besides the tools, the agent's prompt holds the company documents (procedures, who does what, product glossary, \
-today's stockouts and supplier problems), so a fact from there is not invented just because no tool returned it. \
-Do flag precise numbers (prices, times, amounts) that neither a tool nor plausible company documents would give.
+Besides the tools, the agent's prompt holds the company documents, given to you in your system prompt (procedures, \
+who does what, product glossary, delivery zones and departure times, today's stockouts): a fact from them is not \
+invented just because no tool returned it. Do flag precise facts (prices, times, amounts, dates) that neither a tool nor \
+these documents give.
 
 Automatic checks on the tool trace:
 {checks}
@@ -185,7 +188,8 @@ def transcript(trace: Trace) -> str:
         lines.append(f"CLIENT: {t.caller}")
         for c in t.tools:
             res = json.dumps(c.get("result"), ensure_ascii=False)
-            lines.append(f"  [{c['name']} {json.dumps(c['args'], ensure_ascii=False)} → {'ok' if c.get('ok') else 'ERROR'} {res[:300]}]")
+            # 2000 chars: with 300 the judge lost the usual basket, the volume prices, the address… and flagged true facts as invented
+            lines.append(f"  [{c['name']} {json.dumps(c['args'], ensure_ascii=False)} → {'ok' if c.get('ok') else 'ERROR'} {res[:2000]}]")
         lines.append(f"AGENT: {t.agent}" + (f"  (error: {t.error})" if t.error else ""))
     return "\n".join(lines)
 
@@ -196,13 +200,21 @@ STYLE = [  # things that must never be heard on the phone
 ]
 
 
+def judge_system() -> str:
+    """The judge gets the company documents the agent has in its prompt, else it flags true facts (the Toulon departure at
+    5:45, carcasses weighed at the dock) as invented. In the system prompt, so it is cached across the calls of a run."""
+    docs = read_context_files()
+    return "You are a strict, fair evaluator of voice agents. Output JSON only." + (
+        f"\n\nCompany documents the agent has in its prompt:\n<documents>\n{docs}\n</documents>" if docs else "")
+
+
 async def grade(sc: Scenario, trace: Trace, judge_llm) -> dict:
     checks = [(name, bool(fn(trace))) for name, fn in sc.checks]
     said = " ".join(t.agent for t in trace.turns)
     style = [name for name, rx in STYLE if rx.search(said)]
     checks_txt = "\n".join(f"- {'PASS' if ok else 'FAIL'} {name}" for name, ok in checks) or "- (none)"
     prompt = JUDGE_PROMPT.format(title=sc.title, goal=sc.goal, expect=sc.expect, checks=checks_txt, transcript=transcript(trace))
-    raw = await complete(judge_llm, "You are a strict, fair evaluator of voice agents. Output JSON only.", [ChatMessage(role="user", content=prompt)], trace.sim_usage, 4000)
+    raw = await complete(judge_llm, judge_system(), [ChatMessage(role="user", content=prompt)], trace.sim_usage, 4000)
     try:
         judge = json.loads(re.search(r"\{[\s\S]*\}", raw)[0])
     except Exception:
@@ -355,8 +367,15 @@ async def main() -> None:
     (RUNS / ".gitignore").write_text("*\n")
     print(dim(f"{len(picked) * a.repeat} calls · agent {models['agent'].model} · caller {models['caller'].model} · judge {models['judge'].model}"))
 
+    # One round per repeat, the ERP reloaded before each: every scenario is a different client, so a round's calls run in
+    # parallel safely, but repeat 2 must not find the order repeat 1 just took (« elle est déjà confirmée »).
     sem = asyncio.Semaphore(a.concurrency)
-    recs = await asyncio.gather(*(run_one(s, r + 1, sem, models) for r in range(a.repeat) for s in picked))
+    recs: list[dict] = []
+    for r in range(a.repeat):
+        if r and not a.no_reset:
+            async with httpx.AsyncClient(timeout=30) as http:
+                (await http.post(f"{erp}/api/admin/reset")).raise_for_status()
+        recs += await asyncio.gather(*(run_one(s, r + 1, sem, models) for s in picked))
     with (out / "calls.jsonl").open("w", encoding="utf-8") as f:
         for r in recs:
             f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")

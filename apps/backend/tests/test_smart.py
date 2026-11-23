@@ -44,6 +44,11 @@ with TestClient(app) as c:
     assert f["order"]["status"] == "draft" and f["order"]["note"].startswith("À vérifier")
     assert oid in {x["orderId"] for x in c.get("/api/gates/review").json()}
 
+    # Carcass for tomorrow, placed on the night line (data pack clock 04:30): on time whatever the machine's hour.
+    oid = new_order("cli_0001", [{"productId": "prd_0001", "qty": 72}])
+    codes = {x["code"] for x in c.get(f"/api/gates/orders/{oid}").json()["reasons"]}
+    assert "special_cut_late" not in codes, codes
+
     # Retention: overdue payer → service only; loyal on-time big buyer → money, capped, > 150 € needs Rachid.
     assert c.get("/api/retention/cli_0005", params={"basisHt": 500}).json()["status"] == "service_only"  # Sidi Brahim
     g = c.get("/api/retention/cli_0002", params={"basisHt": 1220}).json()

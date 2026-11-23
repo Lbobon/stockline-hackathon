@@ -13,7 +13,7 @@ from pydantic import Field
 
 from .catalog import get_client, get_price, get_product_stock
 from .context import get_context
-from .erp import ErpError
+from .erp import ErpError, pick
 from .registry import ToolContext, tool
 
 
@@ -28,6 +28,18 @@ async def _safe(coro):
         return await coro
     except ErpError as e:
         return {"error": str(e)}
+
+
+async def _strip_expiry(coro) -> dict:
+    r = await coro
+    r.pop("earliestExpiryInStock", None)
+    return r
+
+
+# Haiku skipped the discovery questions with the rule only in the prompt: a note in the result is read every time.
+PROSPECT = ("Pas encore client : réponds à ses questions, puis finis chaque réponse par UNE question pour le connaître, une à la fois "
+            "(volumes par semaine, produits clés, fournisseur actuel) ; propose que son commercial le rappelle pour une offre ; "
+            "note ce qu'il dit (log_client_event). Pas de commande ferme sans son accord.")
 
 
 @tool
@@ -57,7 +69,14 @@ async def find_client(
         _safe(get_client.fn(ctx, client_id=client_id)),
         _safe(get_context.fn(ctx, entity_type="client", id=client_id)),
     )
-    return {"client": card, "context": context, **({"otherCandidates": candidates[1:]} if len(candidates) > 1 else {})}
+    # The register ("Rester formel…") sits deep in the context entries, where the model kept missing it: put it on top.
+    talk = next((e.get("body") for e in (context.get("entries") or []) if "comment leur parler" in (e.get("title") or "").lower()), None) if isinstance(context, dict) else None
+    prospect = isinstance(card, dict) and card.get("status") == "prospect"
+    return {
+        **({"prospect": PROSPECT} if prospect else {}),
+        "client": card, **({"howToTalk": talk} if talk else {}), "context": context,
+        **({"otherCandidates": candidates[1:]} if len(candidates) > 1 else {}),
+    }
 
 
 @tool
@@ -68,7 +87,7 @@ async def check_product(
     qty: float | None = Field(None, description="Quantité envisagée, pour le prix au volume"),
 ) -> dict:
     """
-    Trouve un produit et renvoie en une seule étape son stock (disponible, arrivages, DLC du plus vieux lot en stock) et, si le client est connu, son
+    Trouve un produit et renvoie en une seule étape son stock (disponible, arrivages) et, si le client est connu, son
     prix pour ce client (comme get_price). Si plusieurs produits correspondent, « products » contient les 3 meilleurs, chacun avec
     son stock et son prix : choisis celui qui correspond à ce qui a été dit (calibre, poids), ou demande.
     One step: find a product, return stock and the client's price for the best matches.
@@ -82,10 +101,41 @@ async def check_product(
         ids = [c["id"] for c in candidates[:3]]
 
     async def details(product_id: str) -> dict:
-        stock_call = _safe(get_product_stock.fn(ctx, product_id=product_id))
+        # Without the expiry: the model kept reading the oldest lot's date as the delivered lot's (sim el_baraka_ambigu).
+        # get_product_stock still has it for a client who asks.
+        stock_call = _strip_expiry(_safe(get_product_stock.fn(ctx, product_id=product_id)))
         if not client_id:
             return await stock_call
         stock, price = await asyncio.gather(stock_call, _safe(get_price.fn(ctx, client_id=client_id, product_id=product_id, qty=qty)))
         return {**stock, "clientPrice": price}
 
     return {"products": list(await asyncio.gather(*(details(i) for i in ids)))}
+
+
+@tool
+async def get_delivery(
+    ctx: ToolContext,
+    client_id: str = Field(description="Le client (cli_…)"),
+    date: str | None = Field(None, description="YYYY-MM-DD ; par défaut aujourd'hui"),
+) -> dict:
+    """
+    La livraison d'un client un jour donné (aujourd'hui par défaut) : tournée, chauffeur, camion, heure de départ, heure
+    estimée de passage chez lui (eta), son rang dans la tournée, l'état de l'arrêt. Pour « à quelle heure passe le camion ? ».
+    The client's stop on the day's delivery run: route, driver, departure time and the stop's estimated time.
+    """
+    day = date or (await ctx.erp.get("/api/meta"))["today"]
+    runs = await ctx.erp.get("/api/route-runs", {"date": day})
+    stops = [
+        {
+            "route": run["route"]["name"], **pick(run["route"], "driver", "vehicle"), "departure": run["route"].get("departureTime"),
+            "eta": s.get("eta"), "stop": s.get("seq"), "stopsOnRoute": len(run["stops"]), "status": s.get("status"),
+            **pick(s, "orderId", "orderNumber"),
+        }
+        for run in (runs.get("items", []) if isinstance(runs, dict) else runs)
+        for s in run["stops"]
+        if s.get("clientId") == client_id
+    ]  # fmt: skip
+    if not stops:
+        return {"date": day, "deliveries": [], "note": "aucune livraison prévue ce jour-là pour ce client"}
+    return {"date": day, "deliveries": stops, "note": "eta = heure estimée (départ + temps par arrêt), pas une heure garantie"}
+

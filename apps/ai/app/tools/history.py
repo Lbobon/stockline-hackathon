@@ -3,7 +3,7 @@ Relationship history tools: read a client's / supplier's long-term history (comp
 disputes, calls, visits…) and record a new event during a call (e.g. a complaint).
 """
 
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import Field
 
@@ -44,6 +44,18 @@ ClientEventType = Literal[
     "complaint", "quality_issue", "delivery_issue", "return", "dispute", "late_payment", "special_request",
     "price_negotiation", "menu_change", "contact_change", "compliment", "churn_risk", "call", "note",
 ]  # fmt: skip
+# Tried in order on a type the model invented (« callback_request » → call); anything else → note.
+_TYPE_HINTS = (("price", "price_negotiation"), ("prix", "price_negotiation"), ("remise", "price_negotiation"), ("complain", "complaint"),
+               ("reclam", "complaint"), ("quality", "quality_issue"), ("deliver", "delivery_issue"), ("livr", "delivery_issue"),
+               ("churn", "churn_risk"), ("call", "call"), ("rappel", "call"), ("request", "special_request"), ("demande", "special_request"))  # fmt: skip
+
+
+def client_event_type(value: str) -> str:
+    """A valid client event type: the model sometimes invents one, and a failed call costs a whole model step."""
+    t = (value or "").strip().lower()
+    if t in get_args(ClientEventType):
+        return t
+    return next((real for hint, real in _TYPE_HINTS if hint in t), "note")
 
 
 @tool
@@ -68,7 +80,7 @@ async def get_client_history(
 async def log_client_event(
     ctx: ToolContext,
     client_id: str,
-    type: ClientEventType,
+    type: ClientEventType | str,
     title: str = Field(description="Ligne courte en français, ex. « Réclamation : colis abîmé à la livraison »"),
     description: str | None = Field(None, description="Ce qui s'est passé, en français, peut citer le client"),
     severity: Severity | None = None,
@@ -79,7 +91,7 @@ async def log_client_event(
     Les réclamations, problèmes qualité/livraison, retours, litiges sont créés « ouverts » pour être traités par l'équipe.
     Reformule fidèlement ce que dit le client, sans promettre de geste commercial. Record a client event (e.g. a complaint).
     """
-    body = {"type": type, "title": title, "description": description, "severity": severity, "orderId": order_id}
+    body = {"type": client_event_type(type), "title": title, "description": description, "severity": severity, "orderId": order_id}
     event = await ctx.erp.post(f"/api/clients/{enc(client_id)}/events", without_none(body))
     return compact_event(event)
 

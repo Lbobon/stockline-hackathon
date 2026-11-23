@@ -18,7 +18,10 @@ class OrderLine(ToolArgs):
 
 
 def summarize_order(o: dict) -> dict:
-    """What the model gets back after any order operation: short, with line ids for later edits."""
+    """What the model gets back after any order operation: short, with line ids for later edits.
+    Once picked (status prepared and later), a line carries preparedQty, what is really in the crate, and no "available":
+    today's stock no longer concerns it (the model used to announce a shortage on an order already on the truck)."""
+    open_ = o.get("status") in ("draft", "confirmed")
     return {
         **pick(o, "id", "number", "status"),
         "client": (o.get("client") or {}).get("name"),
@@ -26,7 +29,8 @@ def summarize_order(o: dict) -> dict:
         "lines": [
             {
                 "lineId": line["id"],
-                **pick(line, "productId", "productName", "qty", "unit", "unitPrice", "available"),
+                **pick(line, "productId", "productName", "qty", "unit", "unitPrice", *(("available",) if open_ else ())),
+                **({"preparedQty": line["preparedQty"]} if line.get("preparedQty") is not None else {}),
                 **({"note": line["note"]} if line.get("note") else {}),
             }
             for line in o["lines"]
