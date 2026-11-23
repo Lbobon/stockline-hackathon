@@ -25,6 +25,8 @@ import HistoryPage from "@/pages/history";
 import PricesPage from "@/pages/prices";
 import GroupsPage from "@/pages/groups";
 import ContextPage from "@/pages/context";
+import CallsPage from "@/pages/calls";
+import CallDetailPage from "@/pages/call-detail";
 
 export const router = createBrowserRouter([
   {
@@ -33,6 +35,8 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <DashboardPage /> },
       { path: "orders", element: <OrdersPage /> },
+      { path: "calls", element: <CallsPage /> },
+      { path: "calls/:id", element: <CallDetailPage /> },
       { path: "orders/:id", element: <OrderDetailPage /> },
       { path: "clients", element: <ClientsPage /> },
       { path: "clients/:id", element: <ClientDetailPage /> },

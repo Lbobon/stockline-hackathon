@@ -11,6 +11,12 @@ the agent's latency per turn and its cost per call.
     uv run python -m sim rupture_broche camion
     uv run python -m sim --repeat 3 --concurrency 4
     uv run python -m sim --list
+    uv run python -m sim --classic            # the plain agent, without the orchestra (baseline)
+    uv run python -m sim --reports            # + the Rapporteur's call report for each call (see /calls in the web app)
+
+By default each call runs through the orchestra (app/orchestra: Éclaireur, Réflexe, Greffier, Linguiste) exactly as
+WS /voice does; the caller's words are fed as a live transcript at --speech-rate words/s (2.6 ≈ normal speech) so the
+Éclaireur can work while the "caller speaks". Latency is measured from the end of the caller's speech.
 
 Needs the ERP running (make dev / the medina-kit launch). Resets the ERP first (POST /api/admin/reset) so every run
 starts from the same data; --no-reset keeps your changes. Costs real tokens: about one agent call per caller turn.
@@ -36,6 +42,8 @@ from app.clients import LLMRequest, LLMText, LLMUsage
 from app.clients.factory import make_llm_client
 from app.config import REPO_ROOT, LLMSettings, settings
 from app.schemas import ChatMessage, DoneEvent, ErrorEvent, TextEvent, ToolCallEvent, ToolResultEvent
+from app.orchestra import CallSession, FastEvent, FillerEvent
+from app.orchestra import store as call_store
 from app.tools import all_tools
 
 from .scenarios import SCENARIOS, Scenario
@@ -179,13 +187,90 @@ async def simulate(sc: Scenario, caller_llm, agent_llm) -> Trace:
     return trace
 
 
+async def simulate_orchestra(sc: Scenario, caller_llm, agent_llm, rate: float, reports: bool) -> Trace:
+    trace = Trace()
+    persona = (PERSONAS / sc.persona).read_text(encoding="utf-8")
+    caller_system = CALLER_RULES.format(persona=persona, goal=sc.goal, end=END)
+    caller_view: list[ChatMessage] = [ChatMessage(role="user", content="(La ligne décroche : l'agent attend que vous parliez. À vous.)")]
+    session = CallSession(actor_name="Agent vocal", llm=agent_llm)
+    warm = asyncio.create_task(session.warm())  # the line rings: prompt cache written meanwhile
+
+    for i in range(MAX_TURNS):
+        said = await complete(caller_llm, caller_system, caller_view, trace.sim_usage, 2000)
+        done = END in said
+        said = said.replace(END, "").strip()
+        if not said:
+            trace.ended_by = "caller"
+            break
+        if i == 0:
+            await warm
+        caller_view.append(ChatMessage(role="assistant", content=said))
+        turn = Turn(caller=said)
+        trace.turns.append(turn)
+
+        # the caller "speaks": live transcript, word by word
+        words = said.split()
+        session.speech_start()
+        for k in range(1, len(words) + 1):
+            session.on_partial(" ".join(words[:k]))
+            if rate:
+                await asyncio.sleep(1 / rate)
+
+        started = time.perf_counter()
+        async for ev in session.turn(said):
+            ms = int((time.perf_counter() - started) * 1000)
+            match ev:
+                case FillerEvent() | FastEvent():
+                    if turn.first_sound_ms is None:
+                        turn.first_sound_ms = ms
+                    if isinstance(ev, FastEvent):
+                        turn.path = "fast"
+                case TextEvent(delta=delta):
+                    if turn.first_text_ms is None:
+                        turn.first_text_ms = ms
+                    if turn.first_sound_ms is None:
+                        turn.first_sound_ms = ms
+                    turn.agent += delta
+                case ErrorEvent(message=message):
+                    turn.error = message
+        turn.total_ms = int((time.perf_counter() - started) * 1000)
+        turn.agent = turn.agent.strip()
+        turn.prefetched = list(session.state.turns[-1].get("prefetched") or [])
+        if turn.error:
+            trace.ended_by = "error"
+            break
+        if done:
+            trace.ended_by = "caller"
+            break
+        caller_view.append(ChatMessage(role="user", content=turn.agent or "(silence)"))
+    else:
+        trace.ended_by = "max_turns"
+
+    report = await session.finish(report=reports)
+    if report:
+        report["source"] = "sim"
+        report["scenario"] = sc.id
+        call_store.save(report)
+        trace.report_id = report["id"]
+    # every agent's tool calls, on the turn they happened in (the checks read them all)
+    for c in session.state.tool_calls:
+        n = min(max(c["turn"], 1), len(trace.turns)) - 1
+        if 0 <= n < len(trace.turns):
+            trace.turns[n].tools.append({k: c[k] for k in ("name", "args", "ok", "ms", "result", "agent")})
+    if "voice" in session.state.usage:
+        add_usage(trace.usage, session.state.usage["voice"])
+    trace.cost_by_agent = session.state.cost_by_agent()
+    return trace
+
+
 def transcript(trace: Trace) -> str:
     lines = []
     for t in trace.turns:
         lines.append(f"CLIENT: {t.caller}")
         for c in t.tools:
             res = json.dumps(c.get("result"), ensure_ascii=False)
-            lines.append(f"  [{c['name']} {json.dumps(c['args'], ensure_ascii=False)} → {'ok' if c.get('ok') else 'ERROR'} {res[:300]}]")
+            by = f"{c['agent']}: " if c.get("agent") not in (None, "voice") else ""
+            lines.append(f"  [{by}{c['name']} {json.dumps(c['args'], ensure_ascii=False)} → {'ok' if c.get('ok') else 'ERROR'} {res[:300]}]")
         lines.append(f"AGENT: {t.agent}" + (f"  (error: {t.error})" if t.error else ""))
     return "\n".join(lines)
 
@@ -228,11 +313,15 @@ async def run_one(sc: Scenario, rep: int, sem: asyncio.Semaphore, models: dict) 
     async with sem:
         t0 = time.perf_counter()
         try:
-            trace = await simulate(sc, models["caller"], models["agent"])
+            if models["classic"]:
+                trace = await simulate(sc, models["caller"], models["agent"])
+            else:
+                trace = await simulate_orchestra(sc, models["caller"], models["agent"], models["rate"], models["reports"])
             graded = await grade(sc, trace, models["judge"])
         except Exception as e:  # provider down, rate limit…: count it, keep the run going
             trace, graded = Trace(ended_by="error"), {"success": False, "checks": [], "style": [], "judge": {"problems": [f"{type(e).__name__}: {e}"]}}
-        agent_cost = cost(trace.usage, models["agent"].model)
+        by_agent = {k: v for k, v in trace.cost_by_agent.items() if k != "reporter"}
+        agent_cost = sum(by_agent.values()) if by_agent else cost(trace.usage, models["agent"].model)
         rec = {
             "scenario": sc.id,
             "title": sc.title,
@@ -243,6 +332,8 @@ async def run_one(sc: Scenario, rep: int, sem: asyncio.Semaphore, models: dict) 
             "seconds": round(time.perf_counter() - t0, 1),
             "agent_cost_usd": round(agent_cost, 4),
             "agent_usage": trace.usage,
+            "cost_by_agent": trace.cost_by_agent,
+            "report_id": trace.report_id,
             "sim_usage": trace.sim_usage,
             "trace": [asdict(t) for t in trace.turns],
         }
@@ -264,6 +355,16 @@ def report(recs: list[dict], models: dict, out: Path) -> str:
     turns = [t for r in recs for t in r["trace"]]
     first = [t["first_text_ms"] for t in turns if t["first_text_ms"] is not None]
     total = [t["total_ms"] for t in turns if t["total_ms"] is not None]
+    sound = [t.get("first_sound_ms") if t.get("first_sound_ms") is not None else t["first_text_ms"] for t in turns]
+    sound = [x for x in sound if x is not None]
+    fast = sum(t.get("path") == "fast" for t in turns)
+    prefetched = sum(bool(t.get("prefetched")) for t in turns)
+    tools_voice = sum(1 for t in turns for c in t["tools"] if c.get("agent", "voice") == "voice")
+    by_agent: dict[str, float] = {}
+    for r in recs:
+        for k, v in (r.get("cost_by_agent") or {}).items():
+            by_agent[k] = by_agent.get(k, 0) + v
+    mode = "classic (no orchestra)" if models["classic"] else f"orchestra, speech {models['rate']} words/s"
     agent_cost = sum(r["agent_cost_usd"] for r in recs)
     smart = [r["judge"].get("smart") for r in recs if isinstance(r["judge"].get("smart"), (int, float))]
     natural = [r["judge"].get("natural") for r in recs if isinstance(r["judge"].get("natural"), (int, float))]
@@ -272,13 +373,17 @@ def report(recs: list[dict], models: dict, out: Path) -> str:
     md = [
         f"# Simulated calls — {datetime.now():%Y-%m-%d %H:%M}",
         "",
-        f"Agent: `{models['agent'].model}` (effort {settings.llm.effort}) · caller: `{models['caller'].model}` · judge: `{models['judge'].model}`",
+        f"Agent: `{models['agent'].model}` (effort {settings.llm.effort}) · {mode} · caller: `{models['caller'].model}` · judge: `{models['judge'].model}`",
         "",
         "| | |",
         "|---|---|",
         f"| Success | **{ok}/{n}** ({ok / n:.0%}) |" if n else "| Success | – |",
         f"| Judge, smart / natural (1-5) | {statistics.mean(smart):.1f} / {statistics.mean(natural):.1f} |" if smart and natural else "| Judge | – |",
-        f"| Agent turn → first word, median / p90 | {pct(first, .5)} ms / {pct(first, .9)} ms |",
+        f"| End of speech → first sound (filler / fast path / word), median / p90 | {pct(sound, .5)} ms / {pct(sound, .9)} ms |",
+        f"| End of speech → first real word, median / p90 | {pct(first, .5)} ms / {pct(first, .9)} ms |",
+        f"| Turns answered by the Réflexe / with prefetched data | {fast} / {prefetched} of {len(turns)} |",
+        f"| Voice-agent tool calls per turn | {tools_voice / len(turns):.2f} |" if turns else "",
+        f"| Cost per call by agent | {' · '.join(f'{k} ${v / n:.4f}' for k, v in sorted(by_agent.items(), key=lambda x: -x[1]))} |" if by_agent and n else "",
         f"| Agent turn → done, median / p90 | {pct(total, .5)} ms / {pct(total, .9)} ms |",
         f"| Agent cost per call (LLM only) | ${agent_cost / n:.3f} |" if n else "",
         f"| Agent cost per successful call | ${agent_cost / ok:.3f} |" if ok else "| Agent cost per successful call | – |",
@@ -302,7 +407,8 @@ def report(recs: list[dict], models: dict, out: Path) -> str:
             md.append(f"**Client :** {t['caller']}  ")
             if t["tools"]:
                 md.append(dim_md(", ".join(c["name"] for c in t["tools"])))
-            md.append(f"**Agent :** {t['agent']}" + (f" _(erreur : {t['error']})_" if t["error"] else "") + f" _({t['first_text_ms']} / {t['total_ms']} ms)_")
+            tag = " ⚡réflexe" if t.get("path") == "fast" else (f" 📦{len(t['prefetched'])} préchargé(s)" if t.get("prefetched") else "")
+            md.append(f"**Agent{tag} :** {t['agent']}" + (f" _(erreur : {t['error']})_" if t["error"] else "") + f" _({t.get('first_sound_ms')} / {t['first_text_ms']} / {t['total_ms']} ms)_")
             md.append("")
         md += [f"> Juge : {r['judge'].get('summary', '')}", ""]
     text = "\n".join(line for line in md if line is not None)
@@ -321,6 +427,10 @@ async def main() -> None:
     ap.add_argument("--concurrency", type=int, default=3)
     ap.add_argument("--no-reset", action="store_true", help="keep the ERP as it is (default: reload it from the data pack first)")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--classic", action="store_true", help="plain agent, no orchestra (the baseline)")
+    ap.add_argument("--speech-rate", type=float, default=2.6, help="words/s of the emulated live transcript (0 = instant)")
+    ap.add_argument("--reports", action="store_true", help="write the Rapporteur's report for each call (shown at /calls)")
+    ap.add_argument("--agent-model", help="override the voice agent model, ex. claude-haiku-5-5")
     a = ap.parse_args()
 
     if a.list:
@@ -335,10 +445,11 @@ async def main() -> None:
     if settings.llm.provider != "anthropic":
         sys.exit("the simulator needs LLM_PROVIDER=anthropic in .env (the caller and judge use the same key)")
     models = {
-        "agent": make_llm_client(settings.llm),
+        "agent": anthropic(a.agent_model, settings.llm.effort) if a.agent_model else make_llm_client(settings.llm),
         "caller": anthropic(os.environ.get("SIM_CALLER_MODEL", "claude-opus-5-5"), "low"),
         "judge": anthropic(os.environ.get("SIM_JUDGE_MODEL", "claude-opus-5-5"), "medium"),
     }
+    models.update(classic=a.classic, rate=a.speech_rate, reports=a.reports)
     erp = os.environ.get("ERP_API_URL", "http://localhost:4000")
     async with httpx.AsyncClient(timeout=30) as http:
         try:
@@ -353,7 +464,7 @@ async def main() -> None:
     out = RUNS / datetime.now().strftime("%Y%m%d-%H%M%S")
     out.mkdir(parents=True)
     (RUNS / ".gitignore").write_text("*\n")
-    print(dim(f"{len(picked) * a.repeat} calls · agent {models['agent'].model} · caller {models['caller'].model} · judge {models['judge'].model}"))
+    print(dim(f"{len(picked) * a.repeat} calls · {'classic' if a.classic else 'orchestra'} · agent {models['agent'].model} · caller {models['caller'].model} · judge {models['judge'].model}"))
 
     sem = asyncio.Semaphore(a.concurrency)
     recs = await asyncio.gather(*(run_one(s, r + 1, sem, models) for r in range(a.repeat) for s in picked))

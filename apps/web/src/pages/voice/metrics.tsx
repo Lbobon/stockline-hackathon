@@ -1,4 +1,5 @@
 /** Latency chips: per turn (from agent_done.timings) and the running average across turns. */
+import type { ReactNode } from "react";
 import type { TurnTimings } from "@kit/shared";
 import { Gauge } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -35,14 +36,27 @@ export function Chip({ label, ms, k, title, className }: { label: string; ms?: n
 }
 
 export function TurnChips({ t }: { t: VoiceTurn }) {
-  if (!t.timings && t.perceivedMs == null) return null;
+  if (!t.timings && t.perceivedMs == null && !t.orch) return null;
+  const o = t.orch;
   return (
     <div className="flex flex-wrap items-center gap-1">
+      {o?.path === "fast" ? <Tag title="Répondu par le Réflexe, sans le grand modèle">⚡ Réflexe</Tag> : null}
+      {o?.prefetched?.length ? <Tag title={o.prefetched.join("\n")}>Préchargé ×{o.prefetched.length}</Tag> : null}
+      {o?.filler ? <Tag title="Phrase d'attente pré-enregistrée, jouée tout de suite">« {o.filler} »</Tag> : null}
+      {o?.firstSoundMs != null ? <Chip k="totalMs" label="1er son" ms={o.firstSoundMs} title="Fin de parole → premier son (phrase d'attente ou réponse), côté serveur" /> : null}
       {METRICS.map((m) => {
         const ms = value(t, m.key);
         return ms == null ? null : <Chip key={m.key} k={m.key} label={m.label} ms={ms} title={m.title} />;
       })}
     </div>
+  );
+}
+
+function Tag({ children, title }: { children: ReactNode; title?: string }) {
+  return (
+    <span title={title} className="inline-flex h-[18px] max-w-[220px] items-center truncate rounded-[3px] border border-violet/30 bg-violet/[.06] px-1.5 text-[10.5px] text-violet">
+      {children}
+    </span>
   );
 }
 

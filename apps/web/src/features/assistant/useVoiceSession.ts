@@ -5,7 +5,7 @@
  * Agent audio: binary frames between agent_audio_start/end → one Blob → <audio>. Mock TTS → speechSynthesis (fr-FR).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MOCK_TTS_MIME, type TurnTimings, type VoiceClientMessage, type VoiceServerMessage } from "@kit/shared";
+import { MOCK_TTS_MIME, type OrchestraAgent, type TurnTimings, type VoiceClientMessage, type VoiceServerMessage } from "@kit/shared";
 import { AI_BASE } from "@/lib/api";
 import { SegmentPlayer } from "./audio-player";
 import type { ToolRun } from "./tools";
@@ -22,7 +22,20 @@ export interface VoiceTurn {
   timings?: TurnTimings;
   /** Client-side: caller release → agent audio actually starts playing (or speech synthesis starts). */
   perceivedMs?: number;
+  /** The orchestra's view of the turn: answered by the Réflexe or the voice agent, filler played, data prefetched. */
+  orch?: { path?: "llm" | "fast"; firstSoundMs?: number; firstWordMs?: number; prefetched?: string[]; filler?: string };
 }
+
+/** One agent of the call orchestra (app/orchestra): what it is doing now, and how much it did. */
+export interface AgentLive { agent: OrchestraAgent; label: string; task?: string; status: "idle" | "busy" | "error"; runs: number; lastMs?: number; at?: number }
+export interface OrchestraFeedItem { id: number; agent: OrchestraAgent; label: string; task: string; ms?: number; at: number }
+export interface CallReportState { id: string; status: "writing" | "ready" | "error"; headline?: string }
+
+const ORCH_AGENTS: [OrchestraAgent, string][] = [
+  ["scout", "Éclaireur"], ["fast", "Réflexe"], ["voice", "Agent vocal"], ["scribe", "Greffier"], ["linguist", "Linguiste"],
+];
+const freshAgents = (): Record<string, AgentLive> =>
+  Object.fromEntries(ORCH_AGENTS.map(([agent, label]) => [agent, { agent, label, status: "idle", runs: 0 }]));
 
 export interface Providers { llm: string; stt: string; tts: string; sessionId: string }
 
@@ -37,6 +50,12 @@ export function useVoiceSession() {
   const [turns, setTurns] = useState<VoiceTurn[]>([]);
   const [level, setLevel] = useState(0);
   const [lastError, setLastError] = useState<string>();
+  const [agents, setAgents] = useState<Record<string, AgentLive>>(freshAgents);
+  const [feed, setFeed] = useState<OrchestraFeedItem[]>([]);
+  const [profile, setProfile] = useState<{ language: string; register: "tu" | "vous" }>({ language: "fr", register: "vous" });
+  const [notes, setNotes] = useState<string[]>([]);
+  const [report, setReport] = useState<CallReportState>();
+  const feedSeq = useRef(0);
 
   const ws = useRef<WebSocket>();
   const sessionId = useRef<string>();
@@ -182,6 +201,30 @@ export function useVoiceSession() {
         audioMime.current = undefined;
         currentTurn.current = undefined;
         break;
+      case "orchestra": {
+        const e = m.event;
+        if (e.type === "agent_activity") {
+          if (e.agent === "warmup" || e.agent === "reporter") break;
+          setAgents((a) => {
+            const cur = a[e.agent] ?? { agent: e.agent, label: e.label, status: "idle", runs: 0 };
+            const next: AgentLive = e.status === "start"
+              ? { ...cur, label: e.label, task: e.task, status: "busy", at: Date.now() }
+              : { ...cur, status: e.status === "error" ? "error" : "idle", runs: cur.runs + 1, lastMs: e.ms };
+            return { ...a, [e.agent]: next };
+          });
+          if (e.status !== "start") {
+            const item: OrchestraFeedItem = { id: ++feedSeq.current, agent: e.agent, label: e.label, task: e.task, ms: e.ms, at: Date.now() };
+            setFeed((f) => [item, ...f].slice(0, 40));
+          }
+        } else if (e.type === "call_profile") setProfile({ language: e.language, register: e.register });
+        else if (e.type === "scribe_note") setNotes((n) => [e.label, ...n].slice(0, 20));
+        else if (e.type === "filler") patchTurn(id, (t) => ({ ...t, orch: { ...t.orch, filler: e.text } }));
+        else if (e.type === "turn") patchTurn(id, (t) => ({ ...t, orch: { ...t.orch, path: e.path, firstSoundMs: e.firstSoundMs, firstWordMs: e.firstWordMs, prefetched: e.prefetched } }));
+        break;
+      }
+      case "call_report":
+        setReport({ id: m.id, status: m.status, headline: m.headline });
+        break;
       case "error":
         setLastError(m.message);
         if (id != null) patchTurn(id, (t) => ({ ...t, caller: { ...t.caller, status: "final" }, agent: { ...t.agent, done: true, error: m.message } }));
@@ -311,17 +354,34 @@ export function useVoiceSession() {
     setLastError(undefined);
   }, [conn, newTurn, send, stopPlayback]);
 
-  const reset = useCallback(() => {
-    stopPlayback();
-    send({ type: "reset" });
+  const clearCall = useCallback(() => {
     currentTurn.current = undefined;
     setTurns([]);
     setActivity("idle");
     setLastError(undefined);
-  }, [send, stopPlayback]);
+    setAgents(freshAgents());
+    setFeed([]);
+    setNotes([]);
+    setProfile({ language: "fr", register: "vous" });
+  }, []);
+
+  const reset = useCallback(() => {
+    stopPlayback();
+    send({ type: "reset" });
+    clearCall();
+    setReport(undefined);
+  }, [clearCall, send, stopPlayback]);
+
+  /** End the call: the Rapporteur writes the report (call_report "writing" → "ready"), a new call starts. */
+  const hangup = useCallback(() => {
+    stopPlayback();
+    send({ type: "hangup" });
+    clearCall();
+  }, [clearCall, send, stopPlayback]);
 
   return {
     conn, activity, mic, providers, turns, level, lastError,
-    startTalking, stopTalking, sendText, stopPlayback, reset, reconnect: connect,
+    agents, feed, profile, notes, report, dismissReport: () => setReport(undefined),
+    startTalking, stopTalking, sendText, stopPlayback, reset, hangup, reconnect: connect,
   };
 }

@@ -49,8 +49,14 @@ class ResetMessage(WireModel):
     type: Literal["reset"] = "reset"
 
 
+class HangupMessage(WireModel):
+    """The caller hung up: the call ends, the Rapporteur writes its report (call_report messages follow)."""
+
+    type: Literal["hangup"] = "hangup"
+
+
 VoiceClientMessage = Annotated[
-    Union[StartMessage, AudioStartMessage, AudioEndMessage, TextMessage, ResetMessage],
+    Union[StartMessage, AudioStartMessage, AudioEndMessage, TextMessage, ResetMessage, HangupMessage],
     Field(discriminator="type"),
 ]
 
@@ -109,6 +115,24 @@ class AgentDoneMessage(WireModel):
     timings: TurnTimings
 
 
+class OrchestraMessage(WireModel):
+    """What the agents around the voice agent are doing (app/orchestra), for the live view: `event` is one of
+    {type: "agent_activity", agent, label, task, status: start|done|error, ms?}, {type: "call_profile", language, register},
+    {type: "scribe_note", label}, {type: "filler", text}, {type: "turn", n, path: llm|fast, firstSoundMs, firstWordMs, prefetched}."""
+
+    type: Literal["orchestra"] = "orchestra"
+    event: dict[str, Any]
+
+
+class CallReportMessage(WireModel):
+    """After a hangup: "writing" right away, then "ready" (GET /calls/{id}) or "error"."""
+
+    type: Literal["call_report"] = "call_report"
+    id: str
+    status: Literal["writing", "ready", "error"]
+    headline: str | None = None
+
+
 class VoiceErrorMessage(WireModel):
     type: Literal["error"] = "error"
     message: str
@@ -123,6 +147,8 @@ VoiceServerMessage = Annotated[
         AgentAudioStartMessage,
         AgentAudioEndMessage,
         AgentDoneMessage,
+        OrchestraMessage,
+        CallReportMessage,
         VoiceErrorMessage,
     ],
     Field(discriminator="type"),

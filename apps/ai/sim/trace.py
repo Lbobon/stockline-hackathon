@@ -11,8 +11,11 @@ WRITE_TOOLS = ORDER_TOOLS - {"get_order"} | {"save_context", "log_client_event"}
 class Turn:
     caller: str
     agent: str = ""
-    tools: list[dict[str, Any]] = field(default_factory=list)  # {name, args, ok, ms, result}
+    tools: list[dict[str, Any]] = field(default_factory=list)  # {name, args, ok, ms, result, agent?}
     first_text_ms: int | None = None  # caller's text in → first agent word (what TTS would start on)
+    first_sound_ms: int | None = None  # end of caller speech → first thing heard (filler / fast-path answer / first word)
+    path: str = "llm"  # llm | fast (orchestra: answered by the Réflexe)
+    prefetched: list[str] = field(default_factory=list)  # facts the Éclaireur had ready when the turn started
     total_ms: int | None = None  # caller's text in → agent turn finished
     error: str | None = None
 
@@ -23,6 +26,8 @@ class Trace:
     usage: dict[str, int] = field(default_factory=dict)  # agent only (what a real call costs)
     sim_usage: dict[str, int] = field(default_factory=dict)  # caller + judge models
     ended_by: str = ""  # "caller" | "max_turns" | "error"
+    cost_by_agent: dict[str, float] = field(default_factory=dict)  # orchestra: voice / scout / fast / scribe / warmup / reporter
+    report_id: str | None = None
 
     def calls(self) -> list[dict[str, Any]]:
         return [c for t in self.turns for c in t.tools]

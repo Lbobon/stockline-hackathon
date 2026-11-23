@@ -9,13 +9,14 @@
  */
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useUrlState } from "@/lib/url-state";
-import { MicOff, Mic, RotateCcw, Send, VolumeX } from "lucide-react";
+import { MicOff, Mic, PhoneOff, RotateCcw, Send, VolumeX } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button, Dot, IconButton, Input, Kbd, Page, PageHeader, Spinner, Tabs } from "@/ui";
 import { useVoiceSession, type Activity, type Conn } from "@/features/assistant/useVoiceSession";
 import { CommandMode } from "./command";
 import { LiveActivity } from "./live-activity";
 import { MetricsBar } from "./metrics";
+import { OrchestraStrip, ReportBanner } from "./orchestra";
 import { LevelBars, Timeline } from "./timeline";
 
 const isTypingTarget = (t: EventTarget | null) => {
@@ -104,13 +105,16 @@ function CallMode({ modeSwitch }: { modeSwitch: ReactNode }) {
               </div>
             ) : null}
             {v.activity === "speaking" ? <Button size="sm" variant="ghost" icon={VolumeX} kbd="Échap" onClick={v.stopPlayback}>Couper</Button> : null}
-            <Button size="sm" icon={RotateCcw} onClick={v.reset} disabled={!ready}>Nouvelle session</Button>
+            <Button size="sm" icon={PhoneOff} onClick={v.hangup} disabled={!ready || !v.turns.length}>Raccrocher</Button>
+            <Button size="sm" variant="ghost" icon={RotateCcw} onClick={v.reset} disabled={!ready}>Nouvelle session</Button>
           </>
         }
       />
       <div className="flex min-h-0 flex-1">
         <section className="flex min-w-0 flex-1 flex-col">
+          <ReportBanner report={v.report} onClose={v.dismissReport} />
           <MetricsBar turns={v.turns} />
+          <OrchestraStrip agents={v.agents} feed={v.feed} profile={v.profile} notes={v.notes} />
           <Timeline turns={v.turns} activity={v.activity} level={v.level} />
 
           {v.mic === "denied" || v.mic === "unsupported" ? (

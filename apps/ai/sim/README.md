@@ -1,6 +1,6 @@
 # Simulated calls
 
-A model plays a Médina client from their persona file (`data/context/clients/*.md`, the same files the jury uses to play clients). The real agent answers exactly as it does on the Voix page: `run_agent`, voice mode, real ERP. The only difference is that there's no speech-to-text or text-to-speech. Each call is then scored two ways:
+A model plays a Médina client from their persona file (`data/context/clients/*.md`, the same files the jury uses to play clients). The real agent answers exactly as it does on the Voix page: the call orchestra (`app/orchestra`) around `run_agent`, voice mode, real ERP. The caller's words are fed word by word as a live transcript (`--speech-rate`, 2.6 words/s by default), so the Éclaireur works while the caller "speaks", as it does on a real call. The only difference is that there's no speech-to-text or text-to-speech. Each call is then scored two ways:
 - automatic checks on the agent's tool calls
 - a judge model
 
@@ -12,6 +12,9 @@ uv run python -m sim --list                    # the scenarios
 uv run python -m sim                           # every scenario once
 uv run python -m sim rupture_broche camion     # just these
 uv run python -m sim --repeat 3 --concurrency 4
+uv run python -m sim --classic                 # the plain agent, without the orchestra (baseline)
+uv run python -m sim --reports                 # + the Rapporteur's report per call, listed on the Appels page
+uv run python -m sim --agent-model claude-haiku-5-5   # try another voice model
 ```
 
 - **Before running:** the ERP must be up (`make dev`, or the `medina-kit` launch on Loric's laptop).
@@ -22,8 +25,8 @@ uv run python -m sim --repeat 3 --concurrency 4
 ## What the numbers mean
 
 - **Success:** every automatic check passed **and** the judge says the agent handled the call the way a good Médina employee would.
-- **Latency:** measured from the caller's text to the agent's first word, and to the end of the turn. It's measured in-process, so on the Voix page add speech-to-text finalisation, text-to-speech and the network.
-- **Cost:** the agent's LLM tokens at list prices (cache reads and writes included). Speech-to-text and text-to-speech aren't counted.
+- **Latency:** measured from the end of the caller's speech to the first sound (a cached filler line, a fast-path answer or the first word), to the first real word, and to the end of the turn. It's measured in-process, so on the Voix page add speech-to-text finalisation, text-to-speech and the network.
+- **Cost:** the LLM tokens of every agent of the call at list prices (cache reads and writes included), split by agent: voice agent, warm-up, Éclaireur, Greffier (the Rapporteur's report is shown apart). Speech-to-text and text-to-speech aren't counted.
 
 ## Adding a scenario
 

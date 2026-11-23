@@ -59,7 +59,8 @@ export type VoiceClientMessage =
   | { type: "audio_start"; mime: string; hint?: string } // caller pressed space (hint: optional STT vocabulary; mock STT returns it)
   | { type: "audio_end" } // caller released space; binary frames sent in between (every 100–250 ms) are the utterance, streamed to the STT as they arrive
   | { type: "text"; text: string } // typed instead of spoken (debug)
-  | { type: "reset" };
+  | { type: "reset" }
+  | { type: "hangup" }; // the call ends: the Rapporteur writes the report (call_report follows)
 
 export interface TurnTimings {
   sttMs?: number;
@@ -79,7 +80,19 @@ export type VoiceServerMessage =
   | { type: "agent_audio_start"; mime: string } // binary frames follow
   | { type: "agent_audio_end" }
   | { type: "agent_done"; text: string; timings: TurnTimings }
+  | { type: "orchestra"; event: OrchestraEvent } // the agents working around the voice agent (live view)
+  | { type: "call_report"; id: string; status: "writing" | "ready" | "error"; headline?: string }
   | { type: "error"; message: string };
+
+/** Agents of a call (app/orchestra): voice, scout (Éclaireur), fast (Réflexe), scribe (Greffier), linguist, reporter. */
+export type OrchestraAgent = "voice" | "scout" | "fast" | "scribe" | "linguist" | "reporter" | "warmup";
+
+export type OrchestraEvent =
+  | { type: "agent_activity"; agent: OrchestraAgent; label: string; task: string; status: "start" | "done" | "error"; ms?: number }
+  | { type: "call_profile"; language: string; register: "tu" | "vous" }
+  | { type: "scribe_note"; label: string }
+  | { type: "filler"; text: string }
+  | { type: "turn"; n: number; path: "llm" | "fast"; firstSoundMs?: number; firstWordMs?: number; prefetched: string[] };
 
 /**
  * Mime returned by the AI service's mock TTS (no key configured): the bytes are a short silent WAV.
