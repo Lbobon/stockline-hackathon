@@ -273,14 +273,35 @@ def update_order(ctx: Ctx, id: str, patch: Doc) -> Doc:
     return order_detail(id)
 
 
+AGENT_ACTORS = ("voice_agent", "ai_chat")  # humans keep "warnings never block": only an agent's edit is re-checked
+
+
+def _hard_before(ctx: Ctx, order: Doc) -> dict | None:
+    """Hard-rule reasons on a confirmed order before an agent edits it (None: no re-check for this edit)."""
+    if order["status"] != "confirmed" or ctx.actor not in AGENT_ACTORS:
+        return None
+    from app.services import gates  # gates imports this module
+
+    return gates.hard_reasons(order["id"])
+
+
+def _recheck(ctx: Ctx, id: str, before: dict | None) -> None:
+    if before is not None:
+        from app.services import gates
+
+        gates.recheck_after_edit(ctx, id, before)
+
+
 @transactional
 def add_line(ctx: Ctx, id: str, input: Doc) -> Doc:
     order = crud.orders.require(id)
     _guard(order, ["draft", "confirmed"], "ajouter une ligne à")
+    before = _hard_before(ctx, order)
     line = _build_line(order["clientId"], input)
     _save({**order, "lines": [*order["lines"], line]})
     p = crud.products.require(line["productId"])
     log_event(ctx, "order.line_added", "order", id, f"{js_str(line['qty'])} {p['unit']} de {p['name']} ajouté(s) à {order['number']}")
+    _recheck(ctx, id, before)
     return order_detail(id)
 
 
@@ -293,6 +314,7 @@ def update_line(ctx: Ctx, id: str, line_id: str, patch: Doc) -> Doc:
     # Once picked, only the prepared quantity and the note can change.
     only_prep = all(k in ("preparedQty", "note") for k in patch)
     _guard(order, ["draft", "confirmed", "prepared"] if only_prep else ["draft", "confirmed"], "modifier une ligne de")
+    before = _hard_before(ctx, order)
     updated = {**line, **patch}
     if patch.get("productId") and patch["productId"] != line["productId"]:
         rebuilt = _build_line(order["clientId"], {"productId": patch["productId"], "qty": patch.get("qty", line["qty"]), "unitPrice": patch.get("unitPrice")})
@@ -305,6 +327,7 @@ def update_line(ctx: Ctx, id: str, line_id: str, patch: Doc) -> Doc:
     _save({**order, "lines": [updated if l["id"] == line_id else l for l in order["lines"]]})
     p = crud.products.get(updated["productId"])
     log_event(ctx, "order.line_updated", "order", id, f"Ligne {p['name'] if p else updated['productId']} modifiée sur {order['number']}")
+    _recheck(ctx, id, before)
     return order_detail(id)
 
 
@@ -317,9 +340,11 @@ def delete_line(ctx: Ctx, id: str, line_id: str) -> Doc:
         raise bad_request("unknown_line", f"Ligne {line_id} introuvable sur {order['number']}")
     if order["status"] == "confirmed" and len(order["lines"]) == 1:
         raise conflict("empty_order", f"Impossible de retirer la dernière ligne de {order['number']} confirmée : annulez la commande")
+    before = _hard_before(ctx, order)
     _save({**order, "lines": [l for l in order["lines"] if l["id"] != line_id]})
     p = crud.products.get(line["productId"])
     log_event(ctx, "order.line_removed", "order", id, f"{p['name'] if p else line['productId']} retiré de {order['number']}")
+    _recheck(ctx, id, before)
     return order_detail(id)
 
 

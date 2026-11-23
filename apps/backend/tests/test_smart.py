@@ -21,7 +21,7 @@ with TestClient(app) as c:
     tomorrow = "2026-11-25"
     # Over its credit ceiling → stays a draft with the reason.
     r = c.get("/api/gates/orders/ord_029511").json()
-    assert r["decision"] == "draft" and [x["code"] for x in r["reasons"]] == ["credit_limit"], r
+    assert r["decision"] == "draft" and {x["code"] for x in r["reasons"]} == {"credit_limit", "short_stock"}, r  # + the veal at zero
 
     def new_order(client_id: str, lines: list[dict]) -> str:
         o = c.post("/api/orders", json={"clientId": client_id, "deliveryDate": tomorrow, "lines": lines}, headers=H)
@@ -55,5 +55,30 @@ with TestClient(app) as c:
     assert g["kind"] == "money" and 0 < g["pct"] <= 15 and g["amountHt"] == round(1220 * g["pct"] / 100, 2)
     big = c.get("/api/retention/cli_0002", params={"basisHt": 5000, "costHt": 4800}).json()
     assert big["status"] == "needs_approval" and "Rachid" in big["explanation"] and "sous le coût" in big["explanation"]
+
+    # Below the 120 € HT delivery minimum: held for Leïla.
+    small = new_order("cli_0002", [{"productId": "prd_0043", "qty": 1}])
+    assert "below_minimum" in {x["code"] for x in c.get(f"/api/gates/orders/{small}").json()["reasons"]}
+
+    # A confirmed order edited past the rules goes back to a draft; an in-stock add-on stays confirmed.
+    oid = new_order("cli_0002", [{"productId": "prd_0043", "qty": 10}])
+    assert c.post(f"/api/gates/orders/{oid}/finalize", json={"recapConfirmed": True}, headers=H).json()["order"]["status"] == "confirmed"
+    assert c.post(f"/api/orders/{oid}/lines", json={"productId": "prd_0049", "qty": 2}, headers=H).json()["status"] == "confirmed"
+    held = c.post(f"/api/orders/{oid}/lines", json={"productId": "prd_0020", "qty": 50}, headers=H).json()  # veal at zero
+    assert held["status"] == "draft" and "modifiée après confirmation" in held["note"], held
+
+    # Removing a line can take a confirmed order under the 120 € minimum: re-checked too (agent edit).
+    oid = new_order("cli_0002", [{"productId": "prd_0043", "qty": 1}, {"productId": "prd_0049", "qty": 5}])  # ≈ 130 € → ≈ 62 €
+    o = c.post(f"/api/gates/orders/{oid}/finalize", json={"recapConfirmed": True}, headers=H).json()["order"]
+    assert o["status"] == "confirmed", o
+    fries = next(l["id"] for l in o["lines"] if l["productId"] == "prd_0049")
+    shrunk = c.delete(f"/api/orders/{oid}/lines/{fries}", headers=H).json()
+    assert shrunk["status"] == "draft" and "minimum" in shrunk["note"], shrunk
+
+    # A confirmed order already over its credit limit when a human confirmed it (Julien, seed): an in-stock add-on by the
+    # agent keeps it confirmed (only reasons the edit creates count), and a human's own edit is never re-checked.
+    assert c.get("/api/gates/orders/ord_029513").json()["decision"] == "draft"  # credit limit already fires
+    assert c.post("/api/orders/ord_029513/lines", json={"productId": "prd_0004", "qty": 5}, headers=H).json()["status"] == "confirmed"
+    assert c.post("/api/orders/ord_029513/lines", json={"productId": "prd_0020", "qty": 50}, headers={"x-actor": "user"}).json()["status"] == "confirmed"
 
 print("gates + retention OK")

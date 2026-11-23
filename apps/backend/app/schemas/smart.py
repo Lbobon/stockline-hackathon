@@ -7,7 +7,7 @@ from app.schemas.views import OrderDetail
 
 
 class GateReason(Schema):
-    code: Literal["client_blocked", "credit_limit", "too_late", "recap_not_confirmed", "unusual_qty", "new_product", "special_cut_late"]
+    code: Literal["client_blocked", "credit_limit", "too_late", "recap_not_confirmed", "unusual_qty", "new_product", "special_cut_late", "below_minimum", "short_stock"]
     message: str  # plain French, shown as is
     product_id: str | None = None
 

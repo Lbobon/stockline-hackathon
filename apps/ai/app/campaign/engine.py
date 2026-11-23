@@ -73,6 +73,7 @@ class Call:
     decision: dict | None = None
     orderId: str | None = None
     totalHt: float = 0.0
+    marginHt: float = 0.0  # margin this call brought (for an add-on call: only what it added)
     lines: list[dict] = field(default_factory=list)
 
 
@@ -83,7 +84,9 @@ class Campaign:
     status: str = "running"
     calls: list[Call] = field(default_factory=list)
     route: dict | None = None
-    totals: dict = field(default_factory=lambda: {"called": 0, "confirmed": 0, "declined": 0, "callback": 0, "revenueHt": 0.0, "upliftHt": 0.0})
+    totals: dict = field(default_factory=lambda: {"called": 0, "confirmed": 0, "declined": 0, "callback": 0, "revenueHt": 0.0, "upliftHt": 0.0,
+                                                  "marginHt": 0.0, "routeSavedEur": 0.0, "staffMinutesSaved": 0, "staffEurSaved": 0.0, "gainEur": 0.0})
+    costs: dict = field(default_factory=dict)  # productId → purchase cost (for the margin)
     log: list[dict] = field(default_factory=list)  # every event, replayed to late subscribers
     subscribers: list[asyncio.Queue] = field(default_factory=list)
     forecast: dict = field(default_factory=dict)
@@ -189,6 +192,22 @@ async def push_route(c: Campaign) -> None:
         emit(c, {"type": "route", "plan": plan})
 
 
+# Money: what the campaign earned, in one number the pitch can say. Assumptions, stated so the demo can say them too:
+STAFF_MIN_PER_CALL = 4  # a sales rep's outbound call (dial, wait, talk, type the order)
+STAFF_EUR_PER_HOUR = 25.0  # loaded cost of an ADV / sales rep hour
+
+
+def _margin(c: Campaign, lines: list[dict]) -> float:
+    return sum(float(l.get("qty") or 0) * (float(l.get("unitPrice") or 0) - c.costs.get(l.get("productId"), float(l.get("unitPrice") or 0)))
+               for l in lines)  # fmt: skip
+
+
+def _call_margin(c: Campaign, order_lines: list[dict], row: dict) -> float:
+    """Margin the call brought: the whole order for a new one; for an add-on, only above the order it already had."""
+    before = _margin(c, row.get("lines") or []) if row["status"] == "upsell" else 0.0
+    return round(max(_margin(c, order_lines) - before, 0.0), 2)
+
+
 def _totals(c: Campaign) -> None:
     t = c.totals
     t["called"] = sum(x.status not in ("queued", "ringing") for x in c.calls)
@@ -196,6 +215,12 @@ def _totals(c: Campaign) -> None:
     t["declined"] = sum(x.status == "declined" for x in c.calls)
     t["callback"] = sum(x.status == "callback" for x in c.calls)
     t["revenueHt"] = round(sum(x.totalHt for x in c.calls), 2)
+    t["marginHt"] = round(sum(x.marginHt for x in c.calls), 2)
+    t["routeSavedEur"] = round(float(((c.route or {}).get("totals") or {}).get("savedEur") or 0), 2)
+    answered = sum(x.status in ("confirmed", "modified", "declined", "callback") for x in c.calls)
+    t["staffMinutesSaved"] = answered * STAFF_MIN_PER_CALL
+    t["staffEurSaved"] = round(t["staffMinutesSaved"] / 60 * STAFF_EUR_PER_HOUR, 2)
+    t["gainEur"] = round(t["marginHt"] + t["routeSavedEur"] + t["staffEurSaved"], 2)
     emit(c, {"type": "totals", **t})
 
 
@@ -265,6 +290,7 @@ async def run_call(c: Campaign, call: Call, row: dict) -> None:
                 # an add-on call only brings what it added to the existing order
                 added = float(o.get("totalHt") or 0) - (float(row.get("totalHt") or 0) if row["status"] == "upsell" else 0)
                 call.orderId, call.totalHt, call.lines = o["id"], round(max(added, 0.0), 2), o.get("lines") or []
+                call.marginHt = _call_margin(c, call.lines, row)
                 emit(c, {"type": "order", "callId": call.callId, "clientId": call.clientId, "orderId": o["id"],
                          "totalHt": call.totalHt, "lines": call.lines, "status": o.get("status")})  # fmt: skip
                 asyncio.create_task(push_route(c))
@@ -296,6 +322,7 @@ async def run_call(c: Campaign, call: Call, row: dict) -> None:
             call.orderId, call.lines = order["id"], order.get("lines") or []
             added = float(order.get("totalHt") or 0) - (float(row.get("totalHt") or 0) if row["status"] == "upsell" else 0)
             call.totalHt = round(max(added, 0.0), 2)
+            call.marginHt = _call_margin(c, call.lines, row)
             emit(c, {"type": "order", "callId": call.callId, "clientId": call.clientId, "orderId": order["id"],
                      "totalHt": call.totalHt, "lines": call.lines, "status": order.get("status")})  # fmt: skip
         if order:
@@ -337,6 +364,11 @@ async def start(date: str | None, client_ids: list[str] | None, concurrency: int
     c.calls = [Call(callId=f"call_{i + 1:02d}", clientId=r["clientId"], clientName=r["name"], lat=r["lat"], lng=r["lng"], kind=r["status"])
                for i, r in enumerate(rows)]  # fmt: skip
     CAMPAIGNS[c.id] = c
+    try:
+        products = await erp.get("/api/products", {"limit": 1000})
+        c.costs = {p["id"]: float(p["cost"]) for p in (products["items"] if isinstance(products, dict) else products)}
+    except Exception as e:
+        print(f"[campaign] costs: {e}", flush=True)
     try:
         c.route = await erp.get("/api/routing/optimize", {"date": c.date})
     except Exception:
