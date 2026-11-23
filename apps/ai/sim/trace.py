@@ -28,11 +28,17 @@ class Trace:
         return [c for t in self.turns for c in t.tools]
 
     def called(self, name: str) -> bool:
+        # check_product with a clientId resolves the client's price exactly like get_price (tools/fast.py)
+        if name == "get_price" and any(c["name"] == "check_product" and c["args"].get("clientId") for c in self.calls()):
+            return True
         return any(c["name"] == name for c in self.calls())
 
     def client_ids_looked_up(self) -> set[str]:
         ids = {c["args"].get("clientId") for c in self.calls()}
         ids |= {c["args"].get("id") for c in self.calls() if c["name"] == "get_context"}
+        # find_client takes the spoken name: the id it loaded is in its result
+        ids |= {((c.get("result") or {}).get("client") or {}).get("id") for c in self.calls() if c["name"] == "find_client" and isinstance(c.get("result"), dict)}
+        ids |= {c["args"].get("query") for c in self.calls() if c["name"] == "find_client"}
         return {i for i in ids if isinstance(i, str) and i.startswith("cli_")}
 
     def write_client_ids(self) -> set[str]:

@@ -65,26 +65,27 @@ async def check_product(
     ctx: ToolContext,
     query: str = Field(description="Le produit tel qu'il est dit (surnom, faute), ex. « broche de 20 », ou un id prd_…"),
     client_id: str | None = Field(None, description="Si on connaît le client (cli_…) : ajoute son prix (get_price)"),
-    qty: float | None = Field(None, description="Quantité envisagée, pour le prix au volume et le stock"),
+    qty: float | None = Field(None, description="Quantité envisagée, pour le prix au volume"),
 ) -> dict:
     """
-    Trouve un produit et renvoie en une seule étape son stock (get_product_stock : disponible, arrivages, prochaine DLC) et, si le
-    client est connu, son prix pour ce client (get_price). Plusieurs produits plausibles : les candidats sont dans « candidates »,
-    avec le stock et le prix du premier.
-    One step: find a product, return its stock and the client's price.
+    Trouve un produit et renvoie en une seule étape son stock (disponible, arrivages, prochaine DLC) et, si le client est connu, son
+    prix pour ce client (comme get_price). Si plusieurs produits correspondent, « products » contient les 3 meilleurs, chacun avec
+    son stock et son prix : choisis celui qui correspond à ce qui a été dit (calibre, poids), ou demande.
+    One step: find a product, return stock and the client's price for the best matches.
     """
     if query.startswith("prd_"):
-        candidates, product_id = [], query
+        ids = [query]
     else:
         candidates = await _search(ctx, query, "product")
         if not candidates:
-            return {"candidates": [], "note": "aucun produit trouvé"}
-        product_id = candidates[0]["id"]
-    stock_call = _safe(get_product_stock.fn(ctx, product_id=product_id))
-    price_call = _safe(get_price.fn(ctx, client_id=client_id, product_id=product_id, qty=qty)) if client_id else None
-    stock, price = await asyncio.gather(stock_call, price_call) if price_call else (await stock_call, None)
-    return {
-        "product": stock,
-        **({"clientPrice": price} if price is not None else {}),
-        **({"candidates": candidates} if len(candidates) > 1 else {}),
-    }
+            return {"products": [], "note": "aucun produit trouvé"}
+        ids = [c["id"] for c in candidates[:3]]
+
+    async def details(product_id: str) -> dict:
+        stock_call = _safe(get_product_stock.fn(ctx, product_id=product_id))
+        if not client_id:
+            return await stock_call
+        stock, price = await asyncio.gather(stock_call, _safe(get_price.fn(ctx, client_id=client_id, product_id=product_id, qty=qty)))
+        return {**stock, "clientPrice": price}
+
+    return {"products": list(await asyncio.gather(*(details(i) for i in ids)))}
