@@ -25,6 +25,7 @@ import HistoryPage from "@/pages/history";
 import PricesPage from "@/pages/prices";
 import GroupsPage from "@/pages/groups";
 import ContextPage from "@/pages/context";
+import MorningPage from "@/pages/morning";
 
 export const router = createBrowserRouter([
   {
@@ -32,6 +33,7 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { index: true, element: <DashboardPage /> },
+      { path: "morning", element: <MorningPage /> },
       { path: "orders", element: <OrdersPage /> },
       { path: "orders/:id", element: <OrderDetailPage /> },
       { path: "clients", element: <ClientsPage /> },

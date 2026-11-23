@@ -52,7 +52,11 @@ class Trace:
         out: dict[str, dict[str, Any]] = {}
         for c in self.calls():
             r = c.get("result")
-            if c["name"] in ORDER_TOOLS and c.get("ok") and isinstance(r, dict) and r.get("id"):
+            if c["name"] == "finalize_order" and c.get("ok") and isinstance(r, dict) and isinstance(r.get("order"), dict):
+                r = r["order"]  # finalize_order (main's smart tools) returns {decision, reasons, order}
+            elif not (c["name"] in ORDER_TOOLS and c.get("ok")):
+                continue
+            if isinstance(r, dict) and r.get("id"):
                 out[r["id"]] = r
         return out
 

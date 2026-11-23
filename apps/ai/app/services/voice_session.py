@@ -28,6 +28,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from app.agent import run_agent, sanitize_history
 from app.agent.loop import ms_since
+from app.agent.outbound import shortage_brief
 from app.clients import STTUpdate, TTSClient, get_llm_client, get_stt_client, get_tts_client
 from app.config import settings
 from app.schemas import (
@@ -128,9 +129,14 @@ class VoiceConnection:
             await self.open()  # no "start" yet: open a fresh conversation
 
         match msg:
-            case StartMessage(session_id=session_id, actor_name=actor_name):
+            case StartMessage(session_id=session_id, actor_name=actor_name, outbound_order_id=outbound_order_id):
                 await self.interrupt()
                 await self.open(session_id, actor_name)
+                if outbound_order_id:  # outbound call: the agent speaks first, from a hidden brief
+                    try:
+                        self.start_turn(text=await shortage_brief(outbound_order_id), outbound=True)
+                    except Exception as e:
+                        await self.send(VoiceErrorMessage(message=str(e)))
             case AudioStartMessage(mime=mime, hint=hint):
                 await self.interrupt()  # barge-in
                 self.recording = Utterance(get_stt_client(), mime, hint, on_partial=self.send_partial)
@@ -182,6 +188,7 @@ class VoiceConnection:
         conv: Conversation,
         text: str | None = None,
         utterance: Utterance | None = None,  # spoken: already being transcribed since audio_start
+        outbound: bool = False,  # `text` is the hidden outbound brief: don't show it as the caller's words
     ) -> None:
         t0 = time.perf_counter()  # end of caller speech
         timings = TurnTimings()
@@ -199,7 +206,8 @@ class VoiceConnection:
             if not heard:
                 await self.send(VoiceErrorMessage(message="Rien entendu — réessayez."))
                 return
-            await self.send(TranscriptMessage(text=heard, final=True))
+            if not outbound:
+                await self.send(TranscriptMessage(text=heard, final=True))
 
             # 2. Agent, on a working copy of the history (committed at the end)
             working = [*conv.history, ChatMessage(role="user", content=heard)]

@@ -48,7 +48,14 @@ def writes_only_for(client_id: str) -> Check:
 
 
 def confirmed() -> Check:
-    return ("commande confirmée", lambda t: t.called("confirm_order") and any(o.get("status") != "draft" for o in t.orders().values()))
+    """The order ended confirmed, by confirm_order or by finalize_order (the ERP's confirm-or-draft gates)."""
+    ended = lambda t: (t.called("confirm_order") or t.called("finalize_order")) and any(o.get("status") != "draft" for o in t.orders().values())  # noqa: E731
+    return ("commande confirmée", ended)
+
+
+def not_confirmed() -> Check:
+    """Nothing got confirmed: no confirm_order, and finalize_order (if called) left every order as a draft."""
+    return ("ne confirme pas", lambda t: not t.called("confirm_order") and all(o.get("status") == "draft" for o in t.orders().values()))
 
 
 def order_qty(product_id: str, lo: float, hi: float) -> Check:
@@ -161,7 +168,7 @@ SCENARIOS: list[Scenario] = [
             "Voir que le compte est bloqué (status blocked), rester courtois, expliquer sans humilier, ne RIEN "
             "confirmer. Au plus un brouillon avec une note, transmis à la compta/au commercial. Pas de promesse de livraison."
         ),
-        checks=[identified("cli_0005"), writes_only_for("cli_0005"), not_called("confirm_order")],
+        checks=[identified("cli_0005"), writes_only_for("cli_0005"), not_confirmed()],
         tags=["règles", "bloqué"],
     ),
     Scenario(
@@ -228,7 +235,7 @@ SCENARIOS: list[Scenario] = [
             "(log_client_event), ne promettre ni avoir ni montant (l'avoir > 150 € passe par Rachid), rassurer et "
             "faire remonter. Ne pas créer de commande."
         ),
-        checks=[identified("cli_0046"), event_logged(), not_called("create_draft_order"), not_called("confirm_order")],
+        checks=[identified("cli_0046"), event_logged(), not_called("create_draft_order"), not_confirmed()],
         tags=["réclamation"],
     ),
     Scenario(
@@ -245,7 +252,7 @@ SCENARIOS: list[Scenario] = [
             "tournée Toulon (mardi, jeudi, samedi), poser les bonnes questions (volumes, produits clés, fournisseur "
             "actuel), proposer un rappel du commercial. Ne rien confirmer."
         ),
-        checks=[not_called("confirm_order")],
+        checks=[not_confirmed()],
         tags=["prospect", "info"],
     ),
     Scenario(
@@ -297,7 +304,7 @@ SCENARIOS: list[Scenario] = [
             "plafond de 18 000 €), le dire sans vexer, ne pas confirmer au-delà du plafond : brouillon + note, "
             "transmis au commercial/à la compta."
         ),
-        checks=[identified("cli_0022"), writes_only_for("cli_0022"), not_called("confirm_order")],
+        checks=[identified("cli_0022"), writes_only_for("cli_0022"), not_confirmed()],
         tags=["règles", "unités"],
     ),
 ]
