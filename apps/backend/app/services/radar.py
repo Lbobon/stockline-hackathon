@@ -31,6 +31,7 @@ EVENTS_FILE = Path(__file__).resolve().parents[1] / "radar_events.json"
 WEEKS = 12
 MIN_PROBABILITY = 0.35
 EVENT_MIN_PROBABILITY = 0.15
+BASKET_MIN_FREQUENCY = 0.5  # a usual product is proposed when it is in at least half the client's recent orders (backtest: € forecast ≈ € delivered)
 WEEKDAY_FR = {"mon": "lundis", "tue": "mardis", "wed": "mercredis", "thu": "jeudis", "fri": "vendredis", "sat": "samedis", "sun": "dimanches"}
 
 
@@ -105,8 +106,19 @@ def _line(client_id: str, pid: str, qty: float, base: float, date: str, event_id
             "unitPrice": round2(price), "eventId": event_id, **({"note": note} if note else {})}  # fmt: skip
 
 
-def forecast_client(client: Doc, date: str, evs: list[Doc]) -> Doc | None:
-    """One client's forecast for `date`, or None when they are not served that day / not likely to order."""
+def _basket(client_id: str, as_of: str | None) -> list[Doc]:
+    """The usual basket; with `as_of` (backtest), from the 60 days before that date only, so the future never leaks in."""
+    if not as_of:
+        return client_svc.usual_basket(client_id)
+    since = add_days(as_of, -60)
+    recent = sorted((o for o in crud.orders.rows.values()
+                     if o["clientId"] == client_id and is_sale(o) and since <= o["deliveryDate"] < as_of), key=lambda o: o["deliveryDate"])  # fmt: skip
+    return client_svc.usual_basket_of(recent, lambda o: o["deliveryDate"])
+
+
+def forecast_client(client: Doc, date: str, evs: list[Doc], as_of: str | None = None) -> Doc | None:
+    """One client's forecast for `date`, or None when they are not served that day / not likely to order.
+    `as_of` (backtest): forecast as it would have been made that day: the basket from before it, existing orders ignored."""
     if client["status"] != "active" or "perdus" in (client.get("tags") or []):
         return None
     if weekday_of(date) not in (client.get("deliveryDays") or []):
@@ -115,7 +127,7 @@ def forecast_client(client: Doc, date: str, evs: list[Doc]) -> Doc | None:
     contact = (client.get("contacts") or [{}])[0]
     base = {"clientId": client["id"], "name": client["name"], "type": client["type"], "city": client["city"],
             "lat": loc["lat"], "lng": loc["lng"], "contactName": contact.get("name"), "phone": contact.get("phone")}  # fmt: skip
-    existing = next((o for o in crud.orders.rows.values()
+    existing = None if as_of else next((o for o in crud.orders.rows.values()
                      if o["clientId"] == client["id"] and o["deliveryDate"] == date and o["status"] != "cancelled"), None)  # fmt: skip
     mine = [e for e in evs if _targets(e, client)]
     boosts = {b["productId"]: (b["factor"], e["id"]) for e in mine for b in e["boosts"]}
@@ -146,7 +158,9 @@ def forecast_client(client: Doc, date: str, evs: list[Doc]) -> Doc | None:
     if prob < MIN_PROBABILITY and not (mine and prob >= EVENT_MIN_PROBABILITY):
         return None
     lines = []
-    for u in client_svc.usual_basket(client["id"]):
+    basket = _basket(client["id"], as_of)
+    core = [u for u in basket if u.get("frequency", 1) >= BASKET_MIN_FREQUENCY] or basket[:1]  # always their top product
+    for u in core:
         pid, note = _stocked(client, u["productId"])
         if not pid or any(l["productId"] == pid for l in lines):
             continue
