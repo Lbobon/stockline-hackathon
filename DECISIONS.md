@@ -1,7 +1,7 @@
 # DECISIONS — Team 18 · Médina Viandes
 
 Le jury lit ce fichier. On le remplit au fil de l'eau : quoi, pourquoi, ce qu'on a essayé et abandonné, avec les mesures.
-Spec complète : [.plans/night-line-shortage-triage-spec.md](.plans/night-line-shortage-triage-spec.md).
+Specs : [V1](.plans/night-line-shortage-triage-spec.md) · [V2 Radar](.plans/demand-radar-spec.md).
 
 ## 1. Le problème choisi
 
@@ -16,6 +16,39 @@ Spec complète : [.plans/night-line-shortage-triage-spec.md](.plans/night-line-s
 3. **Page « Ce matin »** pour Leïla, qui n'est pas à l'aise avec l'informatique : en une minute, ce qu'il faut vérifier, rappeler et valider, puis un bouton « Lancer les appels ».
 
 **Pourquoi la voix :** les clients du soir (snacks, boucheries) commandent déjà au téléphone et par message vocal ; le tri des ruptures est une suite d'appels courts juste avant 6 h. Les deux sont des moments où il n'y a personne au bureau.
+
+4. **Copilote de l'ADV** : Leïla prend l'appel elle-même. L'agent écoute, remplit la commande dans l'ERP pendant qu'elle parle et lui souffle à l'écran ce qu'elle ne doit pas rater (plafond dépassé, refuse les substitutions, produit en rupture). Elle valide en un clic, et les garde-fous passent quand même.
+
+## 1 bis. V2 — « Radar de demande » : la commande qui s'écrit toute seule
+
+**Le pari** : au lieu d'attendre que les clients appellent, l'ERP sait ce qu'ils vont commander demain, et des agents les appellent tous en même temps pour le leur proposer.
+
+1. **Prévision** (`apps/backend/app/services/radar.py`, `GET /api/radar/forecast`). Pour chaque client livré demain, l'ERP calcule :
+   - son rythme sur ce jour de la semaine (combien de mercredis sur les 12 derniers) ;
+   - son panier de base (les produits présents dans au moins la moitié de ses commandes récentes) ;
+   - ses prix négociés.
+   Un produit en rupture n'est jamais proposé : on prend son remplaçant habituel, sauf si le client refuse les substitutions.
+2. **Événements et commandes spéciales** (`apps/backend/app/radar_events.json`, données ajoutées). Chacun touche un segment de clients :
+   - match OM–PSG mercredi soir : les snacks prennent +40 % de broches, +30 % de frites et de pains ;
+   - mariages du week-end : les traiteurs reçoivent deux agneaux entiers (commande spéciale, à passer la veille avant 14 h) et plus de gigots ;
+   - vague de froid : souris et collier pour les tajines ;
+   - marché de Noël du Vieux-Port : merguez et brochettes.
+   Les clients qui ont **déjà** commandé, mais qu'un événement concerne, reçoivent un **appel d'ajout** (« pour vos mariages de samedi, je vous ajoute deux agneaux ? »).
+3. **Appels en parallèle** (`apps/ai/app/campaign/`, `POST /ai/campaigns` et un flux SSE). Pour chaque appel :
+   - le vrai agent vocal appelle et parle en premier, à partir d'une consigne cachée (`agent/radar_brief.py`) ;
+   - Jev classe chaque réponse du client en environ 300 ms : oui, modifie, non, rappeler ;
+   - chaque « oui » crée la commande via les garde-fous (`finalize_order`) ;
+   - les tournées de demain sont ré-optimisées et le tracé se met à jour en direct (`services/optimize.py`).
+4. **Tournées sur la vraie géographie** (`services/geo.py`, `services/optimize.py`). Avant, l'ERP rangeait les arrêts sans géographie (« départ + 12 min par arrêt »). Maintenant :
+   - les arrêts sont ordonnés par proximité, sur les coordonnées tirées du code postal ;
+   - on échange des arrêts entre camions ;
+   - capacité et créneau sont respectés.
+   Sur les tournées du jour : **559 km → 352 km**, soit environ 4 h 20 et 240 € économisés. On calcule aussi le coût de livraison de chaque client et on signale les petites commandes lointaines.
+5. **Page `/radar`** : une carte, les clients qui sonnent, les appels en cours et le tracé qui se redessine à chaque « oui ».
+
+**Ce qui est réel, ce qui est simulé** (on le dit dans la démo) :
+- **Réel** : la prévision, les événements appliqués par segment, l'agent vocal et ses outils, les garde-fous, l'écriture des commandes et l'optimisation des tournées.
+- **Simulé** : les clients qui répondent, joués par un modèle à partir de leur fiche persona, et le calendrier des événements. **Aucun vrai numéro n'est appelé.**
 
 ## 2. Scénarios de test
 
@@ -79,6 +112,15 @@ Simulateur, 13 appels, agent Haiku 5.5. Latence mesurée dans le processus (text
 | Haiku 5.5 + correctifs du simulateur (#30, 2 × 13, mesure de fuzzy-zephyr) | 26/26 | 4,2 / 3,9 | 2,6 s / 5,0 s | 0,006 $ |
 | **Haiku 5.5 + orchestre (#26) + voix adaptée (#23) + prompt affiné, 2 × 14 appels** | **26/28** | **3,9 / 3,9** | **premier son 0,70 s** ; fin de tour 3,3 s | **0,010 $** |
 
+**Radar de demande** :
+
+| Mesure | Résultat |
+|---|---|
+| Rétro-test sur les 8 derniers mercredis (`GET /api/radar/backtest`) | **95 % des commandes vues venir**, 88 % des prévisions justes, quantités à ±24 %, chiffre d'affaires prévu à **8 % près** |
+| Campagne complète sur les données du jour (26 appels, 8 en parallèle) | **84 s**, **22 commandes**, 3 refus, 1 rappel ; **12,1 k€ HT**, dont **4,6 k€ grâce aux événements** ; tournées de 13 à 27 arrêts |
+| Scénarios d'appel radar (match, ajout mariages, refus) | 6/6 sur Haiku, juge 3,8 / 4,2 |
+| Jev sur les réponses (oui / modifie / non / rappeler) | 5/5 sur un contrôle manuel, ~300 ms |
+
 Sur ce dernier run, les deux échecs sont : une coupure réseau de l'API (corrigée ensuite par une nouvelle tentative automatique, PR #35) et une remarque du juge sur un prospect. Le coût double avec l'orchestre (agents secondaires), mais reste à 1 centime par appel.
 
 Dans l'application réelle (page Voix, Soniox + ElevenLabs), un appel sortant mesuré avant le correctif qui a retiré Istanbul Grill du tri (sa broche était déjà remplacée) :
@@ -111,6 +153,13 @@ Dans l'application réelle (page Voix, Soniox + ElevenLabs), un appel sortant me
 - **Haiku sans réflexion** (`LLM_THINKING=disabled`). Premier mot à 0,47 s, mais seulement 15/26 réussis, et une fois il a lu son raisonnement anglais au client. Abandonné.
 - **Router chaque tour entre Haiku et Sonnet** (étudié, pas construit). Le préfixe du prompt fait 29 079 tokens et son cache est propre à chaque modèle : le premier tour Sonnet d'un appel coûte ≈ 0,06–0,07 $, soit environ 10× un appel Haiku entier. Sonnet est aussi plus lent (3,8 s contre 2,5 s au premier mot), et les blocs de réflexion ne se rejouent pas d'un modèle à l'autre. Les cas difficiles se corrigent dans le prompt et les outils, pour Haiku.
 - **Réglages de sortie ElevenLabs** (format, speaker boost, normalisation) et préchauffage de connexion : aucun gain mesurable (~155 ms au premier octet quoi qu'on fasse).
+
+- **Radar, premier essai** :
+  - la prévision proposait tout le panier récent, d'où un CA prévu égal à 2× le réel. On garde maintenant les produits présents dans au moins la moitié des commandes, et le CA prévu tombe à 8 % près.
+  - Jev lisait toute la proposition de l'agent avec la réponse et classait des « non merci » en « oui ». Il ne lit plus que la réponse du client.
+  - certains clients disaient « oui » puis raccrochaient dans la même phrase, et la commande n'était jamais écrite. Le moteur donne maintenant un dernier tour à l'agent et finalise via les garde-fous.
+  - les clients simulés râlaient d'être appelés à 5 h 30. Les appels de prévision se font l'après-midi, comme les commerciaux.
+- **Panne de camion avec appels en parallèle** : construit et testé (`POST /api/routing/breakdown` : un autre camion récupère la marchandise et livre, sinon retrait au quai ou prochaine livraison), puis mis de côté pour la démo au profit du Radar, plus fort à pitcher.
 
 **Reste à corriger (vu par le juge)**
 - L'agent **promet des transmissions qu'il n'enregistre pas** (« je préviens Samia », « je transmets à Martine ») : c'est le défaut le plus fréquent dans les notes du juge.
