@@ -8,6 +8,7 @@ They follow the call types METIER.md lists ("Où la voix change la donne"), on t
 Add a scenario: copy one, change the client and the goal, pick checks from the helpers below.
 """
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -84,6 +85,12 @@ def event_logged() -> Check:
 
 
 # ── scenarios ────────────────────────────────────────────────────────────────────────────────────────────────
+
+def answers_in(lang_words: str) -> Check:
+    """The agent answers in the caller's language: most of its turns use common words of that language."""
+    rx = re.compile(lang_words, re.I)
+    return ("répond dans la langue de l'appelant", lambda t: sum(bool(rx.search(x.agent)) for x in t.turns) >= max(1, len(t.turns) * 0.6))
+
 
 SCENARIOS: list[Scenario] = [
     Scenario(
@@ -307,5 +314,24 @@ SCENARIOS: list[Scenario] = [
         ),
         checks=[identified("cli_0022"), writes_only_for("cli_0022"), not_confirmed()],
         tags=["règles", "unités"],
+    ),
+    Scenario(
+        id="anglais",
+        title="An English-speaking chef (language switch)",
+        client_id="cli_0016",
+        persona="c0016-o-burger-aix-en-provence.md",
+        goal=(
+            "Tu n'es PAS Guillaume : tu es Tom, le nouveau chef anglais d'O'Burger Aix-en-Provence, arrivé de Londres il y a "
+            "une semaine. Tu ne parles qu'ANGLAIS (aucun mot de français, à part « bonjour »). Tu veux 20 kilos de viande "
+            "hachée de bœuf pour la prochaine livraison et tu demandes le prix au kilo. Tu confirmes après la relecture."
+        ),
+        expect=(
+            "Comprendre l'anglais et répondre EN ANGLAIS tout l'appel, identifier O'Burger Aix (cli_0016), donner le prix "
+            "client de la viande hachée de bœuf (prd_0019, get_price), créer 20 kg (10 barquettes de 2 kg si l'unité l'exige) "
+            "pour la prochaine livraison (mercredi 25/11), relire en anglais, confirmer après yes. Signaler les factures échues "
+            "seulement si l'ERP le demande."
+        ),
+        checks=[identified("cli_0016"), writes_only_for("cli_0016"), answers_in(r"\b(the|your|you|order|delivery|kilos?|price|thanks|thank)\b")],
+        tags=["langue", "commande"],
     ),
 ]

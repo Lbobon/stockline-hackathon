@@ -48,6 +48,22 @@ Font: Inter (Google Fonts), `font-feature-settings: "cv11","ss01"`; mono: JetBra
 
 Shadows: `--shadow-sm: 0 1px 3px 0 #24423317, 0 1px 2px -1px #24423314`, side panel `-8px 0 24px -8px #0000001f` (dark: `#03070580`).
 
+## Agent colors (the call orchestra)
+One identity per AI agent, defined once in `apps/web/src/features/calls/agents.ts` (`AGENT`, `TEAM`, `agentOf`): label, role, lucide icon,
+and the classes `bg-agent-*` (bars, dots), `bg-agent-*/10` (icon tiles, tints), `text-agent-*` (icons only, never body text), `border-agent-*/40`.
+Tokens `--agent-voice/fast/scout/scribe/linguist`, a categorical set validated for colour-blind separation in light and dark; always in this order:
+
+| agent | role | icon | light | dark |
+|---|---|---|---|---|
+| voice — Agent vocal | talks to the caller, decides | AudioLines | 262 83% 58% | 258 90% 66% |
+| fast — Réflexe | answers plain "oui" without the big model | Zap | 148 68% 38% | 151 59% 38% |
+| scout — Éclaireur | preloads the ERP while the caller talks | Ear | 224 64% 56% | 224 62% 63% |
+| scribe — Greffier | keeps the client file in the background | NotebookPen | 33 90% 44% | 35 83% 42% |
+| linguist — Linguiste | language and tu / vous | Languages | 342 68% 56% | 342 66% 64% |
+
+Client (User) and Rapporteur (FileText) stay neutral. Any screen that shows agents (live strip, Gantt, transcript, cost) takes its
+name, icon and color from `AGENT` instead of its own map; values and labels stay in text tokens next to a colored mark.
+
 ## Status colors
 - Orders: draft = muted, confirmed = info, prepared = violet, delivered = success, invoiced = foreground/60, cancelled = destructive.
 - Invoices: issued = info, partially_paid = warning, paid = success, overdue = destructive, draft/cancelled = muted.

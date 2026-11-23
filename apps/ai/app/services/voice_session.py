@@ -12,9 +12,14 @@ One turn:
 
 Barge-in: a new audio_start / text while the agent is still busy cancels the running turn (asyncio
 cancellation); what was heard and said so far stays in the history.
+
+The turn runs through the call orchestra (app/orchestra): the Éclaireur reads the live transcript while the caller
+speaks and prefetches the data, the Réflexe answers a plain « oui », a cached filler line plays when the agent has to
+look something up, the Greffier writes notes in the background, and on hangup the Rapporteur writes the call report.
 """
 
 import asyncio
+import copy
 import json
 import re
 import time
@@ -26,7 +31,7 @@ from dataclasses import dataclass, field
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import TypeAdapter, ValidationError
 
-from app.agent import run_agent, sanitize_history
+from app.agent import run_agent
 from app.agent.loop import ms_since
 from app.agent.outbound import shortage_brief
 from app.clients import STTUpdate, TTSClient, get_llm_client, get_stt_client, get_tts_client
@@ -39,8 +44,11 @@ from app.schemas import (
     AgentToolMessage,
     AudioEndMessage,
     AudioStartMessage,
+    CallReportMessage,
     ChatMessage,
     ErrorEvent,
+    HangupMessage,
+    OrchestraMessage,
     ReadyMessage,
     ResetMessage,
     StartMessage,
@@ -53,6 +61,9 @@ from app.schemas import (
     VoiceClientMessage,
     VoiceErrorMessage,
 )
+from app.orchestra import CallSession, FastEvent, FillerEvent
+from app.orchestra import store as call_store
+from app.orchestra.session import FILLERS, trim  # noqa: F401  (trim: re-exported for the tests)
 from app.schemas.base import WireModel
 from app.tools import all_tools
 
@@ -66,7 +77,45 @@ client_message = TypeAdapter(VoiceClientMessage)
 class Conversation:
     id: str
     actor_name: str | None = None
-    history: list[ChatMessage] = field(default_factory=list)
+    call: CallSession | None = None  # the call in progress (history, agents, timeline)
+
+    @property
+    def history(self) -> list[ChatMessage]:
+        return self.call.history if self.call else []
+
+
+# Filler lines (« Je regarde. ») synthesized once per voice: played instantly, no TTS round trip.
+filler_audio: dict[tuple[str, str], tuple[str, bytes]] = {}
+background: set[asyncio.Task] = set()
+
+
+def spawn(coro) -> asyncio.Task:
+    t = asyncio.create_task(coro)
+    background.add(t)
+    t.add_done_callback(background.discard)
+    return t
+
+
+def tts_for(language: str) -> TTSClient:
+    """The TTS speaking `language` (ElevenLabs: language_code); the configured one for French or other providers."""
+    tts = get_tts_client()
+    if language != "fr" and hasattr(tts, "language"):
+        tts = copy.copy(tts)
+        tts.language = language
+    return tts
+
+
+async def cache_fillers(tts: TTSClient, language: str = "fr") -> None:
+    for text in FILLERS.get(language, []):
+        if (language, text) in filler_audio:
+            continue
+        try:
+            result = await tts.synthesize(text, settings.tts.voice or None)
+            audio = b"".join([c async for c in result.chunks])
+            filler_audio[(language, text)] = (result.mime, audio)
+        except Exception as e:
+            print(f"[voice] filler « {text} » : {e}", flush=True)
+            return
 
 
 # In memory: a reconnect with the same sessionId continues the conversation.
@@ -118,6 +167,7 @@ class VoiceConnection:
             pass
         finally:
             await self.interrupt()
+            self.end_call(report=True)  # the line dropped: still report the call
 
     async def handle_text(self, raw: str) -> None:
         try:
@@ -139,27 +189,76 @@ class VoiceConnection:
                         await self.send(VoiceErrorMessage(message=str(e)))
             case AudioStartMessage(mime=mime, hint=hint):
                 await self.interrupt()  # barge-in
+                self.conversation.call.speech_start()
                 self.recording = Utterance(get_stt_client(), mime, hint, on_partial=self.send_partial)
             case AudioEndMessage():
                 if self.recording:
                     utterance, self.recording = self.recording, None
+                    self.conversation.call.speech_end()
                     self.start_turn(utterance=utterance)
             case TextMessage(text=text):
                 await self.interrupt()
                 self.start_turn(text=text)
             case ResetMessage():
                 await self.interrupt()
-                self.conversation.history = []
+                self.end_call(report=False)
+                await self.open(self.conversation.id)
+            case HangupMessage():
+                await self.interrupt()
+                self.end_call(report=True)
                 await self.open(self.conversation.id)
 
     async def send_partial(self, update: STTUpdate) -> None:
+        if self.conversation and self.conversation.call:
+            self.conversation.call.on_partial(update.text)  # the Éclaireur listens while the caller speaks
         await self.send(TranscriptMessage(text=update.text, final=False, stable=update.stable))
+
+    def new_call(self, conv: Conversation) -> CallSession:
+        call = CallSession(actor_name=conv.actor_name, llm=get_llm_client(), runner=run_agent, tools=all_tools())
+
+        async def relay(event: dict) -> None:
+            await self.send(OrchestraMessage(event=event))
+            if event.get("type") == "call_profile" and event.get("language") != "fr":  # Linguiste: fillers in that language too
+                spawn(cache_fillers(tts_for(event["language"]), event["language"]))
+
+        call.state.listeners.append(relay)
+        if call.side:
+            spawn(call.warm())  # prompt cache written while the line rings
+            spawn(cache_fillers(get_tts_client()))
+        return call
+
+    def end_call(self, report: bool) -> None:
+        """Hang up the conversation's call: the Greffier finishes, the Rapporteur writes the report in the background."""
+        conv = self.conversation
+        if not conv or not conv.call:
+            return
+        call, conv.call = conv.call, None
+        if not call.state.turns:
+            spawn(call.finish(report=False))
+            return
+        spawn(self.write_report(call, report))
+
+    async def write_report(self, call: CallSession, report: bool) -> None:
+        cid = call.state.id
+        if report:
+            await self.send(CallReportMessage(id=cid, status="writing"))
+        try:
+            r = await call.finish(report=report)
+            if r:
+                call_store.save(r)
+                await self.send(CallReportMessage(id=cid, status="ready", headline=(r.get("ai") or {}).get("headline")))
+        except Exception as e:
+            print(f"[voice] report: {type(e).__name__}: {e}", flush=True)
+            if report:
+                await self.send(CallReportMessage(id=cid, status="error"))
 
     async def open(self, session_id: str | None = None, actor_name: str | None = None) -> None:
         conv = conversations.get(session_id or "") or Conversation(id=session_id or str(uuid.uuid4()))
         if actor_name:
             conv.actor_name = actor_name
         conversations[conv.id] = self.conversation = conv
+        if conv.call is None:
+            conv.call = self.new_call(conv)
         llm = get_llm_client()
         await self.send(
             ReadyMessage(session_id=conv.id, stt=get_stt_client().name, tts=get_tts_client().name, llm=f"{llm.provider}:{llm.model}")
@@ -193,10 +292,8 @@ class VoiceConnection:
         t0 = time.perf_counter()  # end of caller speech
         timings = TurnTimings()
         heard, spoken = "", ""
-        step_text = ""  # what the model said since the last tool result (not yet in `working`)
-        working: list[ChatMessage] | None = None
-        committed = False
         speaker: Speaker | None = None
+        call = conv.call = conv.call or self.new_call(conv)
         try:
             # 1. Speech → text: with a streaming STT only the last words are left to finalize
             if utterance is not None:
@@ -209,47 +306,47 @@ class VoiceConnection:
             if not outbound:
                 await self.send(TranscriptMessage(text=heard, final=True))
 
-            # 2. Agent, on a working copy of the history (committed at the end)
-            working = [*conv.history, ChatMessage(role="user", content=heard)]
-            speaker = Speaker(get_tts_client(), self.send, self.send_bytes)
+            # 2. The orchestra: fast path, or the voice agent briefed by the scout (history kept by the CallSession,
+            #    also on barge-in). The TTS speaks the caller's language.
+            speaker = Speaker(tts_for(call.state.language), self.send, self.send_bytes)
             llm_start = time.perf_counter()
-            async for ev in run_agent(working, llm=get_llm_client(), tools=all_tools(), mode="voice", actor_name=conv.actor_name):
-                match ev:
-                    case TextEvent(delta=delta):
-                        if timings.llm_first_token_ms is None:
-                            timings.llm_first_token_ms = ms_since(llm_start)
-                        spoken += delta
-                        step_text += delta
-                        await self.send(AgentTextMessage(delta=delta))
-                        speaker.push(delta)
-                    case ToolCallEvent(call=call):
-                        await self.send(AgentToolMessage(name=call.name, args=call.arguments))
-                    case ToolResultEvent(name=name, ok=ok, ms=ms):
-                        step_text = ""
-                        await self.send(AgentToolMessage(name=name, ok=ok, ms=ms))
-                    case ErrorEvent(message=message):
-                        await self.send(VoiceErrorMessage(message=message))
+            async with aclosing(call.turn(heard)) as events:
+                async for ev in events:
+                    match ev:
+                        case FillerEvent(text=filler):
+                            cached = filler_audio.get((call.state.language, filler))
+                            speaker.play(cached) if cached else speaker.speak(filler)
+                            await self.send(OrchestraMessage(event={"type": "filler", "text": filler}))
+                        case FastEvent():
+                            pass  # its text follows as a TextEvent
+                        case TextEvent(delta=delta):
+                            if timings.llm_first_token_ms is None:
+                                timings.llm_first_token_ms = ms_since(llm_start)
+                            spoken += delta
+                            await self.send(AgentTextMessage(delta=delta))
+                            speaker.push(delta)
+                        case ToolCallEvent(call=tc):
+                            await self.send(AgentToolMessage(name=tc.name, args=tc.arguments))
+                        case ToolResultEvent(name=name, ok=ok, ms=ms):
+                            await self.send(AgentToolMessage(name=name, ok=ok, ms=ms))
+                        case ErrorEvent(message=message):
+                            await self.send(VoiceErrorMessage(message=message))
             timings.llm_total_ms = ms_since(llm_start)
-            conv.history = trim(working)
-            committed = True
+            t = call.state.turns[-1] if call.state.turns else {}
+            await self.send(OrchestraMessage(event={"type": "turn", "n": t.get("n"), "path": t.get("path"), "firstSoundMs": t.get("firstSoundMs"),
+                                                    "firstWordMs": t.get("firstWordMs"), "prefetched": t.get("prefetched") or []}))  # fmt: skip
 
             # 3. Speak the last sentence and wait until all the audio is sent
             await speaker.finish()
             timings.tts_first_byte_ms = speaker.tts_first_byte_ms
             if speaker.first_byte_at:
                 timings.total_ms = int((speaker.first_byte_at - t0) * 1000 + 0.5)
+                if call.state.turns:
+                    call.state.turns[-1]["audioMs"] = timings.total_ms
             await self.send(AgentDoneMessage(text=spoken.strip(), timings=timings))
 
         except asyncio.CancelledError:
-            # Interrupted: keep what was heard, the tool rounds already done (an order the agent created must stay
-            # known) and what the agent had started to say. Not when the turn was already committed (barge-in during
-            # the last sentence's audio): that would duplicate it. trim() closes a tool call cut mid-run.
-            if heard and not committed:
-                kept = working if working is not None else [*conv.history, ChatMessage(role="user", content=heard)]
-                last = kept[-1]
-                if step_text.strip() and not (last.role == "assistant" and last.tool_calls):
-                    kept = [*kept, ChatMessage(role="assistant", content=f"{step_text.strip()} …")]
-                conv.history = trim(kept)
+            # Interrupted: the CallSession already kept what was heard, done and started to be said (call.turn's finally).
             if speaker:
                 await speaker.stop()
             raise
@@ -269,7 +366,7 @@ class Speaker:
     def __init__(self, tts: TTSClient, send: Callable[[WireModel], Awaitable], send_bytes: Callable[[bytes], Awaitable]):
         self.tts, self.send, self.send_bytes = tts, send, send_bytes
         self.buffer = ""
-        self.sentences: asyncio.Queue[str | None] = asyncio.Queue()
+        self.sentences: asyncio.Queue[str | tuple[str, bytes] | None] = asyncio.Queue()
         self.worker: asyncio.Task | None = None  # speaks the queued sentences one after the other
         self.started = False
         self.first_byte_at: float | None = None
@@ -287,6 +384,12 @@ class Speaker:
         if self.worker is None:
             self.worker = asyncio.create_task(self._speak_queued())
         self.sentences.put_nowait(sentence)
+
+    def play(self, audio: tuple[str, bytes]) -> None:
+        """Queue pre-synthesized audio (mime, bytes): a cached filler line, no TTS round trip."""
+        if self.worker is None:
+            self.worker = asyncio.create_task(self._speak_queued())
+        self.sentences.put_nowait(audio)
 
     async def finish(self) -> None:
         """Speak what is left in the buffer, wait for all the audio, close the segment."""
@@ -310,6 +413,15 @@ class Speaker:
     async def _speak_queued(self) -> None:
         while (sentence := await self.sentences.get()) is not None:
             tts_start = time.perf_counter()
+            if isinstance(sentence, tuple):
+                mime, audio = sentence
+                if not self.started:
+                    self.started = True
+                    await self.send(AgentAudioStartMessage(mime=mime))
+                    self.first_byte_at = time.perf_counter()
+                    self.tts_first_byte_ms = 0
+                await self.send_bytes(audio)
+                continue
             try:
                 result = await self.tts.synthesize(sentence, settings.tts.voice or None)
                 # aclosing: on barge-in (cancellation) the provider's HTTP stream is closed right away
@@ -323,13 +435,3 @@ class Speaker:
                         await self.send_bytes(chunk)
             except Exception as e:
                 await self.send(VoiceErrorMessage(message=f"TTS : {e}"))
-
-
-def trim(history: list[ChatMessage], max_messages: int = 40) -> list[ChatMessage]:
-    """Keep the last ~40 messages, starting on a user message (never split a tool call from its result)."""
-    history = sanitize_history(history)  # no dangling tool call (cancelled mid-tool), no orphan result
-    if len(history) <= max_messages:
-        return history
-    start = next((i for i, m in enumerate(history) if i >= len(history) - max_messages and m.role == "user"), -1)
-    return history[start:] if start > 0 else history
-

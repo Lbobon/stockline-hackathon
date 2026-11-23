@@ -6,8 +6,7 @@ import {
 import { History } from "lucide-react";
 import { BadgeEuro, Tags } from "lucide-react";
 import { Scale } from "lucide-react";
-import { BookOpen } from "lucide-react";
-import { Sunrise } from "lucide-react";
+import { BookOpen, PhoneCall, Sunrise } from "lucide-react";
 
 export interface NavItem { to: string; label: string; icon: LucideIcon; keywords?: string }
 export interface NavGroup { label?: string; items: NavItem[] }
@@ -51,6 +50,7 @@ export const NAV: NavGroup[] = [
     items: [
       { to: "#assistant", label: "Assistant", icon: Sparkles, keywords: "chat ia" },
       { to: "/voice", label: "Voix", icon: AudioLines, keywords: "agent vocal appel" },
+      { to: "/calls", label: "Appels", icon: PhoneCall, keywords: "appels comptes rendus rapport orchestre agents latence leïla" },
       { to: "/context", label: "Contexte", icon: BookOpen, keywords: "contexte ia fiches connaissances mémoire règles procédures préférences" },
     ],
   },
