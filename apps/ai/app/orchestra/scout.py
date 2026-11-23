@@ -25,12 +25,30 @@ Extrais ce qui permet de préparer la réponse. Réponds UNIQUEMENT par un objet
  "products": ["produits cités, tels que dits (ex. « merguez », « broche kebab 10 kg »)"],
  "order_ref": "numéro de commande cité, sinon null",
  "intent": "commande | modification | suivi | reclamation | prix | prospect | autre",
- "language": "code ISO de la langue parlée par l'appelant (fr, en, ar, es, it, tr…)",
+ "language": "code ISO de la langue de la MAJORITÉ des mots de l'appelant (fr, en, ar, es, it, tr…) ; une formule en arabe (salam aleykoum, wallah, inchallah, hamdoulah, barak Allahou fik) dans une phrase en français = fr",
  "register": "tu si l'appelant tutoie, vous s'il vouvoie, ? sinon"}
 N'invente rien : un nom de personne seul (« c'est Karim ») n'est pas un client ; « l'habituel » n'est pas un produit."""
 
 OPEN_ORDER = ("draft", "confirmed")
 LANG_NAMES = {"fr": "français", "en": "anglais", "ar": "arabe", "es": "espagnol", "it": "italien", "tr": "turc", "de": "allemand", "pt": "portugais"}
+
+
+MIN_SWITCH_WORDS = 6
+
+
+def majority_language(votes: dict[int, tuple[str, int]], current: str) -> str:
+    """The call's language = the one with the most caller words over the whole call ({utterance: (lang, words)}).
+    A greeting in another language can't flip it; a tie keeps the current language."""
+    totals: dict[str, int] = {}
+    for lang, words in votes.values():
+        totals[lang] = totals.get(lang, 0) + words
+    if not totals:
+        return current
+    lang = max(totals, key=totals.__getitem__)
+    # Moving away from French (the company's language) takes real evidence: a lone greeting never switches the call.
+    if lang == current or totals[lang] <= totals.get(current, 0) or (lang != "fr" and totals[lang] < MIN_SWITCH_WORDS):
+        return current
+    return lang
 
 
 def norm(s: str) -> str:
@@ -51,6 +69,8 @@ class Scout:
         self.dirty = False
         self.tried: set[str] = set()  # mentions already resolved (or tried)
         self.products: dict[str, str] = {}  # mention → productId (best hit)
+        self.utterance = 0
+        self.lang_votes: dict[int, tuple[str, int]] = {}  # utterance → (language, words): the latest extraction wins
 
     # ── input ──
 
@@ -69,6 +89,7 @@ class Scout:
 
     def new_utterance(self) -> None:
         self.latest, self.last_words, self.dirty = "", 0, False
+        self.utterance += 1
 
     async def settle(self, final_text: str, cap_ms: int = 450) -> None:
         """Turn start: give the scout up to `cap_ms` to finish what it is doing (or a last pass on the final words).
@@ -103,7 +124,7 @@ class Scout:
             ex = await ask_json(st, "scout", "fast", EXTRACT, f"{known}\nTranscription partielle : « {text} »", 300)
         if not ex:
             return
-        await self._linguist(ex)
+        await self._linguist(ex, text)
 
         jobs = []
         client = (ex.get("client") or "").strip()
@@ -122,10 +143,12 @@ class Scout:
             await asyncio.gather(*jobs)
         await self._prices()
 
-    async def _linguist(self, ex: dict) -> None:
-        """Linguiste: the caller's language and tu / vous, read from the same extraction; drives the prompt and the TTS."""
+    async def _linguist(self, ex: dict, text: str = "") -> None:
+        """Linguiste: the caller's language and tu / vous, read from the same extraction; drives the prompt and the TTS.
+        The language follows the bulk of the call, not one sentence: « Salam aleykoum » + a French order stays French."""
         st = self.state
-        lang = str(ex.get("language") or "fr").lower()[:2]
+        self.lang_votes[self.utterance] = (str(ex.get("language") or "fr").lower()[:2], max(1, len(text.split())))
+        lang = majority_language(self.lang_votes, st.language)
         reg = ex.get("register") if ex.get("register") in ("tu", "vous") else st.register
         if st.register_locked:  # the client card says tu / vous: it wins over how this sentence sounded
             reg = st.register
