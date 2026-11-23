@@ -13,9 +13,9 @@
 | Name | GitHub | Role | Owns |
 |---|---|---|---|
 | Loric | @Lbobon | _TBD_ | |
-| Yuvaan | @yuvaan-d-gupta | TBD |
-| _teammate 3_ | | _TBD_ | |
-| _teammate 4_ | | _TBD_ | |
+| Yuvaan | @yuvaan-d-gupta | _TBD_ | |
+| Denis | @Oopdawg | _TBD_ | |
+| Daphne | @DaphneRi | _TBD_ | |
 
 Proposed roles: **Agent/LLM lead** · **Data & integrations** · **Frontend & design** · **Product & pitch**. We confirm them at kickoff.
 
