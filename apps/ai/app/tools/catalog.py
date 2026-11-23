@@ -55,15 +55,16 @@ async def get_client(ctx: ToolContext, client_id: str = Field(description="ex. c
 @tool
 async def get_product_stock(ctx: ToolContext, product_id: str = Field(description="ex. prd_0042")) -> dict:
     """
-    Stock d'un produit : disponible (= physique - réservé), arrivages attendus, prochaine DLC, prix catalogue.
-    Product stock, incoming, next expiry and list price.
+    Stock d'un produit : disponible (= physique - réservé), arrivages attendus, prix catalogue, et la DLC du lot le plus ancien
+    encore en stock (earliestExpiryInStock : PAS forcément le lot livré au client ; n'en parle que si on te pose la question).
+    Product stock, incoming, list price and the earliest expiry among lots on hand.
     """
     p = await ctx.erp.get(f"/api/products/{enc(product_id)}")
     stock = p.get("stock") or {}
     return {
         **pick(p, "id", "name", "unit", "price", "origin", "caliber", "available", "onHand"),
         **pick(stock, "reserved", "incoming"),
-        **pick(p, "nextExpiry"),
+        **({"earliestExpiryInStock": p["nextExpiry"]} if p.get("nextExpiry") else {}),
     }
 
 

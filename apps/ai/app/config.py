@@ -29,6 +29,7 @@ class LLMSettings:
     api_key: str
     base_url: str  # empty → the provider's public endpoint
     effort: str  # anthropic only: low | medium | high
+    thinking: str = ""  # anthropic only: empty = model default; "between_tools" = no thinking before answering
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,7 @@ settings = Settings(
         api_key=env("LLM_API_KEY"),
         base_url=env("LLM_BASE_URL"),
         effort=env("LLM_EFFORT", "low"),
+        thinking=env("LLM_THINKING"),
     ),
     stt=STTSettings(
         provider=env("STT_PROVIDER", "mock").lower(),
