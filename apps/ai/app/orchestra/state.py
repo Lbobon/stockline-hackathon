@@ -24,6 +24,7 @@ AGENTS = {
     "scribe": "Greffier",  # writes the complaints and durable facts in the background
     "linguist": "Linguiste",  # language and tu / vous of the caller
     "reporter": "Rapporteur",  # the end-of-call report
+    "copilot": "Souffleur",  # copilot mode: Leïla speaks, it keeps the order and whispers (copilot.py)
 }
 
 # $ per million tokens: input, output (cache write = 1.25 × input, cache read = 0.1 × input)

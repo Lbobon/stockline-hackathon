@@ -14,7 +14,9 @@ import re
 from dataclasses import dataclass
 from datetime import date
 
+from app.agent import jev
 from app.agent.prompts import MONTHS, WEEKDAYS
+from app.clients.jev import yes_no_question
 from app.tools import Tool
 
 from .models import ask_json
@@ -39,6 +41,22 @@ BYE = re.compile(r"(au revoir|bonne journée|bonne journee|c'est tout|ce sera to
 NOT_PLAIN = re.compile(r"\d|\b(mais|plutôt|plutot|ajout|ajoute|change|enlève|enleve|retire|aussi|attend|attends|non|pas|sauf|moins|plus)\b", re.I)
 ASKS_YES = re.compile(r"(confirm|valid|je lance|je passe|on part|ça vous va|ça te va|c'est bon pour|je l'enregistre|on y va|je la passe)", re.I)
 HARMLESS = {"expiring_soon"}  # every other ERP alert must be said by the big model
+
+# The same five questions as READ_ANSWER, for Jev (≈130 ms instead of ≈700 ms): each answer is a probability.
+JEV_QUESTIONS = {
+    "accepts": yes_no_question(
+        "Le client dit de valider la commande relue (« valide », « c'est bon », « vas-y »), même s'il ajoute un message pour quelqu'un, une remarque ou un au revoir."
+    ),
+    "changes": yes_no_question(
+        "Le client demande de MODIFIER la commande relue avant de la valider : autre quantité, autre produit, autre date ou autre lot. "
+        "Une remarque sur le prix à transmettre plus tard, répéter les chiffres relus ou un message pour l'équipe ne sont PAS des modifications."
+    ),
+    "question": yes_no_question("Le client pose une question et attend la réponse AVANT de valider."),
+    "message": yes_no_question("Le client demande de transmettre un message ou une remarque à quelqu'un (commercial, équipe)."),
+    "goodbye": yes_no_question("Le client prend congé (au revoir, bonne journée)."),
+}
+# accepts must be clear; any sign of a change or a question sends the turn to the big model
+JEV_THRESHOLDS = {"accepts": 0.8, "changes": 0.35, "question": 0.4, "message": 0.6, "goodbye": 0.6}
 
 
 @dataclass
@@ -73,8 +91,15 @@ def plain_yes(heard: str) -> bool:
 
 
 async def read_answer(state: CallState, heard: str) -> dict | None:
-    """Réflexe: is this a yes to the read-back order, maybe with thanks / a message to pass / a goodbye? (Haiku, ≈0.7 s)"""
+    """Réflexe: is this a yes to the read-back order, maybe with thanks / a message to pass / a goodbye?
+    Jev first (≈130 ms, one request for the five questions); Haiku (≈0.7 s) without a Jev key or when Jev fails."""
     asked = state.turns[-2].get("agent", "") if len(state.turns) >= 2 else ""
+    if jev.available():
+        async with state.span("fast", "lecture du oui · Jev", f"« {heard[:60]} »"):
+            p = await jev.decide({"question_de_l_agent": asked[-400:], "reponse_du_client": heard}, JEV_QUESTIONS)
+        if p and all(isinstance(p.get(k), float) for k in JEV_QUESTIONS):
+            state.usage.setdefault("jev", {"model": "jev", "calls": 0})["calls"] += 1
+            return {k: p[k] >= t for k, t in JEV_THRESHOLDS.items()} | {"jev": {k: round(v, 3) for k, v in p.items()}}
     try:
         async with state.span("fast", "lecture du oui", f"« {heard[:60]} »"):
             return await ask_json(state, "fast", "fast", READ_ANSWER, f"Question de l'agent : « {asked[-400:]} »\nRéponse du client : « {heard} »", 120)

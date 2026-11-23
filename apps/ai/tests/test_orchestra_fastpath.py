@@ -80,3 +80,40 @@ def test_voice_agent_log_is_handed_to_the_scribe():
     assert out["ok"] is True
     assert calls == [{"client_id": "cli_0001", "type": "complaint", "title": "Merguez trop grasses"}]
     assert written == ["événement complaint : Merguez trop grasses"]
+
+
+def test_jev_reads_the_yes(monkeypatch):
+    """A yes with words around it (not a plain « oui ») is read by Jev, not Haiku: five probabilities, one request."""
+    from app.orchestra import fastpath
+
+    async def decide(state, questions, timeout_ms=800):
+        assert set(questions) == {"accepts", "changes", "question", "message", "goodbye"}
+        return {"accepts": 0.95, "changes": 0.05, "question": 0.02, "message": 0.9, "goodbye": 0.85}
+
+    async def no_haiku(*a, **k):
+        raise AssertionError("Haiku must not be called when Jev answers")
+
+    monkeypatch.setattr(fastpath.jev, "available", lambda: True)
+    monkeypatch.setattr(fastpath.jev, "decide", decide)
+    monkeypatch.setattr(fastpath, "ask_json", no_haiku)
+    st = state()
+    finalize = FakeTool({"decision": "confirm", "reasons": [], "order": order("confirmed")})
+    out = asyncio.run(try_fast(st, {"finalize_order": finalize}, "Oui vas-y c'est bon, dis à Rachid de me rappeler, bonne journée", None))
+    assert out.kind == "confirm" and "message" in out.text and "bonne journée" in out.text
+
+
+def test_jev_down_falls_back_to_haiku(monkeypatch):
+    from app.orchestra import fastpath
+
+    async def decide(*a, **k):
+        return None  # no key, timeout or error
+
+    async def haiku(*a, **k):
+        return {"accepts": False, "changes": True}
+
+    monkeypatch.setattr(fastpath.jev, "available", lambda: True)
+    monkeypatch.setattr(fastpath.jev, "decide", decide)
+    monkeypatch.setattr(fastpath, "ask_json", haiku)
+    st = state()
+    out = asyncio.run(try_fast(st, {"finalize_order": FakeTool({})}, "Oui mais mets 12 kilos plutôt", None))
+    assert out is None

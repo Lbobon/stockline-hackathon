@@ -47,6 +47,7 @@ from app.schemas import (
     AudioStartMessage,
     CallReportMessage,
     ChatMessage,
+    CopilotConfirmMessage,
     ErrorEvent,
     HangupMessage,
     OrchestraMessage,
@@ -62,7 +63,7 @@ from app.schemas import (
     VoiceClientMessage,
     VoiceErrorMessage,
 )
-from app.orchestra import CallSession, FastEvent, FillerEvent
+from app.orchestra import CallSession, CopilotSession, FastEvent, FillerEvent
 from app.orchestra import store as call_store
 from app.orchestra.session import FILLERS, trim  # noqa: F401  (trim: re-exported for the tests)
 from app.schemas.base import WireModel
@@ -78,11 +79,12 @@ client_message = TypeAdapter(VoiceClientMessage)
 class Conversation:
     id: str
     actor_name: str | None = None
-    call: CallSession | None = None  # the call in progress (history, agents, timeline)
+    call: CallSession | CopilotSession | None = None  # the call in progress (history, agents, timeline)
+    mode: str = "agent"  # agent: the voice agent answers · copilot: Leïla speaks, the agents whisper (orchestra/copilot.py)
 
     @property
     def history(self) -> list[ChatMessage]:
-        return self.call.history if self.call else []
+        return self.call.history if isinstance(self.call, CallSession) else []
 
 
 # Filler lines (« Je regarde. ») synthesized once per voice: played instantly, no TTS round trip.
@@ -132,6 +134,7 @@ class VoiceConnection:
         self.recording: Utterance | None = None  # while the key is down
         self.turn: asyncio.Task | None = None
         self.warm_up: asyncio.Task | None = None
+        self.speaker = "client"  # copilot mode: whose voice is being recorded
         self._send_lock = asyncio.Lock()
 
     # ── sending ──
@@ -180,14 +183,30 @@ class VoiceConnection:
             await self.open()  # no "start" yet: open a fresh conversation
 
         match msg:
-            case StartMessage(session_id=session_id, actor_name=actor_name, outbound_order_id=outbound_order_id):
+            case StartMessage(session_id=session_id, actor_name=actor_name, outbound_order_id=outbound_order_id, mode=mode):
                 await self.interrupt()
-                await self.open(session_id, actor_name)
+                await self.open(session_id, actor_name, mode)
                 if outbound_order_id:  # outbound call: the agent speaks first, from a hidden brief
                     try:
                         self.start_turn(text=await shortage_brief(outbound_order_id), outbound=True)
                     except Exception as e:
                         await self.send(VoiceErrorMessage(message=str(e)))
+            case AudioStartMessage(mime=mime, hint=hint, speaker=speaker) if self.copilot:
+                if self.recording:  # one mic: a new press drops an unfinished recording (both voices keep their sentences)
+                    self.recording.cancel()
+                self.speaker = speaker
+                self.conversation.call.speech_start()
+                self.recording = Utterance(get_stt_client(), mime, hint, on_partial=self.send_partial)
+            case AudioEndMessage() if self.copilot:
+                if self.recording:
+                    utterance, self.recording = self.recording, None
+                    self.conversation.call.speech_end()
+                    spawn(self.copilot_line(self.conversation, self.speaker, utterance=utterance))
+            case TextMessage(text=text, speaker=speaker) if self.copilot:
+                spawn(self.copilot_line(self.conversation, speaker, text=text))
+            case CopilotConfirmMessage():
+                if self.copilot:
+                    spawn(self.conversation.call.confirm())
             case AudioStartMessage(mime=mime, hint=hint):
                 await self.interrupt()  # barge-in
                 self.conversation.call.speech_start()
@@ -209,12 +228,22 @@ class VoiceConnection:
                 self.end_call(report=True)
                 await self.open(self.conversation.id)
 
+    @property
+    def copilot(self) -> bool:
+        return bool(self.conversation and isinstance(self.conversation.call, CopilotSession))
+
     async def send_partial(self, update: STTUpdate) -> None:
         if self.conversation and self.conversation.call:
             self.conversation.call.on_partial(update.text)  # the Éclaireur listens while the caller speaks
-        await self.send(TranscriptMessage(text=update.text, final=False, stable=update.stable))
+        track = "leila" if self.copilot and self.speaker == "leila" else "caller"
+        await self.send(TranscriptMessage(text=update.text, final=False, stable=update.stable, track=track))
 
-    def new_call(self, conv: Conversation) -> CallSession:
+    def new_call(self, conv: Conversation) -> CallSession | CopilotSession:
+        if conv.mode == "copilot":  # Leïla takes the call, the agents whisper
+            copilot = CopilotSession(actor_name=conv.actor_name, tools=all_tools())
+            copilot.state.listeners.append(lambda event: self.send(OrchestraMessage(event=event)))
+            spawn(copilot.warm())
+            return copilot
         call = CallSession(actor_name=conv.actor_name, llm=get_llm_client(), runner=run_agent, tools=all_tools())
 
         async def relay(event: dict) -> None:
@@ -239,7 +268,7 @@ class VoiceConnection:
             return
         spawn(self.write_report(call, report))
 
-    async def write_report(self, call: CallSession, report: bool) -> None:
+    async def write_report(self, call: CallSession | CopilotSession, report: bool) -> None:
         cid = call.state.id
         if report:
             await self.send(CallReportMessage(id=cid, status="writing"))
@@ -253,11 +282,14 @@ class VoiceConnection:
             if report:
                 await self.send(CallReportMessage(id=cid, status="error"))
 
-    async def open(self, session_id: str | None = None, actor_name: str | None = None) -> None:
+    async def open(self, session_id: str | None = None, actor_name: str | None = None, mode: str | None = None) -> None:
         conv = conversations.get(session_id or "") or Conversation(id=session_id or str(uuid.uuid4()))
         if actor_name:
             conv.actor_name = actor_name
         conversations[conv.id] = self.conversation = conv
+        if mode and mode != conv.mode:  # switching between the agent and the copilot: a new call
+            self.end_call(report=False)
+            conv.mode = mode
         if conv.call is None:
             conv.call = self.new_call(conv)
         llm = get_llm_client()
@@ -280,6 +312,24 @@ class VoiceConnection:
             with suppress(asyncio.CancelledError):
                 await self.turn
         self.turn = None
+
+    # ── copilot mode: one sentence of the client or of Leïla ──
+
+    async def copilot_line(self, conv: Conversation, speaker: str, text: str | None = None, utterance: Utterance | None = None) -> None:
+        try:
+            if utterance is not None:
+                text = await utterance.text()
+            heard = (text or "").strip()
+            if not heard:
+                return
+            await self.send(TranscriptMessage(text=heard, final=True, track="leila" if speaker == "leila" else "caller"))
+            if isinstance(conv.call, CopilotSession):
+                await conv.call.line(speaker, heard)
+        except Exception as e:
+            await self.send(VoiceErrorMessage(message=str(e) or type(e).__name__))
+        finally:
+            if utterance:
+                utterance.cancel()
 
     # ── one turn ──
 

@@ -31,6 +31,7 @@ from .voice import (
     AudioEndMessage,
     AudioStartMessage,
     CallReportMessage,
+    CopilotConfirmMessage,
     HangupMessage,
     OrchestraMessage,
     ReadyMessage,

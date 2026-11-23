@@ -20,7 +20,7 @@ from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass
 
-from app.agent import run_agent, sanitize_history
+from app.agent import jev, run_agent, sanitize_history
 from app.agent.caller import CallerProfile, load_caller
 from app.agent.prompts import build_system_prompt
 from app.clients import LLMClient, LLMRequest, LLMUsage, get_llm_client
@@ -111,10 +111,12 @@ class CallSession:
             self.cur.setdefault("speechEndMs", self.state.now())
 
     async def warm(self) -> None:
-        """Call start: write the system prompt + tools into the provider's prompt cache, so the first real turn reads it."""
+        """Call start: write the system prompt + tools into the provider's prompt cache, so the first real turn reads it,
+        and open Jev's connection (the Réflexe's first « oui » then reads in ≈130 ms, not ≈950 ms)."""
         st = self.state
         if not self.side:
             return
+        jev_warm = asyncio.create_task(jev.warm())
         try:
             async with st.span("voice", "préchauffage"):
                 system = await build_system_prompt("voice", st.actor_name)
@@ -124,6 +126,7 @@ class CallSession:
                         st.add_usage("warmup", self.llm.model, ev)
         except Exception as e:
             print(f"[orchestra] warm-up: {type(e).__name__}: {e}", flush=True)
+        await jev_warm
 
     # ── one turn ──
 

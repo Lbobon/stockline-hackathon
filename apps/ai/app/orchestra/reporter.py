@@ -26,6 +26,7 @@ Réponds UNIQUEMENT par un objet JSON :
  "agent_review": {"score": 1-5, "good": ["ce que l'agent a bien fait"], "improve": ["ce qu'il aurait dû faire autrement"]},
  "moments": [{"turn": n, "label": "moment clé, 6 mots max"}],
  "tags": ["3 à 6 mots-clés"]}
+Si les tours sont ceux de « Leïla (humaine…) », elle a pris l'appel elle-même : agent_review note alors l'aide des agents (commande tenue, alertes utiles).
 Listes vides si rien. for_leila : seulement ce qui demande une action humaine (pas « rien à faire »)."""
 
 
@@ -40,7 +41,8 @@ def transcript(st: CallState) -> str:
         out.append(f"[{t['n']}] Client : {t.get('caller', '')}")
         if t.get("tools"):
             out.append(f"    (outils de l'agent : {', '.join(t['tools'])})")
-        out.append(f"[{t['n']}] Agent{' (réflexe)' if t.get('path') == 'fast' else ''} : {t.get('agent', '')}")
+        who = "Leïla (humaine, agents en souffleurs)" if t.get("path") == "human" else f"Agent{' (réflexe)' if t.get('path') == 'fast' else ''}"
+        out.append(f"[{t['n']}] {who} : {t.get('agent', '')}")
     return "\n".join(out)
 
 
