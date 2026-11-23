@@ -27,6 +27,7 @@ from app.routers import (
     client_events,
     clients,
     context,
+    dispatch,
     logistics,
     orders,
     pricing,
@@ -106,6 +107,7 @@ for router in [
     shortages.router,
     smart.gates_router,
     smart.retention_router,
+    dispatch.router,
 ]:
     app.include_router(router, responses=ERROR_RESPONSES)
 
