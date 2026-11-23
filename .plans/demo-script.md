@@ -2,6 +2,15 @@
 
 Organizer feedback (Moncef): the proactive part is the most interesting, especially at scale, and it demos well if presented well. **The extra money is what people will watch most.** So every scene ends on a € figure.
 
+**State of `/radar` (from nibbling-cattail, branch loric/radar, not pushed yet):**
+- **Built:**
+  - the map with real road routes and colour-coded deliveries (cost, km, ETAs);
+  - the live call feed;
+  - delivery replay with trucks driving;
+  - offline fallback;
+  - KPIs: Commandes, CA des appels, Gagné grâce aux événements, Tournées km and € saved.
+- **NOT built yet:** the big « € gagnés » number with its 3 sub-lines (it needs the new campaign totals from denis/generic-sim on main), and the « tournées d'avant / optimisées » toggle. The storyboard shows the target. Until those exist, use the KPIs above in the video.
+
 The figures below come from the seed data (Tuesday 24/11, 05:30, deliveries on Wednesday 25/11). Rerun before recording, because they move a little from run to run. Run `make reset` before each take.
 
 ## The video (2 min max, one real flow end to end)
