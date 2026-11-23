@@ -1,4 +1,5 @@
 /** All routes. One page = one folder in src/pages/<name>/index.tsx (default export). */
+import { lazy, Suspense } from "react";
 import { createBrowserRouter } from "react-router-dom";
 import { AppShell } from "./AppShell";
 import { NotFound } from "./NotFound";
@@ -28,6 +29,8 @@ import ContextPage from "@/pages/context";
 import CallsPage from "@/pages/calls";
 import CallDetailPage from "@/pages/call-detail";
 import MorningPage from "@/pages/morning";
+// Radar: map libraries, loaded with the page only.
+const RadarPage = lazy(() => import("@/pages/radar"));
 
 export const router = createBrowserRouter([
   {
@@ -56,6 +59,7 @@ export const router = createBrowserRouter([
       { path: "routes", element: <RoutesPage /> },
       { path: "activity", element: <ActivityPage /> },
       { path: "voice", element: <VoicePage /> },
+      { path: "radar", element: <Suspense fallback={null}><RadarPage /></Suspense> },
       { path: "history", element: <HistoryPage /> },
       { path: "prices", element: <PricesPage /> },
       { path: "groups", element: <GroupsPage /> },
