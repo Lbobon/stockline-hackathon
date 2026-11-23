@@ -68,6 +68,7 @@ class CallState:
     given: set[str] = field(default_factory=set)  # facts already put in front of the main agent
     language: str = "fr"
     register: str = "vous"  # tu | vous
+    register_locked: bool = False  # set from the client card (agent/caller.py): the Linguiste keeps it
     order: dict | None = None  # last summary of the order being worked on
     awaiting_yes: str | None = None  # order id the agent just asked to confirm
     turn_no: int = 0
@@ -136,10 +137,21 @@ class CallState:
         if name == "get_client" and result.get("id"):
             self.client = {"id": result["id"], "name": result.get("name")}
             self.candidates = []
+            self.lock_register_from_card()
         elif result.get("lines") is not None and result.get("id", "").startswith("ord_"):
             self.order = result
             if not self.client and args.get("clientId"):
                 self.client = {"id": args["clientId"], "name": result.get("client")}
+                self.lock_register_from_card()
+
+    def lock_register_from_card(self) -> None:
+        """The client card says tu or vous (agent/caller.py): adopt it now and lock it, so the Linguiste doesn't flip it
+        on a sentence like « il vous reste… » (vous = the company, not the person)."""
+        from app.agent.caller import load_caller
+
+        card = load_caller(self.client["id"]) if self.client and self.client.get("id") else None
+        if card and card.tu is not None and not self.register_locked:
+            self.register, self.register_locked = ("tu" if card.tu else "vous"), True
 
 
 async def run_tool(state: CallState, agent: str, tools: dict[str, Tool], name: str, args: dict, actor_name: str | None = None) -> Any:

@@ -127,6 +127,8 @@ class Scout:
         st = self.state
         lang = str(ex.get("language") or "fr").lower()[:2]
         reg = ex.get("register") if ex.get("register") in ("tu", "vous") else st.register
+        if st.register_locked:  # the client card says tu / vous: it wins over how this sentence sounded
+            reg = st.register
         if lang == st.language and reg == st.register:
             return
         async with st.span("linguist", "adaptation", f"{LANG_NAMES.get(lang, lang)} · {'tutoiement' if reg == 'tu' else 'vouvoiement'}"):

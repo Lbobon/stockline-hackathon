@@ -47,6 +47,7 @@ async def run_agent(
     mode: ChatMode = "chat",  # command = single turn, act-first
     actor_name: str | None = None,
     max_steps: int | None = None,
+    caller_style: str | None = None,  # voice: how to talk to the identified caller (agent/caller.py)
 ) -> AsyncIterator[ChatStreamEvent]:
     started = time.perf_counter()
     actor = "ai_chat" if mode == "chat" else "voice_agent"
@@ -55,6 +56,8 @@ async def run_agent(
 
     try:
         system = await build_system_prompt(mode, actor_name)
+        if caller_style:  # last, so the cached prefix stays the same
+            system = f"{system}\n\n{caller_style}"
         request = LLMRequest(system=system, messages=messages, tools=[t.info for t in tools])
         said_something = False
 
