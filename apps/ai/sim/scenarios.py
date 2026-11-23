@@ -33,6 +33,10 @@ class Scenario:
     # ERP writes applied after a reset, before the call (method, path, body). A scenario with a setup changes shared
     # data (stock), so the runner plays it alone, after the parallel round, on a freshly reset ERP.
     setup: list[tuple[str, str, dict]] = field(default_factory=list)
+    # Radar call (Radar de demande): the agent calls this client before they order, from their forecast row
+    # (GET /api/radar/forecast?date=radar_date) through agent/radar_brief.brief.
+    radar_client_id: str | None = None
+    radar_date: str = "2026-11-25"
 
 
 # ── check helpers ────────────────────────────────────────────────────────────────────────────────────────────
@@ -404,5 +408,63 @@ SCENARIOS: list[Scenario] = [
         tags=["sortant", "rupture", "commande"],
         outbound_order_id="ord_029586",
         setup=[("POST", "/api/stock/adjust", {"productId": "prd_0028", "qty": 100, "reason": "adjustment"})],
+    ),
+    # ── Radar de demande: the agent calls a client BEFORE they order, from their forecast row for Wednesday 25/11
+    # (agent/radar_brief.py). Event boosts: the OM–PSG match for snacks, the weekend weddings for caterers.
+    Scenario(
+        id="radar_match_snack",
+        title="Radar : le snack avant le match OM–PSG",
+        client_id="cli_0011",
+        persona="c0011-antalya-kebab.md",
+        goal=(
+            "C'est Médina Viandes qui t'appelle, tu ne t'y attendais pas. On te propose ta commande de demain avant que tu "
+            "appelles, avec plus de broches pour le match. Tu es plutôt content, tu demandes combien de broches exactement, "
+            "tu en enlèves une (« mets-en une de moins »), et tu valides le reste comme d'habitude."
+        ),
+        expect=(
+            "Parler en premier : assistant vocal IA de Médina Viandes ; raison de l'appel en une phrase (il commande presque "
+            "tous les mercredis, et le match OM–PSG demain soir) ; 2 ou 3 produits avec quantité, pas la liste entière ; une "
+            "question fermée. Appliquer le changement (une broche de moins), créer la commande pour le 25/11 avec son panier, "
+            "récapitulatif court, finalize_order après son oui. Pas d'invention (prix = ceux du panier, pas d'heure promise)."
+        ),
+        checks=[writes_only_for("cli_0011"), called("create_draft_order"), confirmed()],
+        tags=["radar", "sortant", "commande"],
+        radar_client_id="cli_0011",
+    ),
+    Scenario(
+        id="radar_upsell_mariages",
+        title="Radar : le traiteur et les mariages du week-end",
+        client_id="cli_0095",
+        persona="c0095-receptions-agnes.md",
+        goal=(
+            "C'est Médina Viandes qui t'appelle. Tu as déjà passé ta commande pour demain. On te propose d'ajouter des "
+            "agneaux entiers et du gigot pour tes mariages de samedi. Tu prends les agneaux entiers mais pas le gigot "
+            "(« le gigot j'en ai assez »). Tu demandes si c'est bien ajouté à ta commande d'origine."
+        ),
+        expect=(
+            "Parler en premier (assistant vocal IA de Médina Viandes) ; ne pas lui reproposer sa commande, seulement l'ajout "
+            "lié aux mariages. Ajouter les carcasses à la commande existante (add_order_line), pas le gigot, sans créer de "
+            "nouvelle commande ; dire que c'est ajouté à sa commande de demain."
+        ),
+        checks=[writes_only_for("cli_0095"), called("add_order_line"), not_called("create_draft_order"), order_qty_on("ord_029521", "prd_0004", 78, 78)],  # gigot: 78 kg already ordered, nothing added
+        tags=["radar", "sortant", "commande"],
+        radar_client_id="cli_0095",
+    ),
+    Scenario(
+        id="radar_refus",
+        title="Radar : le boucher qui dit non",
+        client_id="cli_0042",
+        persona="c0042-boucherie-al-amana.md",
+        goal=(
+            "C'est Médina Viandes qui t'appelle pour ta commande de demain. Tu n'as besoin de rien cette semaine "
+            "(« non merci, j'ai encore du stock, je vous appelle si besoin »). Si on insiste, tu t'agaces."
+        ),
+        expect=(
+            "Parler en premier (assistant vocal IA de Médina Viandes), proposer brièvement. Au non : remercier et terminer "
+            "poliment, sans insister ni reproposer, sans créer de commande."
+        ),
+        checks=[writes_only_for("cli_0042"), not_called("create_draft_order"), not_called("finalize_order")],
+        tags=["radar", "sortant"],
+        radar_client_id="cli_0042",
     ),
 ]

@@ -1,6 +1,6 @@
 """The hidden first turn of a radar call: who the agent calls and what it proposes.
 
-fuzzy-zephyr is writing the tuned version in app/agent/radar_brief.py (`brief(row) -> str`); when it exists it is used,
+fuzzy-zephyr is writing the tuned version in app/agent/radar_brief.py (`brief(row, date) -> str`); when it exists it is used,
 else this default.
 """
 
@@ -41,6 +41,6 @@ def brief_for(row: dict, date: str) -> str:
     try:
         from app.agent.radar_brief import brief  # fuzzy-zephyr's tuned brief, when it lands
 
-        return brief(row)
+        return brief(row, date)
     except ImportError:
         return default_brief(row, date)
