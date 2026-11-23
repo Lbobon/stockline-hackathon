@@ -38,6 +38,7 @@ from pathlib import Path
 import httpx
 
 from app.agent import run_agent
+from app.agent.outbound import shortage_brief
 from app.clients import LLMRequest, LLMText, LLMUsage
 from app.clients.factory import make_llm_client
 from app.config import REPO_ROOT, LLMSettings, settings
@@ -55,6 +56,13 @@ PERSONAS = REPO_ROOT / "data" / "context" / "clients"
 RUNS = Path(__file__).parent / "runs"
 MAX_TURNS = 12
 END = "[FIN]"
+PICK_UP = "(La ligne décroche : l'agent attend que vous parliez. À vous.)"
+OUTBOUND_TURN = "(appel sortant : l'agent parle en premier)"
+
+
+def ringing(opening: str) -> str:
+    """What the caller model hears first on an outbound call: Médina calls, the agent's opening line."""
+    return f"(Ton téléphone sonne, tu décroches : c'est Médina Viandes qui t'appelle.)\n\nL'agent : {opening}"
 
 # $ per million tokens (Anthropic list prices, 2026-11). Cache write = 1.25 × input (5-min cache).
 PRICES = {  # model: (input, output, cache read)
@@ -142,9 +150,30 @@ async def simulate(sc: Scenario, caller_llm, agent_llm) -> Trace:
     trace = Trace()
     persona = (PERSONAS / sc.persona).read_text(encoding="utf-8")
     caller_system = CALLER_RULES.format(persona=persona, goal=sc.goal, end=END)
-    caller_view: list[ChatMessage] = [ChatMessage(role="user", content="(La ligne décroche : l'agent attend que vous parliez. À vous.)")]
+    caller_view: list[ChatMessage] = [ChatMessage(role="user", content=PICK_UP)]
     agent_history: list[ChatMessage] = []
     tools = all_tools()
+    if sc.outbound_order_id:  # the agent calls and speaks first, from the hidden brief (agent/outbound.py)
+        opening = Turn(caller=OUTBOUND_TURN)
+        trace.turns.append(opening)
+        agent_history.append(ChatMessage(role="user", content=await shortage_brief(sc.outbound_order_id)))
+        started, by_id = time.perf_counter(), {}
+        async for ev in run_agent(agent_history, llm=agent_llm, tools=tools, mode="voice", actor_name="Agent vocal"):
+            match ev:
+                case TextEvent(delta=delta):
+                    opening.first_text_ms = opening.first_text_ms or int((time.perf_counter() - started) * 1000)
+                    opening.agent += delta
+                case ToolCallEvent(call=call):
+                    by_id[call.id] = {"name": call.name, "args": call.arguments}
+                    opening.tools.append(by_id[call.id])
+                case ToolResultEvent(call_id=cid, ok=ok, ms=ms, result=result):
+                    by_id.get(cid, {}).update(ok=ok, ms=ms, result=result)
+                case DoneEvent(usage=usage):
+                    if usage:
+                        add_usage(trace.usage, usage)
+        opening.agent = opening.agent.strip()
+        opening.total_ms = int((time.perf_counter() - started) * 1000)
+        caller_view = [ChatMessage(role="user", content=ringing(opening.agent))]
 
     for _ in range(MAX_TURNS):
         said = await complete(caller_llm, caller_system, caller_view, trace.sim_usage, 2000)
@@ -194,9 +223,23 @@ async def simulate_orchestra(sc: Scenario, caller_llm, agent_llm, rate: float, r
     trace = Trace()
     persona = (PERSONAS / sc.persona).read_text(encoding="utf-8")
     caller_system = CALLER_RULES.format(persona=persona, goal=sc.goal, end=END)
-    caller_view: list[ChatMessage] = [ChatMessage(role="user", content="(La ligne décroche : l'agent attend que vous parliez. À vous.)")]
+    caller_view: list[ChatMessage] = [ChatMessage(role="user", content=PICK_UP)]
     session = CallSession(actor_name="Agent vocal", llm=agent_llm)
     warm = asyncio.create_task(session.warm())  # the line rings: prompt cache written meanwhile
+    if sc.outbound_order_id:  # the agent calls and speaks first, as WS /voice does for ?outbound=<orderId>
+        await warm
+        opening = Turn(caller=OUTBOUND_TURN)
+        trace.turns.append(opening)
+        started = time.perf_counter()
+        async for ev in session.turn(await shortage_brief(sc.outbound_order_id)):
+            if isinstance(ev, TextEvent):
+                opening.first_text_ms = opening.first_text_ms or int((time.perf_counter() - started) * 1000)
+                opening.agent += ev.delta
+            elif isinstance(ev, ErrorEvent):
+                opening.error = ev.message
+        opening.agent = opening.agent.strip()
+        opening.total_ms = int((time.perf_counter() - started) * 1000)
+        caller_view = [ChatMessage(role="user", content=ringing(opening.agent))]
 
     for i in range(MAX_TURNS):
         said = await complete(caller_llm, caller_system, caller_view, trace.sim_usage, 2000)
@@ -482,11 +525,20 @@ async def main() -> None:
     # parallel safely, but repeat 2 must not find the order repeat 1 just took (« elle est déjà confirmée »).
     sem = asyncio.Semaphore(a.concurrency)
     recs: list[dict] = []
+    shared, alone = [s for s in picked if not s.setup], [s for s in picked if s.setup]
     for r in range(a.repeat):
         if r and not a.no_reset:
             async with httpx.AsyncClient(timeout=30) as http:
                 (await http.post(f"{erp}/api/admin/reset")).raise_for_status()
-        recs += await asyncio.gather(*(run_one(s, r + 1, sem, models) for s in picked))
+        recs += await asyncio.gather(*(run_one(s, r + 1, sem, models) for s in shared))
+        # A scenario that changes shared data (its setup) runs alone, on a freshly reset ERP, after the parallel round
+        for s in alone:
+            async with httpx.AsyncClient(timeout=30) as http:
+                if not a.no_reset:
+                    (await http.post(f"{erp}/api/admin/reset")).raise_for_status()
+                for method, path, body in s.setup:
+                    (await http.request(method, f"{erp}{path}", json=body, headers={"x-actor": "user"})).raise_for_status()
+            recs.append(await run_one(s, r + 1, sem, models))
     with (out / "calls.jsonl").open("w", encoding="utf-8") as f:
         for r in recs:
             f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")

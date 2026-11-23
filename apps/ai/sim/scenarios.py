@@ -27,6 +27,12 @@ class Scenario:
     expect: str  # what a good agent does, for the judge
     checks: list[Check] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    # Outbound shortage call (Ce matin → « Lancer les appels »): the agent calls this order's client and speaks first,
+    # from the same hidden brief as WS /voice (agent/outbound.shortage_brief). The caller model then answers.
+    outbound_order_id: str | None = None
+    # ERP writes applied after a reset, before the call (method, path, body). A scenario with a setup changes shared
+    # data (stock), so the runner plays it alone, after the parallel round, on a freshly reset ERP.
+    setup: list[tuple[str, str, dict]] = field(default_factory=list)
 
 
 # ── check helpers ────────────────────────────────────────────────────────────────────────────────────────────
@@ -333,5 +339,70 @@ SCENARIOS: list[Scenario] = [
         ),
         checks=[identified("cli_0016"), writes_only_for("cli_0016"), answers_in(r"\b(the|your|you|order|delivery|kilos?|price|thanks|thank)\b")],
         tags=["langue", "commande"],
+    ),
+    # ── Outbound shortage calls: the agent calls the client and speaks first (the demo's « Lancer les appels »).
+    # Today's seed: veal escalope (prd_0020) is out and its usual substitute, turkey escalope (prd_0028), is oversold,
+    # so neither client can be offered a swap: the agent explains, then follows the retention ladder.
+    Scenario(
+        id="sortant_refus",
+        title="Appel sortant : la cantine qui refuse toute substitution",
+        client_id="cli_0041",
+        persona="c0041-centre-social-louise-michel.md",
+        goal=(
+            "C'est Médina Viandes qui t'appelle, tu décroches. Il te manque l'escalope de veau commandée pour la cantine "
+            "de demain : tu refuses tout remplacement (menus validés, règle de la cantine), tu demandes ce qu'on peut faire "
+            "d'autre. Tu acceptes une solution raisonnable (livraison plus tard, quantité partielle) si on te la propose "
+            "clairement, sinon tu demandes qu'on te rappelle."
+        ),
+        expect=(
+            "Parler en premier : se présenter (Médina Viandes, agent IA), dire la rupture d'escalope de veau sur la commande "
+            "de M. Boyer (36,5 kg), en le vouvoyant (« Monsieur Boyer »). Ne JAMAIS substituer sans accord : pas de remplaçant "
+            "en stock de toute façon. Au refus, appeler retention_offer et proposer ses offres une à la fois, sans inventer de "
+            "date de réapprovisionnement. Rien de confirmé ni de remplacé sans accord explicite."
+        ),
+        checks=[writes_only_for("cli_0041"), not_called("apply_substitution"), called("retention_offer")],
+        tags=["sortant", "rupture"],
+        outbound_order_id="ord_029511",
+    ),
+    Scenario(
+        id="sortant_allo",
+        title="Appel sortant : « Allô ? J'entends mal »",
+        client_id="cli_0066",
+        persona="c0066-chez-karine-cuisine-marocaine.md",
+        goal=(
+            "C'est Médina Viandes qui t'appelle pendant le coup de feu, il y a du bruit. Ta PREMIÈRE réplique est exactement : "
+            "« Allô ? Pardon, j'entends rien, c'est qui ? ». Ensuite tu écoutes ce qu'on te dit sur l'escalope de veau "
+            "manquante. Tu acceptes un équivalent si on t'en propose un ; sinon tu demandes ce qui est possible et tu "
+            "acceptes une solution simple."
+        ),
+        expect=(
+            "Parler en premier. Quand le client dit qu'il n'a pas entendu, se re-présenter (Médina Viandes) et répéter l'essentiel "
+            "en une ou deux phrases courtes, sans répéter mot pour mot un long paragraphe. Dire qu'il manque 9,5 kg d'escalope "
+            "de veau et qu'il n'y a pas d'escalope de dinde en stock pour la remplacer ce matin ; proposer une solution sans "
+            "inventer de stock ni de date. Ne rien substituer sans remplaçant disponible."
+        ),
+        checks=[writes_only_for("cli_0066"), not_called("apply_substitution")],
+        tags=["sortant", "rupture", "naturel"],
+        outbound_order_id="ord_029586",
+    ),
+    Scenario(
+        id="sortant_accepte",
+        title="Appel sortant : le client accepte le remplaçant",
+        client_id="cli_0066",
+        persona="c0066-chez-karine-cuisine-marocaine.md",
+        goal=(
+            "C'est Médina Viandes qui t'appelle. On t'annonce qu'il manque l'escalope de veau et on te propose de l'escalope "
+            "de dinde à la place : tu demandes le prix au kilo, puis tu acceptes (« vas-y, mets la dinde »). Tu raccroches "
+            "vite, c'est le coup de feu."
+        ),
+        expect=(
+            "Parler en premier : assistant vocal IA de Médina Viandes, 9,5 kg d'escalope de veau manquants pour la livraison "
+            "de demain, proposer l'escalope de dinde (en stock) avec son prix. Au oui : apply_substitution sur la commande "
+            "(la ligne veau remplacée par la dinde), confirmer en une phrase, sans rien changer d'autre."
+        ),
+        checks=[writes_only_for("cli_0066"), called("apply_substitution"), order_lacks("prd_0020"), order_qty("prd_0028", 9.5, 9.5)],
+        tags=["sortant", "rupture", "commande"],
+        outbound_order_id="ord_029586",
+        setup=[("POST", "/api/stock/adjust", {"productId": "prd_0028", "qty": 100, "reason": "adjustment"})],
     ),
 ]
