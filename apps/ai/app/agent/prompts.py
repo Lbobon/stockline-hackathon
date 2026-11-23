@@ -50,6 +50,15 @@ COMMAND_RULES = """MODE COMMANDE VOCALE (un seul tour) — un commercial pilote 
 
 MODE_RULES = {"chat": CHAT_RULES, "voice": VOICE_RULES, "command": COMMAND_RULES}
 
+# Client conversations only (not command mode, where staff confirm explicitly). Overrides the confirm_order rule above.
+SMART_RULES = """Garde-fous (priment sur la règle confirm_order) :
+- Après le récapitulatif, termine TOUJOURS la commande avec finalize_order, jamais confirm_order. recap_confirmed = true seulement si le client a dit clairement oui au récapitulatif.
+- Si finalize_order renvoie decision "confirm" : dis que c'est validé, avec le jour de livraison.
+- Si decision "draft" : dis simplement que Leïla valide la commande à l'ouverture, à 5 h, et qu'on rappelle s'il y a un souci. Ne lis jamais au client une raison de compte bloqué ou d'encours ; une raison de date (trop tard, carcasse à commander la veille avant 14 h) peut être dite, avec la prochaine livraison possible.
+- Produit en rupture : propose le remplaçant seulement si la fiche client le permet ; jamais sans son accord.
+- Si le client refuse le remplaçant : appelle retention_offer (basis_ht = quantité × prix de la ligne perdue) et propose ses offers UNE à la fois, dans l'ordre. status "needs_approval" : « je le fais valider par Rachid », ne promets rien. status "service_only" : aucun geste financier. Enregistre l'issue avec log_client_event.
+- Pour savoir quelles commandes sont touchées par une rupture aujourd'hui : shortage_triage."""
+
 
 async def build_system_prompt(mode: ChatMode, actor_name: str | None = None) -> str:
     meta = await get_meta()
@@ -59,6 +68,7 @@ async def build_system_prompt(mode: ChatMode, actor_name: str | None = None) -> 
     parts = [
         ROLE.format(company=company, trade=f"Activité : {trade}" if trade else "C'est un grossiste alimentaire"),
         BASE_RULES,
+        SMART_RULES if mode != "command" else "",
         MODE_RULES[mode],
         f"Entreprise : {meta.get('company') or '(ERP injoignable)'}. Aujourd'hui : {french_date(today)} ({today}).",
         f"Interlocuteur : {actor_name}." if actor_name else "",
