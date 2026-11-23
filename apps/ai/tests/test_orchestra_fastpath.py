@@ -1,5 +1,5 @@
 """Réflexe (orchestra/fastpath.py): a plain « oui » to the read-back goes through finalize_order (the ERP's gates), never
-confirm_order; a draft is announced as « Leïla valide à 5 h » without its reason. Greffier sees those outcomes."""
+confirm_order; a draft is handed to the big model with the reasons. Greffier sees those outcomes."""
 
 import asyncio
 
@@ -43,12 +43,10 @@ def test_yes_goes_through_finalize_not_confirm():
     assert st.order["status"] == "confirmed"  # the shared view unwraps {decision, reasons, order}
 
 
-def test_draft_says_leila_and_hides_the_reason():
-    _, out, _, _ = run("draft", "draft", ["Encours dépassé de 1 200 €"])
-    assert out.kind == "draft"
-    assert "Leïla" in out.text and "5 h" in out.text
-    assert "ncours" not in out.text and "1 200" not in out.text
-    assert "Encours dépassé" in out.note  # the main agent still knows why
+def test_draft_is_finalized_then_explained_by_the_big_model():
+    st, out, finalize, _ = run("draft", "draft", ["Encours dépassé"])
+    assert out is None and len(finalize.calls) == 1  # finalized once; the voice agent explains it with tact
+    assert "Encours dépassé" in st.facts["fast:ord_1"] and "refinalise pas" in st.facts["fast:ord_1"]
 
 
 def test_error_hands_over_to_the_big_model():

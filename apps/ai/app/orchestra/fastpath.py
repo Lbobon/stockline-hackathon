@@ -4,7 +4,8 @@ Réflexe (fast path): the turns that need no thinking, answered without the big 
 - « Oui, c'est bon » right after the agent read back a draft order → finalize_order (the ERP's gates confirm it, or keep
   it as a draft for Leïla) + a spoken sentence built from the answer (≈0.1 s instead of 3–5 s). Never confirm_order.
   Only when it is safe: a plain yes, no number, no « mais / plutôt / ajoute », a draft without blocking alerts, a French
-  caller. A draft is announced as « Leïla valide à 5 h », never with its reason; an error or alert goes to the big model.
+  caller. A draft (gates fired) or an error goes to the big model, told what finalize_order returned: the reason must
+  be said with tact (SMART_RULES), which a template can't do.
 - « Non merci, c'est tout, au revoir » once the order is finalized → a goodbye.
 Anything else → None: the main agent handles the turn.
 """
@@ -105,27 +106,27 @@ async def try_fast(state: CallState, tools: dict[str, Tool], heard: str, actor_n
             r = await run_tool(state, "fast", tools, "finalize_order", {"orderId": order_id, "recapConfirmed": True}, actor_name)
         o = (r or {}).get("order") or {}
         decision = (r or {}).get("decision")
-        confirmed = decision == "confirm" and o.get("status") == "confirmed" and not alerts(o)
-        draft = decision == "draft" and o.get("status") == "draft"
-        if not (confirmed or draft):
+        if decision == "draft" and o.get("status") == "draft":
+            # Gates kept it for Leïla: the reason must be said with tact (SMART_RULES), so the big model speaks.
+            reasons = "; ".join((r or {}).get("reasons") or []) or "non précisées"
+            state.facts[f"fast:{order_id}"] = (
+                f"Sur ce oui, le système a déjà appelé finalize_order({order_id}, recap_confirmed=true) : decision draft, "
+                f"raisons : {reasons}. Ne la refinalise pas ; annonce-le au client selon les garde-fous (decision draft)."
+            )
+            return None
+        if not (decision == "confirm" and o.get("status") == "confirmed" and not alerts(o)):
             # an alert or an error: the big model explains it, told what just happened
             state.facts[f"fast:{order_id}"] = (
                 f"Sur ce oui, le système a appelé finalize_order({order_id}) → {r if r else 'erreur'}. Annonce le résultat et les alertes."
             )
             return None
-        if confirmed:
-            day, total = spoken_day(o.get("deliveryDate")), spoken_euros(o.get("totalHt"))
-            text = f"C'est confirmé{f', livraison {day}' if day else ''}{f' pour {total}' if total else ''}."
-            note = f"[Note interne : sur ce oui, finalize_order a confirmé la commande {o.get('number')} ({o['id']}) : statut confirmé, livraison {o.get('deliveryDate')}, total {o.get('totalHt')} € HT. Ne la refinalise pas.]"
-        else:
-            # Gates kept it as a draft for Leïla. Never say why on the phone (credit, blocked account): SMART_RULES.
-            text = f"Très bien, c'est enregistré : Leïla valide la commande à l'ouverture, à 5 h, et on {'te' if you == 'toi' else 'vous'} rappelle s'il y a un souci."
-            reasons = "; ".join((r or {}).get("reasons") or []) or "non précisées"
-            note = f"[Note interne : sur ce oui, finalize_order a laissé la commande {o.get('number')} ({o.get('id')}) en brouillon pour Leïla (raisons : {reasons}). Le client sait que Leïla valide à 5 h. Ne lui lis pas les raisons de compte ou d'encours ; ne la refinalise pas.]"
+        day, total = spoken_day(o.get("deliveryDate")), spoken_euros(o.get("totalHt"))
+        text = f"C'est confirmé{f', livraison {day}' if day else ''}{f' pour {total}' if total else ''}."
+        note = f"[Note interne : sur ce oui, finalize_order a confirmé la commande {o.get('number')} ({o['id']}) : statut confirmé, livraison {o.get('deliveryDate')}, total {o.get('totalHt')} € HT. Ne la refinalise pas.]"
         if verdict.get("message"):
             text += f" Et je transmets {'ton' if you == 'toi' else 'votre'} message à l'équipe."
         text += f" Merci à {you}, bonne journée !" if verdict.get("goodbye") else f" Je peux faire autre chose pour {you} ?"
-        return FastAnswer(text, note, "confirm" if confirmed else "draft")
+        return FastAnswer(text, note, "confirm")
 
     finalized = any(c["name"] == "finalize_order" and c["ok"] for c in state.tool_calls)  # confirmed, or a draft left for Leïla
     done = state.order and (state.order.get("status") == "confirmed" or finalized)
