@@ -22,6 +22,7 @@ class StartMessage(WireModel):
     session_id: str | None = None
     actor_name: str | None = None
     outbound_order_id: str | None = None  # outbound shortage call: the agent calls this order's client and speaks first
+    mode: Literal["agent", "copilot"] = "agent"  # copilot: Leïla speaks, the agents listen and whisper (orchestra/copilot.py)
 
 
 class AudioStartMessage(WireModel):
@@ -30,6 +31,7 @@ class AudioStartMessage(WireModel):
     type: Literal["audio_start"] = "audio_start"
     mime: str
     hint: str | None = None  # optional STT hint (vocabulary; mock STT: the transcript), like x-mock-text on POST /command
+    speaker: Literal["client", "leila"] = "client"  # copilot mode: whose voice this is (agent mode: always the caller)
 
 
 class AudioEndMessage(WireModel):
@@ -44,6 +46,7 @@ class TextMessage(WireModel):
 
     type: Literal["text"] = "text"
     text: str
+    speaker: Literal["client", "leila"] = "client"
 
 
 class ResetMessage(WireModel):
@@ -56,8 +59,14 @@ class HangupMessage(WireModel):
     type: Literal["hangup"] = "hangup"
 
 
+class CopilotConfirmMessage(WireModel):
+    """Copilot mode: Leïla clicks « Valider la commande » → finalize_order (the ERP's gates), copilot_order follows."""
+
+    type: Literal["copilot_confirm"] = "copilot_confirm"
+
+
 VoiceClientMessage = Annotated[
-    Union[StartMessage, AudioStartMessage, AudioEndMessage, TextMessage, ResetMessage, HangupMessage],
+    Union[StartMessage, AudioStartMessage, AudioEndMessage, TextMessage, ResetMessage, HangupMessage, CopilotConfirmMessage],
     Field(discriminator="type"),
 ]
 
@@ -78,7 +87,7 @@ class TranscriptMessage(WireModel):
     Then once final=true with the definitive text, which the agent answers."""
 
     type: Literal["transcript"] = "transcript"
-    track: Literal["caller"] = "caller"
+    track: Literal["caller", "leila"] = "caller"  # leila: copilot mode, Leïla's own voice
     text: str
     final: bool
     stable: str | None = None
@@ -119,7 +128,9 @@ class AgentDoneMessage(WireModel):
 class OrchestraMessage(WireModel):
     """What the agents around the voice agent are doing (app/orchestra), for the live view: `event` is one of
     {type: "agent_activity", agent, label, task, status: start|done|error, ms?}, {type: "call_profile", language, register},
-    {type: "scribe_note", label}, {type: "filler", text}, {type: "turn", n, path: llm|fast, firstSoundMs, firstWordMs, prefetched}."""
+    {type: "scribe_note", label}, {type: "filler", text}, {type: "turn", n, path: llm|fast, firstSoundMs, firstWordMs, prefetched};
+    copilot mode: {type: "copilot_order", order, gate, final}, {type: "whisper", key, level, title, body, source},
+    {type: "whisper_clear", keys}, {type: "copilot_mood", score, label}."""
 
     type: Literal["orchestra"] = "orchestra"
     event: dict[str, Any]

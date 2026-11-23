@@ -55,12 +55,18 @@ export type ChatStreamEvent =
 // ── Voice (push-to-talk, two tracks: the human "caller" and the agent) ──
 
 export type VoiceClientMessage =
-  | { type: "start"; sessionId?: string; actorName?: string; outboundOrderId?: string } // opens a conversation (outboundOrderId: the agent calls that order's client and speaks first)
-  | { type: "audio_start"; mime: string; hint?: string } // caller pressed space (hint: optional STT vocabulary; mock STT returns it)
+  | { type: "start"; sessionId?: string; actorName?: string; outboundOrderId?: string; mode?: VoiceMode } // opens a conversation (outboundOrderId: the agent calls that order's client and speaks first)
+  | { type: "audio_start"; mime: string; hint?: string; speaker?: CopilotSpeaker } // caller pressed space (hint: optional STT vocabulary; mock STT returns it)
   | { type: "audio_end" } // caller released space; binary frames sent in between (every 100–250 ms) are the utterance, streamed to the STT as they arrive
-  | { type: "text"; text: string } // typed instead of spoken (debug)
+  | { type: "text"; text: string; speaker?: CopilotSpeaker } // typed instead of spoken (debug)
   | { type: "reset" }
-  | { type: "hangup" }; // the call ends: the Rapporteur writes the report (call_report follows)
+  | { type: "hangup" } // the call ends: the Rapporteur writes the report (call_report follows)
+  | { type: "copilot_confirm" }; // copilot mode: Leïla clicks « Valider la commande » → finalize_order (the ERP's gates)
+
+/** agent: the voice agent answers the caller · copilot: Leïla speaks, the agents listen and whisper (orchestra/copilot.py). */
+export type VoiceMode = "agent" | "copilot";
+/** Copilot mode: whose voice a recording / typed line is. */
+export type CopilotSpeaker = "client" | "leila";
 
 export interface TurnTimings {
   sttMs?: number;
@@ -74,7 +80,7 @@ export type VoiceServerMessage =
   | { type: "ready"; sessionId: string; stt: string; tts: string; llm: string }
   // While the caller speaks (streaming STT): final=false, the whole text heard so far, resent as words are recognised;
   // `stable` = its leading part made of final words (won't change). Then once final=true: what the agent answers.
-  | { type: "transcript"; track: "caller"; text: string; final: boolean; stable?: string }
+  | { type: "transcript"; track: "caller" | "leila"; text: string; final: boolean; stable?: string }
   | { type: "agent_text"; delta: string }
   | { type: "agent_tool"; name: string; ok?: boolean; ms?: number; args?: Record<string, unknown> }
   | { type: "agent_audio_start"; mime: string } // binary frames follow
@@ -85,14 +91,33 @@ export type VoiceServerMessage =
   | { type: "error"; message: string };
 
 /** Agents of a call (app/orchestra): voice, scout (Éclaireur), fast (Réflexe), scribe (Greffier), linguist, reporter. */
-export type OrchestraAgent = "voice" | "scout" | "fast" | "scribe" | "linguist" | "reporter" | "warmup";
+export type OrchestraAgent = "voice" | "scout" | "fast" | "scribe" | "linguist" | "reporter" | "warmup" | "copilot";
 
 export type OrchestraEvent =
   | { type: "agent_activity"; agent: OrchestraAgent; label: string; task: string; status: "start" | "done" | "error"; ms?: number }
   | { type: "call_profile"; language: string; register: "tu" | "vous" }
   | { type: "scribe_note"; label: string }
   | { type: "filler"; text: string }
-  | { type: "turn"; n: number; path: "llm" | "fast"; firstSoundMs?: number; firstWordMs?: number; prefetched: string[] };
+  | { type: "turn"; n: number; path: "llm" | "fast"; firstSoundMs?: number; firstWordMs?: number; prefetched: string[] }
+  // copilot mode (Souffleur): the order as dictated, kept in the ERP; whispers for Leïla; the client's mood (Jev)
+  | { type: "copilot_order"; order: CopilotOrder | null; gate: { decision: "confirm" | "draft" | "already_confirmed"; reasons: string[] } | null; final: boolean }
+  | { type: "whisper"; key: string; level: WhisperLevel; title: string; body: string; source: string }
+  | { type: "whisper_clear"; keys: string[] }
+  | { type: "copilot_mood"; score: number; label: string };
+
+export type WhisperLevel = "danger" | "warn" | "info" | "tip";
+
+/** summarize_order (apps/ai/app/tools/orders.py): what the copilot keeps in sync with the ERP. */
+export interface CopilotOrder {
+  id: string;
+  number?: string;
+  status: string;
+  client?: string;
+  deliveryDate?: string;
+  totalHt?: number;
+  lines: { lineId: string; productId: string; productName?: string; qty: number; unit?: string; unitPrice?: number; available?: number; note?: string }[];
+  warnings: { code: string; message: string; productId?: string }[];
+}
 
 /**
  * Mime returned by the AI service's mock TTS (no key configured): the bytes are a short silent WAV.

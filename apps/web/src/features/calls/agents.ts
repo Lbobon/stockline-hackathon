@@ -3,9 +3,9 @@
  * validated for colour-blind separation in light and dark). The client and the Rapporteur stay neutral.
  * Used by the live strip on Voix, the Gantt and the transcript of a call report.
  */
-import { AudioLines, Ear, FileText, Languages, NotebookPen, User, Zap, type LucideIcon } from "lucide-react";
+import { AudioLines, Ear, FileText, Languages, MessageSquareQuote, NotebookPen, User, Zap, type LucideIcon } from "lucide-react";
 
-export type AgentKey = "caller" | "voice" | "fast" | "scout" | "scribe" | "linguist" | "reporter";
+export type AgentKey = "caller" | "voice" | "fast" | "scout" | "scribe" | "linguist" | "reporter" | "copilot";
 
 export interface AgentMeta {
   key: AgentKey;
@@ -25,11 +25,15 @@ export const AGENT: Record<AgentKey, AgentMeta> = {
   scout: { key: "scout", label: "Éclaireur", role: "écoute et précharge l'ERP pendant que le client parle", icon: Ear, bg: "bg-agent-scout", soft: "bg-agent-scout/10", text: "text-agent-scout", border: "border-agent-scout/40" },
   scribe: { key: "scribe", label: "Greffier", role: "tient la fiche client en arrière-plan", icon: NotebookPen, bg: "bg-agent-scribe", soft: "bg-agent-scribe/10", text: "text-agent-scribe", border: "border-agent-scribe/40" },
   linguist: { key: "linguist", label: "Linguiste", role: "langue et tutoiement de l'appelant", icon: Languages, bg: "bg-agent-linguist", soft: "bg-agent-linguist/10", text: "text-agent-linguist", border: "border-agent-linguist/40" },
+  // Copilot mode only (Leïla speaks, no voice agent): the Souffleur takes the voice agent's slot and color.
+  copilot: { key: "copilot", label: "Souffleur", role: "tient la commande dictée et souffle à Leïla", icon: MessageSquareQuote, bg: "bg-agent-voice", soft: "bg-agent-voice/10", text: "text-agent-voice", border: "border-agent-voice/40" },
   reporter: { key: "reporter", label: "Rapporteur", role: "écrit le compte rendu", icon: FileText, bg: "bg-muted-foreground/45", soft: "bg-muted-foreground/10", text: "text-muted-foreground", border: "border-muted-foreground/30" },
 };
 
 /** The working agents, in a fixed order (also the order of their colors). */
 export const TEAM: AgentKey[] = ["voice", "fast", "scout", "scribe", "linguist"];
+/** Copilot mode: the agents around Leïla. */
+export const COPILOT_TEAM: AgentKey[] = ["copilot", "scout", "scribe", "linguist"];
 
 export const agentOf = (k: string): AgentMeta => AGENT[(k === "warmup" ? "voice" : k) as AgentKey] ?? AGENT.reporter;
 

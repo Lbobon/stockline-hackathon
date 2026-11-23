@@ -1,5 +1,6 @@
 /**
- * Voix — two modes, switched in the header (?mode=command):
+ * Voix — three modes, switched in the header (?mode=command | copilot):
+ *  - Copilote: Leïla takes the call, the agents listen and whisper (WS /ai/voice in copilot mode), see ./copilot.tsx.
  *  - Appel (conversation): two-track push-to-talk lab on WS /ai/voice (below).
  *  - Commande (un tour): single-turn voice commands on POST /ai/command, see ./command.tsx.
  *
@@ -14,6 +15,7 @@ import { cn } from "@/lib/cn";
 import { Button, Dot, IconButton, Input, Kbd, Page, PageHeader, Spinner, Tabs } from "@/ui";
 import { useVoiceSession, type Activity, type Conn } from "@/features/assistant/useVoiceSession";
 import { CommandMode } from "./command";
+import { CopilotMode } from "./copilot";
 import { LiveActivity } from "./live-activity";
 import { MetricsBar } from "./metrics";
 import { OrchestraStrip, ReportBanner } from "./orchestra";
@@ -26,19 +28,21 @@ const isTypingTarget = (t: EventTarget | null) => {
 
 const STATE_LABEL: Record<Activity, string> = { idle: "Prêt", recording: "Enregistrement", thinking: "L'agent réfléchit", speaking: "L'agent parle" };
 
-type Mode = "call" | "command";
+type Mode = "call" | "copilot" | "command";
 const MODES: { id: Mode; label: string }[] = [
   { id: "call", label: "Appel" },
+  { id: "copilot", label: "Copilote" },
   { id: "command", label: "Commande" },
 ];
 
 export default function VoicePage() {
   const [modeParam, setModeParam] = useUrlState("mode", "", { keepPage: true });
-  const mode: Mode = modeParam === "command" ? "command" : "call";
+  const mode: Mode = modeParam === "command" || modeParam === "copilot" ? modeParam : "call";
   // Two modes = two header tabs: "Appel" (conversation over the WS session) and "Commande" (one stateless turn).
-  const modeSwitch = <Tabs<Mode> value={mode} items={MODES} onChange={(m) => setModeParam(m === "command" ? m : "")} />;
+  const modeSwitch = <Tabs<Mode> value={mode} items={MODES} onChange={(m) => setModeParam(m === "call" ? "" : m)} />;
   // Each mode owns its connection (WS session vs one POST per command): only the visible one is mounted.
-  return mode === "command" ? <CommandMode modeSwitch={modeSwitch} /> : <CallMode modeSwitch={modeSwitch} />;
+  if (mode === "command") return <CommandMode modeSwitch={modeSwitch} />;
+  return mode === "copilot" ? <CopilotMode modeSwitch={modeSwitch} /> : <CallMode modeSwitch={modeSwitch} />;
 }
 
 function CallMode({ modeSwitch }: { modeSwitch: ReactNode }) {

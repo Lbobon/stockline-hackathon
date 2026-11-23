@@ -16,14 +16,15 @@ import { fmtMs } from "./metrics";
 
 const WINDOW_MS = 30_000;
 
-export function OrchestraStrip({ agents, lanes, profile, notes }: {
+export function OrchestraStrip({ agents, lanes, profile, notes, team = TEAM, subtitle = "5 agents en parallèle de l'appel" }: {
   agents: Record<string, AgentLive>; lanes: LaneSpan[]; profile: { language: string; register: "tu" | "vous" }; notes: string[];
+  team?: AgentKey[]; subtitle?: string;
 }) {
   return (
     <div className="shrink-0 border-b border-border">
       <div className="flex h-8 items-center gap-2 px-5">
         <span className={SECTION_LABEL}>Orchestre</span>
-        <span className="hidden text-[11.5px] text-muted-foreground lg:inline">5 agents en parallèle de l'appel</span>
+        <span className="hidden text-[11.5px] text-muted-foreground lg:inline">{subtitle}</span>
         <div className="ml-auto flex min-w-0 items-center gap-3">
           {notes[0] ? (
             <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] animate-fade-in" title="Dernière écriture du Greffier dans la fiche client">
@@ -39,10 +40,10 @@ export function OrchestraStrip({ agents, lanes, profile, notes }: {
           </span>
         </div>
       </div>
-      <div className="grid grid-cols-5 border-t border-border/70">
-        {TEAM.map((k) => <AgentTile key={k} k={k} a={agents[k]} />)}
+      <div className="grid border-t border-border/70" style={{ gridTemplateColumns: `repeat(${team.length}, minmax(0, 1fr))` }}>
+        {team.map((k) => <AgentTile key={k} k={k} a={agents[k]} />)}
       </div>
-      <Lanes lanes={lanes} />
+      <Lanes lanes={lanes} team={team} />
     </div>
   );
 }
@@ -90,7 +91,7 @@ function Equalizer({ cls }: { cls: string }) {
 }
 
 /** The last 30 seconds, one lane per agent; re-rendered 5×/s only while something is on screen. */
-function Lanes({ lanes }: { lanes: LaneSpan[] }) {
+function Lanes({ lanes, team }: { lanes: LaneSpan[]; team: AgentKey[] }) {
   const [now, setNow] = useState(() => Date.now());
   const live = lanes.some((l) => l.end == null || now - l.end < WINDOW_MS);
   useEffect(() => {
@@ -103,7 +104,7 @@ function Lanes({ lanes }: { lanes: LaneSpan[] }) {
   return (
     <div className="border-t border-border/70 px-5 py-2">
       <div className="grid grid-cols-[86px_1fr] items-center gap-x-2 gap-y-[3px]">
-        {TEAM.map((k) => (
+        {team.map((k) => (
           <LaneRow key={k} label={AGENT[k].label} cls={AGENT[k].bg} spans={visible.filter((s) => s.agent === k || (k === "voice" && s.agent === "warmup"))} x={x} now={now} />
         ))}
         <span />
