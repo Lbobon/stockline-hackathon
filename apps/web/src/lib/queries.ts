@@ -119,6 +119,12 @@ export const qk = {
     clientSearch: (p?: EventSearchParams) => ["history", "clients", p ?? {}] as const,
     supplierSearch: (p?: EventSearchParams) => ["history", "suppliers", p ?? {}] as const,
   },
+  /** "Ce matin": shortages and drafts to check (refreshed by order / stock / client changes). */
+  morning: {
+    all: ["morning"] as const,
+    shortages: ["morning", "shortages"] as const,
+    review: ["morning", "review"] as const,
+  },
 };
 
 const clean = <T extends object>(p?: T) =>
@@ -225,6 +231,9 @@ export const useClientEventSearch = (p?: EventSearchParams, enabled = true) =>
 export const useSupplierEventSearch = (p?: EventSearchParams, enabled = true) =>
   useQuery({ queryKey: qk.history.supplierSearch(clean(p)), queryFn: () => api.supplierEvents.search(clean(p)), enabled, placeholderData: keepPreviousData });
 
+export const useShortagesToday = () => useQuery({ queryKey: qk.morning.shortages, queryFn: api.shortages.today });
+export const useGateReview = () => useQuery({ queryKey: qk.morning.review, queryFn: api.gates.review });
+
 // ── Mutations ──
 /**
  * Wraps an api write. Errors already toast inside api.ts. On success: optional toast + invalidations.
@@ -260,11 +269,11 @@ export const useContextFor = (scope: ContextScope, id?: Id) =>
 // ── Live activity stream (SSE) ──
 /** Which query roots to refresh when an entity changes. Add a line when you add an entity/page. */
 export const INVALIDATE: Record<ActivityEvent["entity"], QueryKey[]> = {
-  client: [qk.clients.all, qk.dashboard, qk.tags.all, qk.pricing.all, qk.history.all],
+  client: [qk.clients.all, qk.dashboard, qk.tags.all, qk.pricing.all, qk.history.all, qk.morning.all],
   supplier: [qk.suppliers.all, qk.tags.all, qk.history.all],
   product: [qk.products.all, qk.stock.all, qk.tags.all, qk.pricing.all],
-  stock: [qk.stock.all, qk.products.all, qk.dashboard],
-  order: [qk.orders.all, qk.clients.all, qk.stock.all, qk.products.all, qk.routeRuns.all, qk.invoices.all, qk.dashboard],
+  stock: [qk.stock.all, qk.products.all, qk.dashboard, qk.morning.all],
+  order: [qk.orders.all, qk.clients.all, qk.stock.all, qk.products.all, qk.routeRuns.all, qk.invoices.all, qk.dashboard, qk.morning.all],
   purchase_order: [qk.purchaseOrders.all, qk.stock.all, qk.products.all, qk.suppliers.all, qk.dashboard],
   invoice: [qk.invoices.all, qk.orders.all, qk.clients.all, qk.payments.all, qk.dashboard],
   payment: [qk.payments.all, qk.invoices.all, qk.clients.all, qk.dashboard],

@@ -6,13 +6,18 @@ import {
 import { History } from "lucide-react";
 import { BadgeEuro, Tags } from "lucide-react";
 import { Scale } from "lucide-react";
-import { BookOpen, PhoneCall } from "lucide-react";
+import { BookOpen, PhoneCall, Sunrise } from "lucide-react";
 
 export interface NavItem { to: string; label: string; icon: LucideIcon; keywords?: string }
 export interface NavGroup { label?: string; items: NavItem[] }
 
 export const NAV: NavGroup[] = [
-  { items: [{ to: "/", label: "Accueil", icon: Home, keywords: "dashboard tableau de bord" }] },
+  {
+    items: [
+      { to: "/", label: "Accueil", icon: Home, keywords: "dashboard tableau de bord" },
+      { to: "/morning", label: "Ce matin", icon: Sunrise, keywords: "matin nuit ruptures à faire vérifier rappeler leïla" },
+    ],
+  },
   {
     label: "Ventes",
     items: [

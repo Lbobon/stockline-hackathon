@@ -45,6 +45,13 @@ function CallMode({ modeSwitch }: { modeSwitch: ReactNode }) {
   const v = useVoiceSession();
   const vRef = useRef(v);
   vRef.current = v;
+  // /voice?outbound=<orderId> (from "Ce matin" → Lancer les appels): place that call once connected.
+  const [outbound, setOutbound] = useUrlState("outbound", "", { keepPage: true });
+  useEffect(() => {
+    if (!outbound || v.conn !== "ready") return;
+    v.callOutbound(outbound);
+    setOutbound("");
+  }, [outbound, v.conn]); // eslint-disable-line react-hooks/exhaustive-deps
   const [text, setText] = useState("");
   const spaceDown = useRef(false);
 

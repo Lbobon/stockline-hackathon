@@ -57,7 +57,7 @@ def make_llm_client(cfg: LLMSettings) -> LLMClient:
                 include_usage=False,
             )
         case "anthropic":
-            return AnthropicLLM(model, need("LLM_API_KEY", cfg.api_key), cfg.base_url or "https://api.anthropic.com", cfg.effort)
+            return AnthropicLLM(model, need("LLM_API_KEY", cfg.api_key), cfg.base_url or "https://api.anthropic.com", cfg.effort, thinking=cfg.thinking or None)
         case "gemini":
             return GeminiLLM(model, need("LLM_API_KEY", cfg.api_key), cfg.base_url or "https://generativelanguage.googleapis.com/v1beta")
     raise ConfigError(f'Unknown LLM_PROVIDER "{cfg.provider}" (openai | openai-compatible | anthropic | gemini | mock)')

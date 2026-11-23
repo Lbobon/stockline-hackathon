@@ -40,8 +40,10 @@ class AnthropicLLM(LLMClient):
         base_url: str = "https://api.anthropic.com",
         effort: str | None = "low",  # "low" keeps voice latency down; raise for harder reasoning
         http: httpx.AsyncClient | None = None,
+        thinking: str | None = None,  # e.g. "between_tools": no thinking before answering (LLM_THINKING)
     ):
         self.model, self.api_key, self.base_url, self.effort, self.http = model, api_key, base_url.rstrip("/"), effort, http
+        self.thinking = thinking
 
     def build_body(self, req: LLMRequest) -> dict:
         messages = to_anthropic_messages(req.messages)
@@ -56,6 +58,8 @@ class AnthropicLLM(LLMClient):
             body["system"] = [{"type": "text", "text": req.system, "cache_control": CACHE}]
         if self.effort:
             body["output_config"] = {"effort": self.effort}
+        if self.thinking:
+            body["thinking"] = {"type": self.thinking}
         if req.tools:
             body["tools"] = [{"name": t.name, "description": t.description, "input_schema": t.parameters} for t in req.tools]
             body["tools"][-1]["cache_control"] = CACHE

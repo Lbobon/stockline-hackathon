@@ -27,6 +27,7 @@ import GroupsPage from "@/pages/groups";
 import ContextPage from "@/pages/context";
 import CallsPage from "@/pages/calls";
 import CallDetailPage from "@/pages/call-detail";
+import MorningPage from "@/pages/morning";
 
 export const router = createBrowserRouter([
   {
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { index: true, element: <DashboardPage /> },
+      { path: "morning", element: <MorningPage /> },
       { path: "orders", element: <OrdersPage /> },
       { path: "calls", element: <CallsPage /> },
       { path: "calls/:id", element: <CallDetailPage /> },
