@@ -205,6 +205,11 @@ class Recorder(STTClient):
         async for _ in audio:
             if self.live_mode == "fail":
                 raise ProviderError("network down")
+            if self.live_mode == "slow":  # words heard while speaking, then the finalize never comes
+                yield STTUpdate("Il me faut du veau", stable="Il me faut")
+            if self.live_mode == "noise":
+                yield STTUpdate("euh…", final=True, stable="euh…")
+                return
         await asyncio.sleep(60)  # "hang": no final words
         yield STTUpdate("jamais")
 
@@ -231,6 +236,40 @@ async def test_utterance_falls_back_when_the_final_words_never_come(monkeypatch)
     u = Utterance(stt, "audio/webm", None, no_partial)
     u.feed(b"ab")
     assert await u.text() == "texte complet" and u.live.cancelled()
+
+
+async def test_a_slow_finalize_uses_the_words_already_heard(monkeypatch):
+    monkeypatch.setattr(utterance, "FINAL_TIMEOUT_S", 0.1)
+    stt = Recorder("slow")
+    u = Utterance(stt, "audio/webm", None, no_partial)
+    u.feed(b"ab")
+    await asyncio.sleep(0.05)  # the partial arrives while the caller still speaks
+    assert await u.text() == "Il me faut du veau"
+    assert stt.batch == []  # no second transcription of the whole recording
+
+
+async def test_a_hesitation_alone_is_not_a_turn():
+    u = Utterance(Recorder("noise"), "audio/webm", None, no_partial)
+    u.feed(b"ab")
+    assert await u.text() == ""
+
+
+def test_is_noise():
+    assert utterance.is_noise("") and utterance.is_noise(" … ") and utterance.is_noise("Euh, hum…")
+    assert not utterance.is_noise("Je.") and not utterance.is_noise("oui") and not utterance.is_noise("euh, oui")
+
+
+async def test_the_whole_recording_fallback_is_bounded(monkeypatch):
+    monkeypatch.setattr(utterance, "FALLBACK_TIMEOUT_S", 0.1)
+
+    class Stuck(Recorder):
+        async def transcribe(self, audio, mime, hint=None):
+            await asyncio.sleep(60)
+
+    u = Utterance(Stuck("fail"), "audio/webm", None, no_partial)
+    u.feed(b"ab")
+    with pytest.raises(asyncio.TimeoutError):
+        await u.text()
 
 
 async def test_utterance_without_streaming_transcribes_at_the_end():
