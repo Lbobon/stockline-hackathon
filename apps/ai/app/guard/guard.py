@@ -298,6 +298,9 @@ class Guard:
             v.status = "verified" if (v.p_supported or 0) >= 0.3 else "unverified"
         elif quoted_erp_numbers(sentence, items):
             v.status = "verified" if (v.p_supported or 0) >= 0.3 else "unverified"
+        elif item is not None and (v.p_mismatch or 0) < 0.85 and rounded_erp_numbers(sentence, [item], self.heard):
+            # every figure matches the very fact Jev cites (sim: « 372 euros » for a 372,48 € total, con 0.97): a doubt, not a lie
+            v.status = "verified" if (v.p_supported or 0) >= 0.3 else "unverified"
         elif (max(v.p_contradicts or 0, v.p_mismatch or 0) >= BLOCK_CONTRADICTS and (v.p_supported or 0) <= BLOCK_SUPPORTED_MAX
               or not safe and (v.p_mismatch or 0) >= 0.85 and (v.p_supported or 0) < 0.75):  # a number no ERP fact has
             v.status = "contradicted"

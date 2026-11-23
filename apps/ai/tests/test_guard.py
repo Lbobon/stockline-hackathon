@@ -83,6 +83,17 @@ async def test_figures_quoted_to_the_decimal_are_not_flagged(monkeypatch):
     assert wrong.status == "contradicted" and wrong.blocked
 
 
+async def test_figures_of_the_cited_fact_are_never_blocked(monkeypatch):
+    fake_jev(monkeypatch, lambda s: {"supported": 0.04, "contradicts": 0.97, "mismatch": 0.36, "promises": 0.29})
+    g = Guard(mode="block")
+    g._today_set = True
+    g.book.add_tool("validate_order", {"orderId": "ord_1"}, {"number": "CMD-1", "status": "confirmed", "totalHt": 372.48, "deliveryDate": "2026-11-26"})
+    v = await g.check("C'est confirmé, livraison jeudi 26 novembre pour 372 euros hors taxes.")
+    assert v.status == "unverified" and not v.blocked
+    wrong = await g.check("C'est confirmé, livraison jeudi 26 novembre pour 290 euros hors taxes.")
+    assert wrong.status == "contradicted" and wrong.blocked
+
+
 async def test_shadow_mode_never_blocks(monkeypatch):
     fake_jev(monkeypatch, wrong_price)
     v = await Guard(mode="shadow").check("Le gigot est à douze euros le kilo.")
