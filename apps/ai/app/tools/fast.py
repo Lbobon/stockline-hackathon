@@ -13,7 +13,7 @@ from pydantic import Field
 
 from .catalog import get_client, get_price, get_product_stock
 from .context import get_context
-from .erp import ErpError
+from .erp import ErpError, pick
 from .registry import ToolContext, tool
 
 
@@ -97,3 +97,32 @@ async def check_product(
         return {**stock, "clientPrice": price}
 
     return {"products": list(await asyncio.gather(*(details(i) for i in ids)))}
+
+
+@tool
+async def get_delivery(
+    ctx: ToolContext,
+    client_id: str = Field(description="Le client (cli_…)"),
+    date: str | None = Field(None, description="YYYY-MM-DD ; par défaut aujourd'hui"),
+) -> dict:
+    """
+    La livraison d'un client un jour donné (aujourd'hui par défaut) : tournée, chauffeur, camion, heure de départ, heure
+    estimée de passage chez lui (eta), son rang dans la tournée, l'état de l'arrêt. Pour « à quelle heure passe le camion ? ».
+    The client's stop on the day's delivery run: route, driver, departure time and the stop's estimated time.
+    """
+    day = date or (await ctx.erp.get("/api/meta"))["today"]
+    runs = await ctx.erp.get("/api/route-runs", {"date": day})
+    stops = [
+        {
+            "route": run["route"]["name"], **pick(run["route"], "driver", "vehicle"), "departure": run["route"].get("departureTime"),
+            "eta": s.get("eta"), "stop": s.get("seq"), "stopsOnRoute": len(run["stops"]), "status": s.get("status"),
+            **pick(s, "orderId", "orderNumber"),
+        }
+        for run in (runs.get("items", []) if isinstance(runs, dict) else runs)
+        for s in run["stops"]
+        if s.get("clientId") == client_id
+    ]  # fmt: skip
+    if not stops:
+        return {"date": day, "deliveries": [], "note": "aucune livraison prévue ce jour-là pour ce client"}
+    return {"date": day, "deliveries": stops, "note": "eta = heure estimée (départ + temps par arrêt), pas une heure garantie"}
+

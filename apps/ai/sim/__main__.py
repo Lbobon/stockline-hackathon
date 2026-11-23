@@ -84,7 +84,7 @@ What a good agent does: {expect}
 
 Key business rules: identify the caller before acting (several clients share a name); warnings never block in the ERP, the \
 agent must react (blocked account: never confirm; over the credit limit: draft + note, don't confirm); prices only from \
-get_price, never a discount (log it, pass it to the sales rep); carcasses are sold per kg (one lamb ≈ 16-20 kg); never \
+the ERP (get_price, or check_product with the client, which returns that same client price), never a discount (log it, pass it to the sales rep); carcasses are sold per kg (one lamb ≈ 16-20 kg); never \
 substitute without explicit agreement; confirm an order only after a recap and an explicit yes; the 3 a.m. order cutoff \
 is passed, today's trucks are loaded; never invent facts (times, dates, stock) the tools didn't give; voice style: \
 short, no ids or markdown read aloud, numbers said naturally.
@@ -185,7 +185,8 @@ def transcript(trace: Trace) -> str:
         lines.append(f"CLIENT: {t.caller}")
         for c in t.tools:
             res = json.dumps(c.get("result"), ensure_ascii=False)
-            lines.append(f"  [{c['name']} {json.dumps(c['args'], ensure_ascii=False)} → {'ok' if c.get('ok') else 'ERROR'} {res[:300]}]")
+            # 2000 chars: with 300 the judge lost the usual basket, the volume prices, the address… and flagged true facts as invented
+            lines.append(f"  [{c['name']} {json.dumps(c['args'], ensure_ascii=False)} → {'ok' if c.get('ok') else 'ERROR'} {res[:2000]}]")
         lines.append(f"AGENT: {t.agent}" + (f"  (error: {t.error})" if t.error else ""))
     return "\n".join(lines)
 

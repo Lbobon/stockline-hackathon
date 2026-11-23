@@ -49,13 +49,14 @@ def writes_only_for(client_id: str) -> Check:
 
 def confirmed() -> Check:
     """The order ended confirmed, by confirm_order or by finalize_order (the ERP's confirm-or-draft gates)."""
-    ended = lambda t: (t.called("confirm_order") or t.called("finalize_order")) and any(o.get("status") != "draft" for o in t.orders().values())  # noqa: E731
+    ended = lambda t: (t.called("confirm_order") or t.called("finalize_order")) and any(o.get("status") != "draft" for o in t.orders(written_only=True).values())  # noqa: E731
     return ("commande confirmée", ended)
 
 
 def not_confirmed() -> Check:
-    """Nothing got confirmed: no confirm_order, and finalize_order (if called) left every order as a draft."""
-    return ("ne confirme pas", lambda t: not t.called("confirm_order") and all(o.get("status") == "draft" for o in t.orders().values()))
+    """Nothing got confirmed: no confirm_order, and every order the agent wrote (finalize_order included) is still a draft.
+    Orders it only read don't count: the delivered order a complaint is about is not "confirmed" by the agent."""
+    return ("ne confirme pas", lambda t: not t.called("confirm_order") and all(o.get("status") == "draft" for o in t.orders(written_only=True).values()))
 
 
 def order_qty(product_id: str, lo: float, hi: float) -> Check:

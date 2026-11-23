@@ -158,6 +158,8 @@ def order_warnings(order: Doc) -> list[Doc]:
     levels = stock_levels(order["id"])
     demand: dict[str, float] = {}
     for l in order["lines"]:
+        if l.get("preparedQty") is not None:
+            continue  # already picked: what is in the crate is settled, today's stock and lots no longer apply to it
         demand[l["productId"]] = demand.get(l["productId"], 0) + line_qty(l)
     for product_id, qty in demand.items():
         p = crud.products.get(product_id)

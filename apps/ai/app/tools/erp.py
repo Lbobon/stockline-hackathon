@@ -52,6 +52,10 @@ class ErpClient:
         self.base_url = base_url
         self.http = http
         self.headers = {"x-actor": actor, **({"x-actor-name": quote(actor_name, safe="")} if actor_name else {})}
+        # One client per agent turn (agent/loop.py), whose tool calls run in parallel. Writes go one at a time, in the
+        # order the model called them, so each result shows every earlier write of the turn; a read waits for them.
+        # Without it, "remove A, remove B, set C to 14" came back out of order and contradicted the final order.
+        self._writes = asyncio.Lock()
 
     async def get(self, path: str, query: dict[str, Any] | None = None) -> Any:
         params = {k: str(v) for k, v in (query or {}).items() if v is not None and v != ""}
@@ -68,6 +72,12 @@ class ErpClient:
         return await self._request("DELETE", path, params=params)
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+        if method != "GET" or self._writes.locked():
+            async with self._writes:  # FIFO: acquired in call order (each tool reaches here before its first await)
+                return await self._send(method, path, **kwargs)
+        return await self._send(method, path, **kwargs)
+
+    async def _send(self, method: str, path: str, **kwargs: Any) -> Any:
         try:
             res = await (self.http or erp_http()).request(method, f"{self.base_url}{path}", headers=self.headers, **kwargs)
         except httpx.HTTPError as e:
