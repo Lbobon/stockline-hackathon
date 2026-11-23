@@ -63,25 +63,24 @@ async def run_agent(
 
         for _step in range(max_steps or settings.max_steps):
             # 1. Ask the model. Stream the text as it comes; collect the tool calls.
-            text = ""
-            calls: list[ToolCall] = []
-            async for ev in llm.stream(request):
-                match ev:
-                    case LLMText(delta=delta):
-                        # keep words apart when the model speaks again after a tool call
-                        shown = f" {delta}" if said_something and not text and not delta[:1].isspace() else delta
-                        text += delta
-                        yield TextEvent(delta=shown)
-                    case LLMToolCall(call=call):
-                        calls.append(call)
-                        yield ToolCallEvent(call=call)
-                    case LLMUsage(input_tokens=i, output_tokens=o, cache_creation_input_tokens=cw, cache_read_input_tokens=cr):
-                        usage.input_tokens += i or 0
-                        usage.output_tokens += o or 0
-                        if cw is not None:
-                            usage.cache_creation_input_tokens = (usage.cache_creation_input_tokens or 0) + cw
-                        if cr is not None:
-                            usage.cache_read_input_tokens = (usage.cache_read_input_tokens or 0) + cr
+            for attempt in range(2):  # a stream the provider drops before saying anything is retried once
+                text = ""
+                calls: list[ToolCall] = []
+                try:
+                    async for ev in _events(llm.stream(request), usage):
+                        if isinstance(ev, TextEvent):
+                            shown = f" {ev.delta}" if said_something and not text and not ev.delta[:1].isspace() else ev.delta
+                            text += ev.delta
+                            yield TextEvent(delta=shown)
+                        else:
+                            calls.append(ev.call)
+                            yield ev
+                    break
+                except Exception as e:
+                    if attempt or text or calls:  # something was already said or asked: retrying would repeat it
+                        raise
+                    print(f"[agent] flux LLM coupé avant la réponse ({type(e).__name__}) : nouvel essai", flush=True)
+                    await asyncio.sleep(0.2)
             said_something = said_something or bool(text)
 
             # 2. No tool call → that was the final answer.
@@ -107,6 +106,23 @@ async def run_agent(
         print("[agent] erreur pendant le tour :", flush=True)
         traceback.print_exc()
         yield ErrorEvent(message=str(e) or type(e).__name__)
+
+
+async def _events(stream: AsyncIterator, usage: Usage) -> AsyncIterator[TextEvent | ToolCallEvent]:
+    """One model call as loop events: text and tool calls go out, usage is added up."""
+    async for ev in stream:
+        match ev:
+            case LLMText(delta=delta):
+                yield TextEvent(delta=delta)
+            case LLMToolCall(call=call):
+                yield ToolCallEvent(call=call)
+            case LLMUsage(input_tokens=i, output_tokens=o, cache_creation_input_tokens=cw, cache_read_input_tokens=cr):
+                usage.input_tokens += i or 0
+                usage.output_tokens += o or 0
+                if cw is not None:
+                    usage.cache_creation_input_tokens = (usage.cache_creation_input_tokens or 0) + cw
+                if cr is not None:
+                    usage.cache_read_input_tokens = (usage.cache_read_input_tokens or 0) + cr
 
 
 async def execute_tool(call: ToolCall, tools: list[Tool], ctx: ToolContext) -> ToolResultEvent:
