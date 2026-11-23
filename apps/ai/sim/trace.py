@@ -47,10 +47,13 @@ class Trace:
         ids |= {c["args"].get("entityId") for c in self.calls() if c["name"] == "save_context" and str(c["args"].get("entityId", "")).startswith("cli_")}
         return {i for i in ids if i}
 
-    def orders(self) -> dict[str, dict[str, Any]]:
-        """Last known state of every order the agent touched (from the order tools' summaries)."""
+    def orders(self, written_only: bool = False) -> dict[str, dict[str, Any]]:
+        """Last known state of every order the agent touched (from the order tools' summaries).
+        written_only: skip orders the agent only read (get_order), e.g. the client's existing order for today."""
         out: dict[str, dict[str, Any]] = {}
         for c in self.calls():
+            if written_only and c["name"] == "get_order":
+                continue
             r = c.get("result")
             if c["name"] == "finalize_order" and c.get("ok") and isinstance(r, dict) and isinstance(r.get("order"), dict):
                 r = r["order"]  # finalize_order (main's smart tools) returns {decision, reasons, order}

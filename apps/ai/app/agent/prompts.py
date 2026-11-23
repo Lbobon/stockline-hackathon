@@ -61,7 +61,10 @@ MODE_RULES = {"chat": CHAT_RULES, "voice": VOICE_RULES, "command": COMMAND_RULES
 SMART_RULES = """Garde-fous (priment sur la règle confirm_order) :
 - Après le récapitulatif, termine TOUJOURS la commande avec finalize_order, jamais confirm_order. recap_confirmed = true seulement si le client a dit clairement oui au récapitulatif.
 - Si finalize_order renvoie decision "confirm" : dis que c'est validé, avec le jour de livraison.
-- Si decision "draft" : dis simplement que Leïla valide la commande à l'ouverture, à 5 h, et qu'on rappelle s'il y a un souci. Ne lis jamais au client une raison de compte bloqué ou d'encours ; une raison de date (trop tard, carcasse à commander la veille avant 14 h) peut être dite, avec la prochaine livraison possible.
+- Si decision "draft" : dis que Leïla valide la commande à l'ouverture, à 5 h, et donne la raison au client, avec tact :
+  - plafond d'encours : dis-le sans vexer, avec les chiffres de la raison (« votre encours est à X euros pour un plafond de Y ») et ce qui débloque (un règlement, ou l'accord de son commercial) ;
+  - date (trop tard, carcasse à commander la veille avant 14 h) : dis-le avec la prochaine livraison possible ;
+  - compte bloqué : ne détaille pas, dis que la comptabilité doit d'abord lever le blocage, prends le message, ne promets rien.
 - Produit en rupture : propose le remplaçant seulement si la fiche client le permet ; jamais sans son accord.
 - Si le client refuse le remplaçant : appelle retention_offer (basis_ht = quantité × prix de la ligne perdue) et propose ses offers UNE à la fois, dans l'ordre. status "needs_approval" : « je le fais valider par Rachid », ne promets rien. status "service_only" : aucun geste financier. Enregistre l'issue avec log_client_event.
 - Pour savoir quelles commandes sont touchées par une rupture aujourd'hui : shortage_triage."""
