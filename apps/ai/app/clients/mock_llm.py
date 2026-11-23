@@ -290,7 +290,7 @@ def decide(messages: list[ChatMessage]) -> ToolCall | str:
     d = last.data if isinstance(last.data, dict) else {}
     match last.name:
         case "get_product_stock":
-            expiry = f", prochaine DLC {fr_day(d['nextExpiry'])}" if d.get("nextExpiry") else ""
+            expiry = f", prochaine DLC {fr_day(d['earliestExpiryInStock'])}" if d.get("earliestExpiryInStock") else ""
             return f"{d.get('name')} : {fr_num(d.get('available'))} {UNIT_FR.get(d.get('unit'), d.get('unit'))} disponibles{expiry}."
         case "get_client":
             usual = [u.get("productName") for u in (d.get("usual") or [])[:3]]

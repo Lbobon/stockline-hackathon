@@ -68,7 +68,7 @@ async def check_product(
     qty: float | None = Field(None, description="Quantité envisagée, pour le prix au volume"),
 ) -> dict:
     """
-    Trouve un produit et renvoie en une seule étape son stock (disponible, arrivages, prochaine DLC) et, si le client est connu, son
+    Trouve un produit et renvoie en une seule étape son stock (disponible, arrivages, DLC du plus vieux lot en stock) et, si le client est connu, son
     prix pour ce client (comme get_price). Si plusieurs produits correspondent, « products » contient les 3 meilleurs, chacun avec
     son stock et son prix : choisis celui qui correspond à ce qui a été dit (calibre, poids), ou demande.
     One step: find a product, return stock and the client's price for the best matches.
