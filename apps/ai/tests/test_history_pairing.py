@@ -397,7 +397,7 @@ async def test_voice_barge_in_during_last_audio_does_not_duplicate_the_turn(monk
 async def test_voice_error_mid_turn_then_next_turn_valid(monkeypatch):
     class Boom(ScriptedLLM):
         async def stream(self, request):
-            if len(self.requests) == 1:
+            if len(self.requests) in (1, 2):  # fails twice: the loop's one retry fails too, so the error surfaces
                 self.requests.append(None)
                 raise RuntimeError("provider down")
             async for ev in super().stream(request):
