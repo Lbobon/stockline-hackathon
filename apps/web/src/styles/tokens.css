@@ -31,6 +31,7 @@
   --agent-scout: 224 64% 56%;
   --agent-scribe: 33 90% 44%;
   --agent-linguist: 342 68% 56%;
+  --agent-guard: 186 76% 32%; /* le Garde-fou: Jev fact-checks each sentence against the ERP */
 
   --shadow-sm: 0 1px 3px 0 #24423317, 0 1px 2px -1px #24423314;
   --shadow-panel: -8px 0 24px -8px #0000001f;
@@ -70,6 +71,7 @@
   --agent-scout: 224 62% 63%;
   --agent-scribe: 35 83% 42%;
   --agent-linguist: 342 66% 64%;
+  --agent-guard: 184 62% 46%;
 
   --shadow-sm: 0 1px 3px 0 #03070580, 0 1px 2px -1px #03070580;
   --shadow-panel: -8px 0 24px -8px #03070580;

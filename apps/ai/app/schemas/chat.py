@@ -99,7 +99,14 @@ class ErrorEvent(WireModel):
     message: str
 
 
+class GuardEvent(WireModel):
+    """Le Garde-fou (app/guard): Jev's verdict on one sentence of the answer, checked against the ERP facts of the conversation."""
+
+    type: Literal["guard"] = "guard"
+    verdict: dict[str, Any]
+
+
 ChatStreamEvent = Annotated[
-    Union[TextEvent, ToolCallEvent, ToolResultEvent, DoneEvent, ErrorEvent],
+    Union[TextEvent, ToolCallEvent, ToolResultEvent, DoneEvent, ErrorEvent, GuardEvent],
     Field(discriminator="type"),
 ]

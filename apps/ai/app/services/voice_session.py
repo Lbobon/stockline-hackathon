@@ -37,6 +37,7 @@ from app.agent.loop import ms_since
 from app.agent.outbound import shortage_brief
 from app.clients import STTUpdate, TTSClient, get_llm_client, get_stt_client, get_tts_client
 from app.config import settings
+from app.guard import Guard, Verdict, until
 from app.schemas import (
     AgentAudioEndMessage,
     AgentAudioStartMessage,
@@ -85,6 +86,23 @@ class Conversation:
     @property
     def history(self) -> list[ChatMessage]:
         return self.call.history if isinstance(self.call, CallSession) else []
+
+
+# « Provoquer une erreur » (/voice, Garde-fou panel): shows the guard catching a wrong figure on demand. The model won't
+# lie when asked to, so the demo simulates a hallucination: the first price / quantity of its answer is altered on the fly.
+_NUM = re.compile(r"\d+(?:[.,]\d+)?|\b(?:deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|vingt|trente|quarante|cinquante|soixante|cent)\b", re.I)
+
+
+def hallucinate(sentence: str) -> str | None:
+    """« … 11 euros 80 le kilo » → « … 8 euros 80 le kilo »: the first number of a sentence that states a price, a stock
+    or a quantity, about 30 % lower. None when the sentence has no such figure."""
+    from app.guard import claim_kinds
+    from app.guard.numbers import numbers_in
+
+    if not {"prix", "stock", "quantité"} & set(claim_kinds(sentence)) or not (m := _NUM.search(sentence)):
+        return None
+    v = numbers_in(m[0])[0] if numbers_in(m[0]) else float(m[0].replace(",", "."))
+    return sentence[: m.start()] + str(max(1, round(v * 0.7))) + sentence[m.end() :]
 
 
 # Filler lines (« Je regarde. ») synthesized once per voice: played instantly, no TTS round trip.
@@ -216,9 +234,9 @@ class VoiceConnection:
                     utterance, self.recording = self.recording, None
                     self.conversation.call.speech_end()
                     self.start_turn(utterance=utterance)
-            case TextMessage(text=text):
+            case TextMessage(text=text, demo_error=demo_error):
                 await self.interrupt()
-                self.start_turn(text=text)
+                self.start_turn(text=text, demo_error=demo_error)
             case ResetMessage():
                 await self.interrupt()
                 self.end_call(report=False)
@@ -245,6 +263,7 @@ class VoiceConnection:
             spawn(copilot.warm())
             return copilot
         call = CallSession(actor_name=conv.actor_name, llm=get_llm_client(), runner=run_agent, tools=all_tools())
+        call.guard = Guard(call.state)  # type: ignore[attr-defined]  # le Garde-fou: Jev checks each sentence against the ERP
 
         async def relay(event: dict) -> None:
             await self.send(OrchestraMessage(event=event))
@@ -274,6 +293,8 @@ class VoiceConnection:
             await self.send(CallReportMessage(id=cid, status="writing"))
         try:
             r = await call.finish(report=report)
+            if r and getattr(call, "guard", None) is not None:
+                r["guard"] = call.guard.summary()
             if r:
                 call_store.save(r)
                 await self.send(CallReportMessage(id=cid, status="ready", headline=(r.get("ai") or {}).get("headline")))
@@ -339,6 +360,7 @@ class VoiceConnection:
         text: str | None = None,
         utterance: Utterance | None = None,  # spoken: already being transcribed since audio_start
         outbound: bool = False,  # `text` is the hidden outbound brief: don't show it as the caller's words
+        demo_error: bool = False,  # Garde-fou demo (« Provoquer une erreur »): one wrong figure, for the guard to catch
     ) -> None:
         t0 = time.perf_counter()  # end of caller speech
         timings = TurnTimings()
@@ -358,33 +380,65 @@ class VoiceConnection:
                 await self.send(TranscriptMessage(text=heard, final=True))
 
             # 2. The orchestra: fast path, or the voice agent briefed by the scout (history kept by the CallSession,
-            #    also on barge-in). The TTS speaks the caller's language.
+            #    also on barge-in). The TTS speaks the caller's language. Le Garde-fou checks each sentence before it is said.
+            guard: Guard | None = getattr(call, "guard", None)
+            if guard is not None:
+                guard.add_brief(heard) if outbound else guard.client_said(heard)
             card = load_caller(call.state.client["id"]) if call.state.client and call.state.client.get("id") else None
-            speaker = Speaker(tts_for(call.state.language), self.send, self.send_bytes, stability=card.stability if card else None)
+            speaker = Speaker(tts_for(call.state.language), self.send, self.send_bytes, stability=card.stability if card else None, guard=guard)
             llm_start = time.perf_counter()
-            async with aclosing(call.turn(heard)) as events:
-                async for ev in events:
-                    match ev:
-                        case FillerEvent(text=filler):
-                            cached = filler_audio.get((call.state.language, filler))
-                            speaker.play(cached) if cached else speaker.speak(filler)
-                            await self.send(OrchestraMessage(event={"type": "filler", "text": filler}))
-                        case FastEvent():
-                            pass  # its text follows as a TextEvent
-                        case TextEvent(delta=delta):
-                            if timings.llm_first_token_ms is None:
-                                timings.llm_first_token_ms = ms_since(llm_start)
-                            spoken += delta
-                            await self.send(AgentTextMessage(delta=delta))
-                            speaker.push(delta)
-                        case ToolCallEvent(call=tc):
-                            await self.send(AgentToolMessage(name=tc.name, args=tc.arguments))
-                        case ToolResultEvent(name=name, ok=ok, ms=ms):
-                            await self.send(AgentToolMessage(name=name, ok=ok, ms=ms))
-                        case ErrorEvent(message=message):
-                            await self.send(VoiceErrorMessage(message=message))
+
+            async def consume(source, demo_error: bool = False) -> None:
+                nonlocal spoken
+                held = ""  # demo: the text held back until a sentence with a figure is altered
+
+                async def say(delta: str) -> None:
+                    nonlocal spoken
+                    spoken += delta
+                    await self.send(AgentTextMessage(delta=delta))
+                    speaker.push(delta)
+
+                async with aclosing(source) as events:
+                    # block mode: the stream stops as soon as the guard catches a sentence (like a barge-in)
+                    stream = until(events, speaker.halt) if guard is not None and guard.blocking else events
+                    async for ev in stream:
+                        match ev:
+                            case FillerEvent(text=filler):
+                                cached = filler_audio.get((call.state.language, filler))
+                                speaker.play(cached) if cached else speaker.speak(filler)
+                                await self.send(OrchestraMessage(event={"type": "filler", "text": filler}))
+                            case FastEvent():
+                                pass  # its text follows as a TextEvent
+                            case TextEvent(delta=delta):
+                                if timings.llm_first_token_ms is None:
+                                    timings.llm_first_token_ms = ms_since(llm_start)
+                                if demo_error:
+                                    held += delta
+                                    while demo_error and (m := Speaker.SENTENCE.match(held)):
+                                        wrong = hallucinate(m[0])
+                                        await say(wrong or m[0])
+                                        held = held[m.end() :]
+                                        demo_error = wrong is None
+                                    if not demo_error and held:
+                                        await say(held)
+                                        held = ""
+                                    continue
+                                await say(delta)
+                            case ToolCallEvent(call=tc):
+                                await self.send(AgentToolMessage(name=tc.name, args=tc.arguments))
+                            case ToolResultEvent(name=name, ok=ok, ms=ms):
+                                await self.send(AgentToolMessage(name=name, ok=ok, ms=ms))
+                            case ErrorEvent(message=message):
+                                await self.send(VoiceErrorMessage(message=message))
+                if held:
+                    await say(held)
+
+            await consume(call.turn(heard), demo_error=demo_error)
+            await speaker.settle()
+            if speaker.blocked is not None and guard is not None:
+                await self.correct(call, guard, speaker, consume)
             timings.llm_total_ms = ms_since(llm_start)
-            t = call.state.turns[-1] if call.state.turns else {}
+            t = next((x for x in reversed(call.state.turns) if not x.get("guard")), {}) if call.state.turns else {}
             await self.send(OrchestraMessage(event={"type": "turn", "n": t.get("n"), "path": t.get("path"), "firstSoundMs": t.get("firstSoundMs"),
                                                     "firstWordMs": t.get("firstWordMs"), "prefetched": t.get("prefetched") or []}))  # fmt: skip
 
@@ -409,6 +463,27 @@ class VoiceConnection:
                 utterance.cancel()  # interrupted while transcribing: close the provider stream
 
 
+    async def correct(self, call: CallSession, guard: Guard, speaker: "Speaker", consume) -> None:
+        """Block mode: the guard stopped a sentence the ERP contradicts. The agent re-says it from the ERP fact, in the same
+        audio segment, as if it caught itself. One correction per turn; if that one is caught too, a safe line instead."""
+        v: Verdict = speaker.blocked  # type: ignore[assignment]
+        note = guard.correction_note(v, " ".join(speaker.said))
+        at = speaker.resume()
+        v.corrected_by = f"{v.id}c"
+        await self.send(OrchestraMessage(event={"type": "guard_correction", "id": v.id, "at": at, "sentence": v.sentence,
+                                                "erp": (v.source or {}).get("values") or [], "source": (v.source or {}).get("label")}))  # fmt: skip
+        n_before = len(call.state.turns)
+        await consume(call.turn(note))
+        await speaker.settle()
+        for t in call.state.turns[n_before:]:  # the hidden note is not the caller's words (report, timeline)
+            t.update(caller="(Garde-fou : correction)", guard=v.id)
+        if speaker.blocked is not None:  # caught twice: never a third guess
+            speaker.resume()
+            safe = " Je préfère vous le faire confirmer par Leïla, elle vous rappelle tout de suite."
+            await self.send(AgentTextMessage(delta=safe))
+            speaker.push(safe + " ")
+
+
 MARKDOWN = [
     (re.compile(r"^\s*(?:[-*•–]|\d+[.)])\s+", re.M), ""),  # list markers at line start: "- ", "• ", "1. "
     (re.compile(r"^\s*#+\s*", re.M), ""),  # headings
@@ -425,8 +500,21 @@ def speakable(text: str) -> str:
     return text.strip(" ,")
 
 
+@dataclass
+class _Line:
+    """A sentence waiting for the TTS; `check` = the Garde-fou's verdict on it, computing meanwhile."""
+
+    text: str
+    check: asyncio.Task | None = None
+    gen: int = 0  # bumped when the guard blocks: the sentences queued after it are dropped
+
+
 class Speaker:
-    """Buffers the streamed text, cuts it into sentences and speaks them in order, as one audio segment."""
+    """Buffers the streamed text, cuts it into sentences and speaks them in order, as one audio segment.
+
+    With a Garde-fou: each sentence with a claim is checked by Jev as soon as it is complete. In block mode the TTS
+    synthesizes it meanwhile and its audio is only sent once the verdict says the ERP backs it; a contradicted sentence
+    is never heard, `blocked` is set and `halt` stops the turn (the voice agent then corrects itself)."""
 
     # a sentence ends with . ! ? … followed by a space ("18.50" is not a boundary)
     SENTENCE = re.compile(r"^([\s\S]*?[.!?…])\s+")
@@ -437,29 +525,46 @@ class Speaker:
         send: Callable[[WireModel], Awaitable],
         send_bytes: Callable[[bytes], Awaitable],
         stability: float | None = None,  # ElevenLabs voice stability for this caller (agent/caller.py)
+        guard: Guard | None = None,
     ):
-        self.tts, self.send, self.send_bytes, self.stability = tts, send, send_bytes, stability
+        self.tts, self.send, self.send_bytes, self.stability, self.guard = tts, send, send_bytes, stability, guard
         self.buffer = ""
-        self.sentences: asyncio.Queue[str | tuple[str, bytes] | None] = asyncio.Queue()
+        self.sentences: asyncio.Queue[_Line | tuple[str, bytes] | None] = asyncio.Queue()
         self.worker: asyncio.Task | None = None  # speaks the queued sentences one after the other
         self.started = False
         self.first_byte_at: float | None = None
         self.tts_first_byte_ms: int | None = None
         self.previous = ""  # the sentence just spoken: ElevenLabs continues its intonation (previous_text)
+        self.pos = 0  # characters of the turn's agent text already cut into sentences (verdict offsets)
+        self.gen = 0
+        self.blocked: Verdict | None = None
+        self.halt = asyncio.Event()
+        self.said: list[str] = []  # sentences actually spoken this turn
+        self.checks: list[asyncio.Task] = []  # the guard's verdicts on this turn's sentences
 
     def push(self, delta: str) -> None:
         self.buffer += delta
         while m := self.SENTENCE.match(self.buffer):
-            self.speak(m[1])
+            raw = m[1]
+            lead = len(raw) - len(raw.lstrip())
+            self.speak(raw, start=self.pos + lead, end=self.pos + len(raw))
+            self.pos += m.end()
             self.buffer = self.buffer[m.end() :]
 
-    def speak(self, sentence: str) -> None:
-        sentence = speakable(sentence)
-        if not sentence.strip():
+    def speak(self, sentence: str, start: int | None = None, end: int | None = None) -> None:
+        """`start`/`end` given = a sentence of the agent's text (checked by the guard); none = a filler line."""
+        text = speakable(sentence)
+        if not text.strip():
             return
+        if self.blocked is not None and start is not None:
+            return  # the guard stopped this turn: nothing more of it is said
+        check = None
+        if self.guard is not None and self.guard.enabled and start is not None:
+            check = asyncio.create_task(self.guard.check(sentence.strip(), start, end))
+            self.checks.append(check)
         if self.worker is None:
             self.worker = asyncio.create_task(self._speak_queued())
-        self.sentences.put_nowait(sentence)
+        self.sentences.put_nowait(_Line(text, check, self.gen))
 
     def play(self, audio: tuple[str, bytes]) -> None:
         """Queue pre-synthesized audio (mime, bytes): a cached filler line, no TTS round trip."""
@@ -467,10 +572,38 @@ class Speaker:
             self.worker = asyncio.create_task(self._speak_queued())
         self.sentences.put_nowait(audio)
 
+    def resume(self) -> int:
+        """After a block: forget the unfinished text of the stopped turn and accept the correction. Returns its offset."""
+        self.pos += len(self.buffer)
+        self.buffer = ""
+        self.blocked = None
+        self.halt = asyncio.Event()
+        self.checks = []
+        return self.pos
+
+    def flush(self) -> None:
+        """Queue what is left in the buffer (the last sentence may have no final punctuation)."""
+        rest = self.buffer
+        lead = len(rest) - len(rest.lstrip())
+        self.speak(rest, start=self.pos + lead, end=self.pos + len(rest.rstrip()))
+        self.pos += len(rest)
+        self.buffer = ""
+
+    async def settle(self, timeout: float = 15) -> None:
+        """Block mode, the LLM stream is over: Jev's last verdicts may still be on their way (~150 ms), and a blocked
+        sentence only sets `blocked` once the sentences before it are said. Wait for both, so the turn knows whether
+        to correct itself."""
+        if self.guard is None or not self.guard.blocking:
+            return
+        self.flush()
+        verdicts = await asyncio.gather(*self.checks, return_exceptions=True)
+        if any(isinstance(v, Verdict) and v.blocked for v in verdicts) and self.blocked is None:
+            with suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(self.halt.wait(), timeout)
+
     async def finish(self) -> None:
         """Speak what is left in the buffer, wait for all the audio, close the segment."""
-        self.speak(self.buffer)
-        self.buffer = ""
+        self.flush()
         if self.worker:
             self.sentences.put_nowait(None)
             await self.worker
@@ -487,10 +620,9 @@ class Speaker:
             await self.send(AgentAudioEndMessage())
 
     async def _speak_queued(self) -> None:
-        while (sentence := await self.sentences.get()) is not None:
-            tts_start = time.perf_counter()
-            if isinstance(sentence, tuple):
-                mime, audio = sentence
+        while (item := await self.sentences.get()) is not None:
+            if isinstance(item, tuple):
+                mime, audio = item
                 if not self.started:
                     self.started = True
                     await self.send(AgentAudioStartMessage(mime=mime))
@@ -498,18 +630,58 @@ class Speaker:
                     self.tts_first_byte_ms = 0
                 await self.send_bytes(audio)
                 continue
-            try:
-                extra = {"stability": self.stability, "previous_text": self.previous or None} if self.tts.name == "elevenlabs" else {}
-                result = await self.tts.synthesize(sentence, settings.tts.voice or None, **extra)  # type: ignore[call-arg]
-                self.previous = sentence
-                # aclosing: on barge-in (cancellation) the provider's HTTP stream is closed right away
-                async with aclosing(result.chunks) as chunks:  # type: ignore[type-var]
-                    async for chunk in chunks:
-                        if not self.started:
-                            self.started = True
-                            await self.send(AgentAudioStartMessage(mime=result.mime))
-                            self.first_byte_at = time.perf_counter()
-                            self.tts_first_byte_ms = ms_since(tts_start)
-                        await self.send_bytes(chunk)
-            except Exception as e:
-                await self.send(VoiceErrorMessage(message=f"TTS : {e}"))
+            if item.gen != self.gen:
+                continue  # queued after a blocked sentence: never said
+            if item.check is not None and self.guard is not None and self.guard.blocking:
+                await self._say_gated(item)
+            else:
+                await self._say(item.text)
+
+    async def _synthesize(self, text: str):
+        extra = {"stability": self.stability, "previous_text": self.previous or None} if self.tts.name == "elevenlabs" else {}
+        return await self.tts.synthesize(text, settings.tts.voice or None, **extra)  # type: ignore[call-arg]
+
+    async def _say(self, text: str) -> None:
+        tts_start = time.perf_counter()
+        try:
+            await self._stream(text, await self._synthesize(text), tts_start)
+        except Exception as e:
+            await self.send(VoiceErrorMessage(message=f"TTS : {e}"))
+
+    async def _say_gated(self, item: _Line) -> None:
+        """Synthesize while Jev checks; send the audio only if the sentence is not contradicted by the ERP."""
+        tts_start = time.perf_counter()
+        synth = asyncio.create_task(self._synthesize(item.text))
+        verdict: Verdict | None = None
+        try:
+            verdict = await item.check  # type: ignore[misc]
+        except Exception:
+            verdict = None  # a failed check never silences the agent
+        if verdict is not None and verdict.blocked:
+            synth.cancel()
+            with suppress(BaseException):
+                result = await synth
+                close = getattr(result.chunks, "aclose", None)
+                if close:
+                    await close()
+            self.gen += 1
+            self.blocked = verdict
+            self.halt.set()
+            return
+        try:
+            await self._stream(item.text, await synth, tts_start)
+        except Exception as e:
+            await self.send(VoiceErrorMessage(message=f"TTS : {e}"))
+
+    async def _stream(self, text: str, result, tts_start: float) -> None:
+        self.previous = text
+        self.said.append(text)
+        # aclosing: on barge-in (cancellation) the provider's HTTP stream is closed right away
+        async with aclosing(result.chunks) as chunks:  # type: ignore[type-var]
+            async for chunk in chunks:
+                if not self.started:
+                    self.started = True
+                    await self.send(AgentAudioStartMessage(mime=result.mime))
+                    self.first_byte_at = time.perf_counter()
+                    self.tts_first_byte_ms = ms_since(tts_start)
+                await self.send_bytes(chunk)

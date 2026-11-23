@@ -5,7 +5,7 @@
  * Agent audio: binary frames between agent_audio_start/end → one Blob → <audio>. Mock TTS → speechSynthesis (fr-FR).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MOCK_TTS_MIME, type OrchestraAgent, type TurnTimings, type VoiceClientMessage, type VoiceServerMessage } from "@kit/shared";
+import { MOCK_TTS_MIME, type GuardVerdict, type OrchestraAgent, type TurnTimings, type VoiceClientMessage, type VoiceServerMessage } from "@kit/shared";
 import { AI_BASE } from "@/lib/api";
 import { SegmentPlayer } from "./audio-player";
 import type { ToolRun } from "./tools";
@@ -18,7 +18,9 @@ export interface VoiceTurn {
   id: number;
   /** text: live while recording/transcribing (stable = its final words), definitive once status is "final". */
   caller: { text: string; stable?: string; at: number; status: "recording" | "transcribing" | "final"; typed?: boolean };
-  agent: { text: string; at?: number; tools: ToolRun[]; done: boolean; error?: string; interrupted?: boolean };
+  agent: { text: string; at?: number; tools: ToolRun[]; done: boolean; error?: string; interrupted?: boolean;
+    /** Le Garde-fou: Jev's verdict on each sentence (offsets in `text`); a blocked sentence's correction starts at `correction.at`. */
+    guard?: GuardVerdict[]; correction?: GuardCorrection };
   timings?: TurnTimings;
   /** Client-side: caller release → agent audio actually starts playing (or speech synthesis starts). */
   perceivedMs?: number;
@@ -31,10 +33,13 @@ export interface AgentLive { agent: OrchestraAgent; label: string; task?: string
 export interface OrchestraFeedItem { id: number; agent: OrchestraAgent; label: string; task: string; ms?: number; at: number }
 /** One piece of agent work on the live timeline (client clock, ms since epoch); end undefined while it runs. */
 export interface LaneSpan { id: number; agent: OrchestraAgent; task: string; start: number; end?: number; ok?: boolean }
+export interface GuardCorrection { id: string; at: number; sentence: string; erp: string[]; source?: string }
+/** A blocked sentence, for the live alert: what the agent was about to say and what the ERP says. */
+export interface GuardAlert extends GuardCorrection { key: number; shownAt: number }
 export interface CallReportState { id: string; status: "writing" | "ready" | "error"; headline?: string }
 
 const ORCH_AGENTS: [OrchestraAgent, string][] = [
-  ["scout", "Éclaireur"], ["fast", "Réflexe"], ["voice", "Agent vocal"], ["scribe", "Greffier"], ["linguist", "Linguiste"],
+  ["scout", "Éclaireur"], ["fast", "Réflexe"], ["voice", "Agent vocal"], ["scribe", "Greffier"], ["linguist", "Linguiste"], ["guard", "Garde-fou"],
 ];
 const freshAgents = (): Record<string, AgentLive> =>
   Object.fromEntries(ORCH_AGENTS.map(([agent, label]) => [agent, { agent, label, status: "idle", runs: 0 }]));
@@ -58,7 +63,10 @@ export function useVoiceSession() {
   const [notes, setNotes] = useState<string[]>([]);
   const [report, setReport] = useState<CallReportState>();
   const [lanes, setLanes] = useState<LaneSpan[]>([]);
+  const [verdicts, setVerdicts] = useState<GuardVerdict[]>([]);
+  const [guardAlert, setGuardAlert] = useState<GuardAlert>();
   const feedSeq = useRef(0);
+  const lastTurn = useRef<number>(); // a verdict can land just after agent_done: it still belongs to that turn
 
   const ws = useRef<WebSocket>();
   const sessionId = useRef<string>();
@@ -202,6 +210,7 @@ export function useVoiceSession() {
         if (audioMime.current === MOCK_TTS_MIME && turnHasAudio.current) speak(m.text, id);
         else if (!turnHasAudio.current || !player.current) setActivity((a) => (a === "thinking" ? "idle" : a));
         audioMime.current = undefined;
+        lastTurn.current = id ?? lastTurn.current;
         currentTurn.current = undefined;
         break;
       case "orchestra": {
@@ -236,6 +245,16 @@ export function useVoiceSession() {
         else if (e.type === "scribe_note") setNotes((n) => [e.label, ...n].slice(0, 20));
         else if (e.type === "filler") patchTurn(id, (t) => ({ ...t, orch: { ...t.orch, filler: e.text } }));
         else if (e.type === "turn") patchTurn(id, (t) => ({ ...t, orch: { ...t.orch, path: e.path, firstSoundMs: e.firstSoundMs, firstWordMs: e.firstWordMs, prefetched: e.prefetched } }));
+        else if (e.type === "guard") {
+          const { type: _t, ...v } = e;
+          const target = id ?? lastTurn.current;
+          patchTurn(target, (t) => ({ ...t, agent: { ...t.agent, guard: [...(t.agent.guard ?? []).filter((x) => x.id !== v.id), v] } }));
+          if (v.status !== "none") setVerdicts((l) => [v, ...l.filter((x) => x.id !== v.id)].slice(0, 200));
+        } else if (e.type === "guard_correction") {
+          const c: GuardCorrection = { id: e.id, at: e.at, sentence: e.sentence, erp: e.erp, source: e.source };
+          patchTurn(id ?? lastTurn.current, (t) => ({ ...t, agent: { ...t.agent, correction: c } }));
+          setGuardAlert({ ...c, key: ++feedSeq.current, shownAt: Date.now() });
+        }
         break;
       }
       case "call_report":
@@ -359,12 +378,13 @@ export function useVoiceSession() {
     }
   }, [patchTurn]);
 
-  const sendText = useCallback((text: string) => {
+  /** demoError: « Provoquer une erreur » — the agent is told to state one wrong figure, for the Garde-fou to catch. */
+  const sendText = useCallback((text: string, opts?: { demoError?: boolean }) => {
     const v = text.trim();
     if (!v || conn !== "ready") return;
     stopPlayback();
     newTurn({ text: v, at: Date.now(), status: "final", typed: true });
-    send({ type: "text", text: v });
+    send({ type: "text", text: v, ...(opts?.demoError ? { demoError: true } : {}) });
     releasedAt.current = performance.now();
     setActivity("thinking");
     setLastError(undefined);
@@ -391,6 +411,9 @@ export function useVoiceSession() {
     setFeed([]);
     setNotes([]);
     setLanes([]);
+    setVerdicts([]);
+    setGuardAlert(undefined);
+    lastTurn.current = undefined;
     setProfile({ language: "fr", register: "vous" });
   }, []);
 
@@ -411,6 +434,7 @@ export function useVoiceSession() {
   return {
     conn, activity, mic, providers, turns, level, lastError,
     agents, feed, profile, notes, report, lanes, dismissReport: () => setReport(undefined),
+    verdicts, guardAlert, dismissGuardAlert: () => setGuardAlert(undefined),
     startTalking, stopTalking, sendText, callOutbound, stopPlayback, reset, hangup, reconnect: connect,
   };
 }

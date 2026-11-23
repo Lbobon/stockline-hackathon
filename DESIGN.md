@@ -51,7 +51,7 @@ Shadows: `--shadow-sm: 0 1px 3px 0 #24423317, 0 1px 2px -1px #24423314`, side pa
 ## Agent colors (the call orchestra)
 One identity per AI agent, defined once in `apps/web/src/features/calls/agents.ts` (`AGENT`, `TEAM`, `agentOf`): label, role, lucide icon,
 and the classes `bg-agent-*` (bars, dots), `bg-agent-*/10` (icon tiles, tints), `text-agent-*` (icons only, never body text), `border-agent-*/40`.
-Tokens `--agent-voice/fast/scout/scribe/linguist`, a categorical set validated for colour-blind separation in light and dark; always in this order:
+Tokens `--agent-voice/fast/scout/scribe/linguist`, a categorical set validated for colour-blind separation in light and dark, plus `--agent-guard` (teal, added for the Garde-fou, always shown with its ShieldCheck icon and label); always in this order:
 
 | agent | role | icon | light | dark |
 |---|---|---|---|---|
@@ -60,7 +60,9 @@ Tokens `--agent-voice/fast/scout/scribe/linguist`, a categorical set validated f
 | scout — Éclaireur | preloads the ERP while the caller talks | Ear | 224 64% 56% | 224 62% 63% |
 | scribe — Greffier | keeps the client file in the background | NotebookPen | 33 90% 44% | 35 83% 42% |
 | linguist — Linguiste | language and tu / vous | Languages | 342 68% 56% | 342 66% 64% |
+| guard — Garde-fou | Jev checks each sentence against the ERP before it is said | ShieldCheck | 186 76% 32% | 184 62% 46% |
 
+Garde-fou verdicts use the status colors, not the agent color: ✓ success, ✗ destructive, ? warning (`features/guard/guard-ui.tsx`).
 Client (User) and Rapporteur (FileText) stay neutral. Any screen that shows agents (live strip, Gantt, transcript, cost) takes its
 name, icon and color from `AGENT` instead of its own map; values and labels stay in text tokens next to a colored mark.
 

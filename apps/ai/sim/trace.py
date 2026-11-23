@@ -18,6 +18,7 @@ class Turn:
     prefetched: list[str] = field(default_factory=list)  # facts the Éclaireur had ready when the turn started
     total_ms: int | None = None  # caller's text in → agent turn finished
     error: str | None = None
+    guard: list[dict[str, Any]] = field(default_factory=list)  # --guard: the Garde-fou's verdict on each sentence (shadow)
 
 
 @dataclass

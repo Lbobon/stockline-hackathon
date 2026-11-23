@@ -4,6 +4,8 @@ from fastapi import APIRouter
 
 from app.agent import run_agent, sanitize_history
 from app.clients import get_llm_client
+from app.guard import Guard
+from app.guard.chat import guarded, seed_from_history
 from app.schemas import ChatRequest
 from app.tools import all_tools
 
@@ -17,6 +19,8 @@ async def chat(body: ChatRequest):
     """ChatRequest → text/event-stream of ChatStreamEvent."""
     # The harness owns the system prompt; a client-rebuilt history with a broken tool pairing must not 400 the provider.
     messages = sanitize_history(body.messages)
-    return sse_response(
-        run_agent(messages, llm=get_llm_client(), tools=all_tools(), mode=body.mode or "chat", actor_name=body.actor_name)
-    )
+    events = run_agent(messages, llm=get_llm_client(), tools=all_tools(), mode=body.mode or "chat", actor_name=body.actor_name)
+    # Le Garde-fou: each sentence of the answer is checked against the ERP facts (shown, never blocked: text is already out)
+    guard = Guard(mode="off" if Guard().mode == "off" else "shadow")
+    seed_from_history(guard, messages)
+    return sse_response(guarded(events, guard))
