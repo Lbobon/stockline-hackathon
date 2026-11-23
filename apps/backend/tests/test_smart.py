@@ -67,4 +67,18 @@ with TestClient(app) as c:
     held = c.post(f"/api/orders/{oid}/lines", json={"productId": "prd_0020", "qty": 50}, headers=H).json()  # veal at zero
     assert held["status"] == "draft" and "modifiée après confirmation" in held["note"], held
 
+    # Removing a line can take a confirmed order under the 120 € minimum: re-checked too (agent edit).
+    oid = new_order("cli_0002", [{"productId": "prd_0043", "qty": 1}, {"productId": "prd_0049", "qty": 5}])  # ≈ 130 € → ≈ 62 €
+    o = c.post(f"/api/gates/orders/{oid}/finalize", json={"recapConfirmed": True}, headers=H).json()["order"]
+    assert o["status"] == "confirmed", o
+    fries = next(l["id"] for l in o["lines"] if l["productId"] == "prd_0049")
+    shrunk = c.delete(f"/api/orders/{oid}/lines/{fries}", headers=H).json()
+    assert shrunk["status"] == "draft" and "minimum" in shrunk["note"], shrunk
+
+    # A confirmed order already over its credit limit when a human confirmed it (Julien, seed): an in-stock add-on by the
+    # agent keeps it confirmed (only reasons the edit creates count), and a human's own edit is never re-checked.
+    assert c.get("/api/gates/orders/ord_029513").json()["decision"] == "draft"  # credit limit already fires
+    assert c.post("/api/orders/ord_029513/lines", json={"productId": "prd_0004", "qty": 5}, headers=H).json()["status"] == "confirmed"
+    assert c.post("/api/orders/ord_029513/lines", json={"productId": "prd_0020", "qty": 50}, headers={"x-actor": "user"}).json()["status"] == "confirmed"
+
 print("gates + retention OK")

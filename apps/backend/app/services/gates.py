@@ -123,16 +123,19 @@ def review(day: str | None = None) -> list[Doc]:
     return sorted(out, key=lambda r: (r["deliveryDate"], r["clientName"]))
 
 
-def recheck_after_edit(ctx: Ctx, order_id: str) -> None:
-    """A confirmed order that was just edited is checked again on the hard rules. If one fires, it goes back to a draft
-    for Leïla (with the reason) and leaves its route: an edit can't sneak past the checks the confirmation went through."""
+def hard_reasons(order_id: str) -> dict[tuple, Doc]:
+    """The hard-rule reasons firing on this order now, keyed (code, productId) so before/after can be compared."""
+    return {(r["code"], r.get("productId")): r for r in check(order_id)["reasons"] if r["code"] in HARD_REASONS}
+
+
+def recheck_after_edit(ctx: Ctx, order_id: str, before: dict[tuple, Doc]) -> None:
+    """A confirmed order an agent just edited goes back to a draft for Leïla (with the reason, off its route) only when
+    the edit broke a hard rule that held before: a credit limit a human already accepted at confirmation doesn't count."""
     order = crud.orders.require(order_id)
-    if order["status"] != "confirmed":
+    new = [r for k, r in hard_reasons(order_id).items() if k not in before]
+    if not new:
         return
-    hard = [r for r in check(order_id)["reasons"] if r["code"] in HARD_REASONS]
-    if not hard:
-        return
-    note = "À vérifier (modifiée après confirmation) : " + " · ".join(r["message"] for r in hard)
+    note = "À vérifier (modifiée après confirmation) : " + " · ".join(r["message"] for r in new)
     routing.detach_order(order)
     rest = {k: v for k, v in order.items() if k not in ("routeRunId", "confirmedAt")}
     crud.orders.put({**rest, "status": "draft", "note": note})
