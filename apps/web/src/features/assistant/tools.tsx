@@ -25,6 +25,9 @@ export const TOOL_LABEL: Record<string, string> = {
   find_alternatives: "Alternatives",
   create_draft_order: "Pré-commande",
   add_order_line: "Ajout de ligne",
+  update_order_line: "Modification de ligne",
+  remove_order_line: "Retrait de ligne",
+  update_order: "Modification de commande",
   confirm_order: "Confirmation",
   get_order: "Commande",
   search_context: "Recherche contexte",
@@ -40,6 +43,7 @@ const SEARCH_ENTITY: Record<string, ActivityEvent["entity"]> = { client: "client
 const TOOL_ENTITY: Record<string, ActivityEvent["entity"]> = {
   get_client: "client", get_product_stock: "product", find_alternatives: "product",
   create_draft_order: "order", add_order_line: "order", confirm_order: "order", get_order: "order",
+  update_order_line: "order", remove_order_line: "order", update_order: "order",
   search_context: "context", save_context: "context",
 };
 

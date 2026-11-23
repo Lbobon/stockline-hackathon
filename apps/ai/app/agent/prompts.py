@@ -28,7 +28,10 @@ BASE_RULES = """Règles :
 - Respecte les préférences et notes du client (ex. pas de substitution) avant de proposer un remplacement.
 - Tiens compte de l'historique du client (get_client / get_client_history : réclamations ouvertes, litiges, retards de paiement). Si un client se plaint, enregistre-le avec log_client_event.
 - Une commande se crée en brouillon (create_draft_order). Ne la confirme (confirm_order) qu'après accord explicite sur le récapitulatif.
-- Signale les alertes renvoyées par l'ERP (encours, client bloqué, stock insuffisant).
+- Heure limite : une commande passée après 3 h du matin ne peut plus être livrée le jour même (les tournées sont chargées). Ne crée et ne confirme jamais une livraison pour aujourd'hui : dis-le clairement et propose la prochaine livraison du client. L'alerte too_late le signale : corrige la date (update_order) avant toute confirmation.
+- Pour changer une commande existante : update_order_line (nouvelle quantité totale, autre produit), remove_order_line, update_order (date, note) — pas une nouvelle ligne en double. Si le client hésite ou se corrige, attends le chiffre définitif ; sur une commande déjà confirmée, relis le changement et attends son oui avant de l'écrire.
+- Ne propose que ce que les outils ou les fiches permettent : pas de choix de lot, pas de date, d'heure, de prix ou de condition que tu n'as pas lus, pas de rappel promis par une personne précise à une heure précise. Si tu ne peux pas, dis que tu transmets la demande.
+- Signale les alertes renvoyées par l'ERP (encours, client bloqué, stock insuffisant, trop tard).
 - Réponds en français, de façon concise."""
 
 CHAT_RULES = "Mode chat : tu peux utiliser un markdown léger (listes courtes, gras)."
@@ -60,7 +63,8 @@ async def build_system_prompt(mode: ChatMode, actor_name: str | None = None) -> 
         ROLE.format(company=company, trade=f"Activité : {trade}" if trade else "C'est un grossiste alimentaire"),
         BASE_RULES,
         MODE_RULES[mode],
-        f"Entreprise : {meta.get('company') or '(ERP injoignable)'}. Aujourd'hui : {french_date(today)} ({today}).",
+        f"Entreprise : {meta.get('company') or '(ERP injoignable)'}. Aujourd'hui : {french_date(today)} ({today})"
+        + (f", il est {t}." if (t := paris_time(meta.get("generatedAt"))) else "."),
         f"Interlocuteur : {actor_name}." if actor_name else "",
         f"# Contexte entreprise\n\n{context}" if (context := read_context_files()) else "",
     ]
@@ -112,6 +116,23 @@ def company_trade() -> str:
 
 WEEKDAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]  # fmt: skip
+
+
+def paris_time(iso: str | None) -> str | None:
+    """The data pack's clock ("2026-11-24T04:30:00.000Z" → "5 h 30"), French time without tzdata (absent on Windows):
+    UTC+2 from the last Sunday of March to the last Sunday of October, else UTC+1. None if absent or unreadable."""
+    try:
+        t = datetime.fromisoformat(iso.replace("Z", "+00:00"))  # type: ignore[union-attr]
+    except (AttributeError, ValueError):
+        return None
+
+    def last_sunday(month: int) -> date:
+        d = date(t.year, month, 31)
+        return date.fromordinal(d.toordinal() - (d.weekday() + 1) % 7)
+
+    summer = last_sunday(3) <= t.date() < last_sunday(10)
+    local = datetime.fromtimestamp(t.timestamp() + (7200 if summer else 3600), UTC)
+    return f"{local.hour} h {local.minute:02d}"
 
 
 def french_date(iso: str) -> str:

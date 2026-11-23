@@ -178,6 +178,7 @@ export interface Warning {
     | "expiring_soon"
     | "no_route"
     | "price_below_cost"
+    | "too_late"
     // purchase orders
     | "below_min_order"
     | "price_above_usual"

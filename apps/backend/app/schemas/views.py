@@ -62,7 +62,7 @@ class Health(Schema):
 
 
 WarningCode = Literal[
-    "credit_limit", "client_blocked", "insufficient_stock", "expiring_soon", "no_route", "price_below_cost",
+    "credit_limit", "client_blocked", "insufficient_stock", "expiring_soon", "no_route", "price_below_cost", "too_late",
     # purchase orders
     "below_min_order", "price_above_usual", "not_in_supplier_catalog",
 ]  # fmt: skip

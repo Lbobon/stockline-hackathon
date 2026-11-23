@@ -72,6 +72,42 @@ async def add_order_line(
 
 
 @tool
+async def update_order_line(
+    ctx: ToolContext,
+    order_id: str,
+    line_id: str = Field(description="lineId renvoyé par get_order / create_draft_order"),
+    qty: float | None = Field(None, description="Nouvelle quantité TOTALE de la ligne (pas un ajout)"),
+    product_id: str | None = Field(None, description="Autre produit (substitution acceptée par le client) : passer aussi substitute_for"),
+    substitute_for: str | None = Field(None, description="productId remplacé, si c'est une substitution"),
+    note: str | None = None,
+) -> dict:
+    """
+    Modifie une ligne d'une commande brouillon ou confirmée : quantité, produit (substitution), note. Prix recalculé.
+    Sur une commande confirmée, seulement après que le client a validé le changement relu.
+    Change a line of a draft/confirmed order (qty is the new total).
+    """
+    patch = {"qty": qty, "productId": product_id, "substituteFor": substitute_for, "note": note}
+    return summarize_order(await ctx.erp.patch(f"/api/orders/{enc(order_id)}/lines/{enc(line_id)}", without_none(patch)))
+
+
+@tool
+async def remove_order_line(ctx: ToolContext, order_id: str, line_id: str) -> dict:
+    """Retire une ligne d'une commande brouillon ou confirmée, quand le client l'a demandé. Remove a line."""
+    return summarize_order(await ctx.erp.delete(f"/api/orders/{enc(order_id)}/lines/{enc(line_id)}"))
+
+
+@tool
+async def update_order(
+    ctx: ToolContext,
+    order_id: str,
+    delivery_date: str | None = Field(None, description="Nouvelle date de livraison YYYY-MM-DD (un jour de livraison du client)"),
+    note: str | None = None,
+) -> dict:
+    """Change la date de livraison ou la note d'une commande brouillon ou confirmée. Change an order's delivery date or note."""
+    return summarize_order(await ctx.erp.patch(f"/api/orders/{enc(order_id)}", without_none({"deliveryDate": delivery_date, "note": note})))
+
+
+@tool
 async def confirm_order(ctx: ToolContext, order_id: str) -> dict:
     """
     Confirme une commande : réserve le stock et l'affecte à une tournée. Renvoie des alertes (encours, stock…).

@@ -74,10 +74,10 @@ export function DocumentNote({ doc }: { doc: DocModel }) {
 }
 
 // ── Warnings ──
-const BLOCKING: Warning["code"][] = ["client_blocked", "credit_limit"];
+const BLOCKING: Warning["code"][] = ["client_blocked", "credit_limit", "too_late"];
 const WARNING_TITLE: Record<Warning["code"], string> = {
   credit_limit: "Encours", client_blocked: "Client bloqué", insufficient_stock: "Stock", expiring_soon: "DLC",
-  no_route: "Tournée", price_below_cost: "Prix",
+  no_route: "Tournée", price_below_cost: "Prix", too_late: "Trop tard",
   below_min_order: "Minimum", price_above_usual: "Prix inhabituel", not_in_supplier_catalog: "Hors catalogue",
 };
 

@@ -134,6 +134,15 @@ def order_warnings(order: Doc) -> list[Doc]:
 
     if client["status"] == "blocked":
         warnings.append({"code": "client_blocked", "message": f"Le client {client['name']} est bloqué"})
+    # Order cutoff (data/context: "commande avant 3h du matin pour une livraison le matin même"). The dataset's day
+    # starts after it (meta.today, 05:30, trucks loaded), so an order taken today can't be delivered today or earlier.
+    # Orders created before today (the seed's) are left alone.
+    if order["deliveryDate"] <= today() and (order.get("createdAt") or "")[:10] >= today():
+        warnings.append({
+            "code": "too_late",
+            "message": f"Trop tard pour une livraison {fr_day(order['deliveryDate'])} : l'heure limite de 3 h est passée et "
+            f"les tournées du jour sont chargées. Prochaine livraison possible : {fr_day(clients.next_delivery_date(client))}",
+        })  # fmt: skip
     if client["creditLimit"] > 0:
         outstanding = clients.client_balances(client["id"])["outstanding"]
         exposure = round2(outstanding + _total_ttc(order["lines"]))
