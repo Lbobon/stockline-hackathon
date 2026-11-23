@@ -499,6 +499,8 @@ async def main() -> None:
     ap.add_argument("--speech-rate", type=float, default=2.6, help="words/s of the emulated live transcript (0 = instant)")
     ap.add_argument("--reports", action="store_true", help="write the Rapporteur's report for each call (shown at /calls)")
     ap.add_argument("--agent-model", help="override the voice agent model, ex. claude-haiku-5-5")
+    ap.add_argument("--generic", type=int, default=0, metavar="N", help="N random calls (random client × everyday situation, generic checks: sim/generic.py) instead of the named scenarios")
+    ap.add_argument("--seed", type=int, default=7, help="seed for --generic (same seed = same calls)")
     a = ap.parse_args()
 
     if a.list:
@@ -509,6 +511,10 @@ async def main() -> None:
     if unknown:
         sys.exit(f"unknown scenario(s): {', '.join(sorted(unknown))} (see --list)")
     picked = [s for s in SCENARIOS if not a.scenarios or s.id in a.scenarios]
+    if a.generic:
+        from .generic import generate
+
+        picked = generate(a.generic, a.seed)
 
     if settings.llm.provider != "anthropic":
         sys.exit("the simulator needs LLM_PROVIDER=anthropic in .env (the caller and judge use the same key)")
