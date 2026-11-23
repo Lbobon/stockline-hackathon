@@ -1,35 +1,36 @@
-# secrets
+# dependencies & builds
+node_modules
+dist
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+
+# secrets: never commit your keys
 .env
 .env.*
 !.env.example
 
-# hackathon data from Stockline: never push
+# local databases
+*.db
+*.db-*
+apps/*/data/
+
+# company data (shipped in your team zip; too big for git)
+data/seed/
+
+.DS_Store
+
+# --- team additions ---
+# raw data from Stockline beyond the kit: never push
 data/raw/*
 !data/raw/.gitkeep
-
-# python
-__pycache__/
-*.pyc
-.venv/
-venv/
-*.db
-.pytest_cache/
-
-# node
-node_modules/
-.next/
-dist/
-build/
-
-# os / editors
-.DS_Store
-Thumbs.db
+# old prototype's runtime files
+prototype/server/orders.json
+# Superset: per-person overrides
+.superset/config.local.json
+.idea/
 .vscode/*
 !.vscode/extensions.json
-.idea/
-
-# voice prototype runtime data
-server/orders.json
-
-# superset: per-person overrides
-.superset/config.local.json
+Thumbs.db
