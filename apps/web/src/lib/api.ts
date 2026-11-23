@@ -21,6 +21,7 @@ import type { Receivables } from "@kit/shared";
 import type { Category } from "@kit/shared";
 import type { ContextEntry, ContextEntryInput, ContextEntrySummary, ContextForEntity, ContextScope } from "@kit/shared";
 import type { ListParams, Page } from "@kit/shared";
+import type { GateReviewItem, ShortageTriage, SubstituteInput } from "@kit/shared";
 import { toast } from "@/ui/toast";
 
 export const API_BASE = "/api";
@@ -275,6 +276,15 @@ export const api = {
 
   admin: {
     reset: () => post<{ ok: true }>("/admin/reset"),
+  },
+
+  // ── "Ce matin": shortage triage, drafts to check (packages/shared/src/morning.ts) ──
+  shortages: {
+    today: () => get<ShortageTriage>("/shortages/today"),
+    substitute: (orderId: Id, body: SubstituteInput = {}) => post<OrderDetail>(`/shortages/${orderId}/substitute`, body),
+  },
+  gates: {
+    review: () => get<GateReviewItem[]>("/gates/review"),
   },
 };
 
