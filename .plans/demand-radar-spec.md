@@ -34,7 +34,7 @@ The two build in parallel against the contract below.
 
 ## Events (« commandes spéciales »)
 
-New data in `apps/backend/app/data/events.json`, committed (the data is fictional):
+New data in `apps/backend/app/radar_events.json`, committed (the data is fictional):
 
 | id | date | title | targets | boost |
 |---|---|---|---|---|
@@ -63,7 +63,8 @@ Each event has a `pitch` sentence that the agent can say (« avec le match demai
   "clients": [{
     "clientId": "cli_0002", "name": "Istanbul Grill (3 snacks)", "type": "restaurant", "city": "Marseille 3e",
     "lat": 43.31, "lng": 5.38, "contactName": "Murat Demir",
-    "status": "ordered | predicted | unlikely",
+    "status": "ordered | upsell | predicted",
+    "addLines": [ "…upsell only: what the events add to the existing order (same line shape)…" ],
     "probability": 0.83, "existingOrderId": "ord_… (when ordered)",
     "lines": [{ "productId": "prd_0043", "productName": "Broche kebab veau-dinde 10 kg", "unit": "piece",
                 "qty": 14, "baseQty": 10, "eventId": "om-psg" }],
@@ -71,7 +72,7 @@ Each event has a `pitch` sentence that the agent can say (« avec le match demai
     "reason": "Commande 9 mercredis sur 12 ; OM–PSG demain soir : +40 % broches",
     "specialRequirements": ["Certificat halal du lot sur le bon"]
   }],
-  "summary": { "ordered": 19, "predicted": 24, "unlikely": 0, "expectedHt": 18400.0, "upliftHt": 2100.0 } }
+  "summary": { "ordered": 19, "predicted": 17, "upsell": 9, "expectedHt": 30430.7, "upliftHt": 5469.6 } }
 ```
 
 `GET /api/routing/optimize?date=2026-11-25`: already built (branch `denis/dispatch`). This is the **RoutePlan** shape:
@@ -87,7 +88,7 @@ Each event has a `pitch` sentence that the agent can say (« avec le match demai
 
 ### AI service (`/ai`, port 4100, through the Vite proxy)
 
-`POST /ai/campaigns` with body `{ "date": "2026-11-25", "clientIds": ["…"] | null, "concurrency": 8 }`. `clientIds: null` means every `predicted` client. Returns `{ "id": "cmp_…" }`.
+`POST /ai/campaigns` with body `{ "date": "2026-11-25", "clientIds": ["…"] | null, "concurrency": 8 }`. `clientIds: null` means every `predicted` and `upsell` client. Returns `{ "id": "cmp_…" }`.
 
 `GET /ai/campaigns/{id}`: a full snapshot. Use it on page load or after a reconnect.
 ```json
@@ -127,3 +128,12 @@ One page, `/radar`:
 - `GET /api/radar/forecast` returns about 24 predicted clients for 25/11, each with a reason. At least the OM match and the weddings visibly change baskets. There's a backend test.
 - A campaign of about 24 calls runs in parallel (concurrency 8) against simulated clients. Every call ends with a Jev decision. Every "oui" creates a finalized order and a `route` event with one more stop.
 - The UI shows it live, from start to final route, in under 2 minutes.
+
+## Status values (from the real data)
+
+- `ordered`: already has an order for the date. Solid pin.
+- `upsell`: has ordered, but an event calls for more: `addLines`. Examples: 2 whole lambs + legs for a caterer's weddings; extra fries and bread for a snack on match night. Solid pin with a "+" badge; it gets a call too.
+- `predicted`: no order yet; `probability` = their weekday rhythm over 12 weeks. Ghost pin; it gets a call.
+- An out-of-stock product is never proposed. Its usual substitute is used, with `note`, unless the client refuses substitutions.
+
+A real sample (2026-11-25, seed data): `.plans/radar-forecast-sample.json`.

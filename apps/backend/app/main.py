@@ -33,6 +33,7 @@ from app.routers import (
     pricing,
     products,
     purchase_orders,
+    radar,
     shortages,
     smart,
     stock,
@@ -108,6 +109,7 @@ for router in [
     smart.gates_router,
     smart.retention_router,
     dispatch.router,
+    radar.router,
 ]:
     app.include_router(router, responses=ERROR_RESPONSES)
 
