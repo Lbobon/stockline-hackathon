@@ -1,0 +1,42 @@
+{
+  "slug": "medina-viandes-marseille",
+  "name": "Médina Viandes",
+  "trade": "boucherie halal",
+  "region": "Marseille et Bouches-du-Rhône",
+  "city": "Marseille",
+  "employees": 32,
+  "clients": 95,
+  "products": 66,
+  "suppliers": 10,
+  "orders": 29604,
+  "stockoutPct": 0.8,
+  "worstStockouts": [
+    "AGN-CAR-FR:239",
+    "AGN-EPA:208",
+    "BOE-HAC:164",
+    "AGN-CAR-ES:164",
+    "AGN-GIG:88"
+  ],
+  "seedMB": 97.9,
+  "generationSeconds": 7.1,
+  "counts": {
+    "products": 66,
+    "clients": 95,
+    "clientPrices": 114,
+    "suppliers": 10,
+    "supplierPrices": 69,
+    "lots": 27149,
+    "stockMovements": 195480,
+    "orders": 29604,
+    "purchaseOrders": 5697,
+    "invoices": 21053,
+    "payments": 14165,
+    "routes": 5,
+    "routeRuns": 3778,
+    "clientEvents": 4002,
+    "supplierEvents": 813,
+    "tags": 28,
+    "priceRules": 7,
+    "contextEntries": 1117
+  }
+}

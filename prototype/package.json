@@ -1,0 +1,13 @@
+{
+  "name": "stockline-voice-prototype",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server/index.mjs",
+    "test": "node server/test-bridge.mjs"
+  },
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
