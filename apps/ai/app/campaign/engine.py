@@ -28,10 +28,10 @@ MAX_ROUNDS = 6
 ORDER_TOOLS = {"finalize_order", "add_order_line", "update_order_line", "create_draft_order"}
 
 DECISIONS = {
-    "oui": "Le client accepte la proposition telle quelle",
-    "modifie": "Le client accepte mais change une quantité ou un produit",
-    "non": "Le client refuse, il ne veut rien de plus",
-    "rappeler": "Le client n'est pas disponible ou veut être rappelé plus tard",
+    "oui": "« Oui, c'est bon, mettez-moi ça » : il accepte tel quel",
+    "modifie": "« Oui mais mettez-en moins / enlevez ça » : il accepte en changeant une quantité ou un produit",
+    "non": "« Non merci, je ne veux rien » : il refuse",
+    "rappeler": "« Rappelez-moi plus tard » : il n'est pas disponible",
 }
 
 # How the simulated clients lean (seeded per client, so a replay gives the same story).
@@ -43,8 +43,8 @@ DISPOSITIONS = [
 ]
 
 CALLEE_RULES = """Tu joues un client de Médina Viandes (grossiste en viande halal, MIN des Arnavaux, Marseille). Nous sommes \
-le mardi 24 novembre 2026 vers 5 h 30. L'agent de Médina t'APPELLE (tu ne t'y attendais pas) au sujet de ta livraison de \
-demain.
+le mardi 24 novembre 2026, vers 15 h, le creux de l'après-midi. L'agent de Médina t'APPELLE pour préparer ta livraison \
+de demain (c'est l'heure où les commerciaux appellent d'habitude).
 
 Ta fiche (qui tu es, comment tu parles, ce que tu commandes) :
 <fiche>
@@ -135,35 +135,38 @@ def callee_llm():
 
 async def _complete(system: str, messages: list[ChatMessage]) -> str:
     text = ""
-    async for ev in callee_llm().stream(LLMRequest(system=system, messages=messages, max_tokens=300)):
+    # generous budget: the model may think first, and an empty answer ended calls before the client spoke
+    async for ev in callee_llm().stream(LLMRequest(system=system, messages=messages, max_tokens=1500)):
         if isinstance(ev, LLMText):
             text += ev.delta
     return text.strip()
 
 
-def _keyword_decision(said: str) -> str:
+def _keyword_decision(said: str) -> str | None:
+    """Obvious answers only; None when unclear."""
     s = said.lower()
-    if any(w in s for w in ("rappel", "plus tard", "pas le temps", "dans une heure")):
+    if any(w in s for w in ("rappelez", "rappelle-moi", "plus tard", "pas le temps", "dans une heure")):
         return "rappeler"
-    if any(w in s for w in ("non merci", "pas besoin", "ça ira", "non, ", "pas cette fois")):
+    if any(w in s for w in ("non merci", "pas besoin", "veux rien", "rien de plus", "pas cette fois", "ça ira pas", "non, non")):
         return "non"
-    if any(w in s for w in ("plutôt", "mets-moi", "mettez-moi", "enlève", "retire", "au lieu", "seulement")):
-        return "modifie"
-    return "oui"
+    return None
 
 
 async def decide(agent_said: str, client_said: str) -> dict:
     """Jev in ~300 ms; keyword fallback when Jev is off, slow or unsure."""
+    obvious = _keyword_decision(client_said)
     jev = get_jev_client()
     if jev:
         try:
-            ans = await asyncio.wait_for(jev.ask({"agent": agent_said[-600:], "client": client_said},
-                                                 {"d": choice_question("Que répond le client à la proposition de l'agent ?", DECISIONS)}), 3.0)  # fmt: skip
+            # only what the client said: the agent's long pitch drowned the answer
+            ans = await asyncio.wait_for(jev.ask({"reponse_du_client": client_said},
+                                                 {"d": choice_question("Un commercial vient de proposer une commande au client. Que répond le client ?", DECISIONS)}), 3.0)  # fmt: skip
             a = ans["answers"]["d"]
-            return {"label": a["choice"], "confidence": round(a["confidence"], 2), "source": "jev"}
+            if not obvious or obvious == a["choice"]:
+                return {"label": a["choice"], "confidence": round(a["confidence"], 2), "source": "jev"}
         except Exception as e:  # never let a decision break a call
             print(f"[campaign] jev indisponible ({type(e).__name__}) : repli mots-clés", flush=True)
-    return {"label": _keyword_decision(client_said), "confidence": 0.6, "source": "keywords"}
+    return {"label": obvious or "oui", "confidence": 0.9 if obvious else 0.5, "source": "keywords"}
 
 
 # ── route ──
@@ -232,6 +235,15 @@ def _order_from(results: list[ToolResultEvent]) -> dict | None:
     return None
 
 
+async def _finalize(order_id: str) -> dict | None:
+    try:
+        r = await ErpClient("voice_agent", "Agent vocal (radar)").post(f"/api/gates/orders/{order_id}/finalize", {"recapConfirmed": True})
+        return r.get("order")
+    except Exception as e:
+        print(f"[campaign] finalize {order_id}: {e}", flush=True)
+        return None
+
+
 async def run_call(c: Campaign, call: Call, row: dict) -> None:
     tools = all_tools()
     _set(c, call, "ringing")
@@ -267,10 +279,27 @@ async def run_call(c: Campaign, call: Call, row: dict) -> None:
                 if call.decision is None or call.decision["label"] != "oui" or not order:
                     call.decision = await decide(said, reply)
                     emit(c, {"type": "decision", "callId": call.callId, **call.decision})
-            if done or not reply:
+            agent_history.append(ChatMessage(role="user", content=reply or "(silence)"))
+            yes = (call.decision or {}).get("label") in ("oui", "modifie")
+            if (done or not reply) and not (yes and not order):
                 break
-            agent_history.append(ChatMessage(role="user", content=reply))
+            if done and yes and not order:  # the client said yes and hung up in one breath: the agent still writes it
+                said, results, error = await _agent_turn(agent_history, tools)
+                _line(c, call, "agent", said)
+                order = _order_from(results) or order
+                break
         label = (call.decision or {}).get("label")
+        if order and order.get("status") == "draft" and label in ("oui", "modifie"):
+            # safety net: the client said yes but the agent left a draft; the ERP's order checks still decide
+            order = await _finalize(order["id"]) or order
+        if order and not call.orderId:
+            call.orderId, call.lines = order["id"], order.get("lines") or []
+            added = float(order.get("totalHt") or 0) - (float(row.get("totalHt") or 0) if row["status"] == "upsell" else 0)
+            call.totalHt = round(max(added, 0.0), 2)
+            emit(c, {"type": "order", "callId": call.callId, "clientId": call.clientId, "orderId": order["id"],
+                     "totalHt": call.totalHt, "lines": call.lines, "status": order.get("status")})  # fmt: skip
+        if order:
+            asyncio.create_task(push_route(c))
         if order and order.get("status") in ("confirmed", "prepared", None):
             final = "modified" if label == "modifie" else "confirmed"
         elif order:  # kept as a draft by the order checks: still a yes from the client
