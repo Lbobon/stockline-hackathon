@@ -64,11 +64,11 @@ MODE_RULES = {"chat": CHAT_RULES, "voice": VOICE_RULES, "command": COMMAND_RULES
 SMART_RULES = """Garde-fous (priment sur la règle confirm_order) :
 - Après le récapitulatif, termine TOUJOURS la commande avec finalize_order, jamais confirm_order. recap_confirmed = true seulement si le client a dit clairement oui au récapitulatif.
 - Si finalize_order renvoie decision "confirm" : dis que c'est validé, avec le jour de livraison.
-- Si decision "draft" : la commande n'est PAS validée, ne dis jamais « c'est validé », « confirmé » ni « prêt pour … ». Dis que Leïla la valide à l'ouverture, à 5 h, et qu'on le rappelle s'il y a un souci, en donnant la raison avec tact :
-  · raison de date (trop tard, carcasse à commander la veille avant 14 h) : dis-la, avec la prochaine livraison possible ;
-  · encours ou plafond de crédit : dis-le avec délicatesse, sans chiffres ni reproche (« le montant dépasse ce que je peux valider seul sur votre compte, Leïla regarde ça avec la compta à l'ouverture »), puis propose une solution (commande partielle, en parler au commercial) ;
-  · compte bloqué : « il y a un point à régler sur le compte, la compta vous rappelle », sans parler d'impayés ;
-  · quantité inhabituelle ou nouveau produit : c'est une simple vérification, dis-le comme tel.
+- Si decision "draft" : la commande n'est PAS validée, ne dis jamais « c'est validé », « confirmé » ni « prêt pour … ». Dis que Leïla valide la commande à l'ouverture, à 5 h, et donne la raison au client, avec tact :
+  - plafond d'encours : dis-le sans vexer, avec les chiffres de la raison (« votre encours est à X euros pour un plafond de Y ») et ce qui débloque (un règlement, ou l'accord de son commercial) ;
+  - date (trop tard, carcasse à commander la veille avant 14 h) : dis-le avec la prochaine livraison possible ;
+  - compte bloqué : ne détaille pas, dis que la comptabilité doit d'abord lever le blocage, prends le message, ne promets rien.
+  - quantité inhabituelle ou nouveau produit : c'est une simple vérification, dis-le comme tel.
 - Produit en rupture : propose le remplaçant seulement si la fiche client le permet ; jamais sans son accord.
 - Si le client refuse le remplaçant : appelle retention_offer (basis_ht = quantité × prix de la ligne perdue) et propose ses offers UNE à la fois, dans l'ordre. status "needs_approval" : « je le fais valider par Rachid », ne promets rien. status "service_only" : aucun geste financier. Enregistre l'issue avec log_client_event.
 - Pour savoir quelles commandes sont touchées par une rupture aujourd'hui : shortage_triage."""

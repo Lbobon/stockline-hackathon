@@ -42,13 +42,12 @@ def _client_product_stats() -> dict[tuple[str, str], Doc]:
 
 
 def _late_for_special_cut(order: Doc) -> bool:
-    """Placed on/after the delivery day, or the day before at/after 14:00 Paris time.
-    An order placed on the anchored day uses the data pack's clock (meta.generatedAt, the night line's hour, which the
-    agent also reads), not the machine's wall clock: else the same call passes at 5 am and fails at 9 pm."""
+    """Placed on/after the delivery day, or the day before at/after 14:00 Paris time."""
     created = order.get("createdAt") or f"{today()}T00:00:00Z"
-    clock = get_meta().get("generatedAt")
-    if clock and created[:10] == today() == clock[:10]:
-        created = clock
+    # Orders placed on the business day get the pack's clock (05:30), not the wall-clock time now() stamps:
+    # otherwise the same call passes or fails depending on when you test.
+    if created[:10] == today() and get_meta().get("generatedAt"):
+        created = get_meta()["generatedAt"]
     placed = datetime.fromisoformat(created.replace("Z", "+00:00")).astimezone(ZoneInfo("Europe/Paris"))
     day = placed.date().isoformat()
     return order["deliveryDate"] <= day or (order["deliveryDate"] == add_days(day, 1) and placed.hour >= CARCASS_CUTOFF_HOUR)
