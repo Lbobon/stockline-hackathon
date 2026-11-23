@@ -36,6 +36,12 @@ async def retention_offer(
     par Rachid », ne rien promettre. status "service_only" : aucun geste financier.
     """
     r = await ctx.erp.get(f"/api/retention/{enc(client_id)}", {"basisHt": basis_ht, "costHt": cost_ht})
+    if r["status"] == "needs_approval":
+        # Open event = an "À faire" card for Rachid on the morning page (type credit_note, status open, title "Geste à valider…").
+        await ctx.erp.post(f"/api/clients/{enc(client_id)}/events", {
+            "type": "credit_note", "status": "open", "amount": r["amountHt"], "tags": ["geste-a-valider"],
+            "title": f"Geste à valider par Rachid : {r['pct']:g} % ({r['amountHt']:.2f} € HT)", "description": r["explanation"],
+        })  # fmt: skip
     return pick(r, "status", "pct", "amountHt", "offers", "explanation")
 
 
