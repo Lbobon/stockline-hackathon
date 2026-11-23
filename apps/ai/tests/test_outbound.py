@@ -3,13 +3,17 @@
 import asyncio
 
 from app.agent import outbound
-from app.agent.outbound import spoken_day, spoken_qty
+from app.agent.outbound import spoken_day, spoken_price, spoken_qty
 
 
 def test_spoken_quantities():
     assert spoken_qty(36.5, "kg") == "36 kilos et demi"
     assert spoken_qty(10, "piece") == "10 pièces"
     assert spoken_qty(2.25, "kg") == "2,25 kilos"
+
+
+def test_spoken_prices():
+    assert spoken_price(9.4) == "9 euros 40" and spoken_price(64) == "64 euros" and spoken_price(26.55) == "26 euros 55"
 
 
 def test_spoken_days():
@@ -46,3 +50,16 @@ def test_the_brief_closes_the_gaps_the_sim_found(monkeypatch):
     assert "Haut de cuisse (un arrivage est prévu)" in brief  # the other short line, only with the ERP's facts
     assert "veut être prévenu de tout changement" in brief  # a client who refuses substitutions hears it unprompted
     assert "basis_ht = 967.25" in brief  # 36.5 × 26.5
+
+
+def test_the_rest_leaves_normally_only_when_it_is_in_stock(monkeypatch):
+    class AllInStock(FakeErp):
+        async def get(self, path, params=None):
+            if path == "/api/orders/ord_1":
+                return {"status": "confirmed", "warnings": []}
+            return await super().get(path, params)
+
+    monkeypatch.setattr(outbound, "ErpClient", AllInStock)
+    assert "le reste partant normalement" in asyncio.run(outbound.shortage_brief("ord_1"))
+    monkeypatch.setattr(outbound, "ErpClient", FakeErp)  # thigh line short too
+    assert "le reste partant normalement" not in asyncio.run(outbound.shortage_brief("ord_1"))

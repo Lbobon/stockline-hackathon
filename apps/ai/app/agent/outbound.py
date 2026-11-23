@@ -26,6 +26,12 @@ def spoken_qty(qty: float, unit: str) -> str:
     return f"{whole} {word} et demi" if half else f"{qty:g} {word}".replace(".", ",")
 
 
+def spoken_price(price: float) -> str:
+    """9.4 → « 9 euros 40 », 64 → « 64 euros »."""
+    euros, cents = int(price), round((price - int(price)) * 100)
+    return f"{euros} euros {cents:02d}" if cents else f"{euros} euros"
+
+
 def spoken_day(delivery: str, today: str) -> str:
     """The delivery day as said on the phone: « demain mercredi », « ce matin », « jeudi 26 »."""
     try:
@@ -64,8 +70,14 @@ async def shortage_brief(order_id: str) -> str:
         basis += line["missingQty"] * line["price"]
         sub = line.get("substitute")
         if sub and sub.get("available", 0) >= line["missingQty"]:
-            subs.append(f"{line['name']} → {sub['name']} ({sub['price']:g} € le {line['unit']})")
-            lines.append(f"il manque {missing} de {line['name']} ; remplaçant en stock : {sub['name']}")
+            try:  # the client's own price (negotiated > rule > list), as get_price would say it
+                price = (await erp.get("/api/prices/resolve", {"clientId": row["clientId"], "productId": sub["productId"],
+                                                                "qty": line["missingQty"]})).get("price", sub["price"])  # fmt: skip
+            except Exception:
+                price = sub["price"]
+            offer_line = f"{sub['name'].lower()} à {spoken_price(price)} le {UNITS.get(line['unit'], line['unit']).rstrip('s')}"
+            subs.append(f"{line['name']} → {offer_line}")
+            lines.append(f"il manque {missing} de {line['name']} ; remplaçant en stock : {offer_line} (son prix à lui)")
         elif usual.get(line["productId"]):
             lines.append(f"il manque {missing} de {line['name']} ; son remplaçant habituel ({usual[line['productId']]}) n'est pas disponible non plus")
         else:
@@ -91,15 +103,17 @@ async def shortage_brief(order_id: str) -> str:
     pending = order.get("status") == "draft"
 
     offer = (
-        f"Propose ce remplaçant (et lui seul) : {'; '.join(subs)}. S'il accepte : apply_substitution."
+        f"Propose ce remplaçant (et lui seul) : {'; '.join(subs)}. S'il accepte : apply_substitution, puis confirme en "
+        "une phrase ; aucune autre écriture (ni note de ligne, ni autre modification)."
         if subs
         else "Il n'y a pas de remplaçant en stock : dis-le simplement (le remplaçant habituel manque aussi, mais ne le "
         "nomme que si on te pose la question), ne propose aucun autre produit de toi-même et ne lui demande pas d'en trouver un."
     )
     question = (
-        "est-ce qu'il accepte le remplaçant"
+        f"est-ce qu'il accepte {subs[0].split(' → ')[1]} à la place (dis le prix dans la même phrase)"
         if subs
-        else "est-ce qu'on retire ce produit de la commande pour cette livraison, le reste partant normalement"
+        else "est-ce qu'on retire ce produit de la commande pour cette livraison"
+        + ("" if tight else ", le reste partant normalement")  # only when the rest of the order is really in stock
     )
     impossible = (
         f"\n- Aucun arrivage confirmé pour {', '.join(nothing_coming)} : une livraison plus tard ou une quantité partielle "
