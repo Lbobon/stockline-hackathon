@@ -30,3 +30,6 @@ Thumbs.db
 
 # voice prototype runtime data
 server/orders.json
+
+# superset: per-person overrides
+.superset/config.local.json
