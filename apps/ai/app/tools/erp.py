@@ -30,7 +30,8 @@ def erp_http() -> httpx.AsyncClient:
     global _http, _http_loop
     loop = asyncio.get_running_loop()
     if _http is None or _http.is_closed or _http_loop is not loop:
-        _http, _http_loop = httpx.AsyncClient(timeout=10), loop
+        # keep-alive under uvicorn's 5 s: never reuse a socket the server is closing (gave an empty « ERP injoignable »)
+        _http, _http_loop = httpx.AsyncClient(timeout=10, limits=httpx.Limits(keepalive_expiry=4.0)), loop
     return _http
 
 
@@ -78,8 +79,15 @@ class ErpClient:
         return await self._send(method, path, **kwargs)
 
     async def _send(self, method: str, path: str, **kwargs: Any) -> Any:
+        http, url = self.http or erp_http(), f"{self.base_url}{path}"
         try:
-            res = await (self.http or erp_http()).request(method, f"{self.base_url}{path}", headers=self.headers, **kwargs)
+            try:
+                res = await http.request(method, url, headers=self.headers, **kwargs)
+            except (httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadError) as e:
+                # One retry on a fresh connection. A write only when it surely never reached the server (connect failed).
+                if method != "GET" and not isinstance(e, httpx.ConnectError):
+                    raise
+                res = await http.request(method, url, headers=self.headers, **kwargs)
         except httpx.HTTPError as e:
             raise ErpError(f"ERP injoignable ({self.base_url}) : {e or type(e).__name__}") from e
         try:

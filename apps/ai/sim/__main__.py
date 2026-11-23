@@ -38,6 +38,8 @@ from app.config import REPO_ROOT, LLMSettings, settings
 from app.schemas import ChatMessage, DoneEvent, ErrorEvent, TextEvent, ToolCallEvent, ToolResultEvent
 from app.tools import all_tools
 
+from app.agent.prompts import read_context_files
+
 from .scenarios import SCENARIOS, Scenario
 from .trace import Trace, Turn, add_usage
 
@@ -89,9 +91,10 @@ substitute without explicit agreement; confirm an order only after a recap and a
 is passed, today's trucks are loaded; never invent facts (times, dates, stock) the tools didn't give; voice style: \
 short, no ids or markdown read aloud, numbers said naturally.
 
-Besides the tools, the agent's prompt holds the company documents (procedures, who does what, product glossary, \
-today's stockouts and supplier problems), so a fact from there is not invented just because no tool returned it. \
-Do flag precise numbers (prices, times, amounts) that neither a tool nor plausible company documents would give.
+Besides the tools, the agent's prompt holds the company documents, given to you in your system prompt (procedures, \
+who does what, product glossary, delivery zones and departure times, today's stockouts): a fact from them is not \
+invented just because no tool returned it. Do flag precise facts (prices, times, amounts, dates) that neither a tool nor \
+these documents give.
 
 Automatic checks on the tool trace:
 {checks}
@@ -197,13 +200,21 @@ STYLE = [  # things that must never be heard on the phone
 ]
 
 
+def judge_system() -> str:
+    """The judge gets the company documents the agent has in its prompt, else it flags true facts (the Toulon departure at
+    5:45, carcasses weighed at the dock) as invented. In the system prompt, so it is cached across the calls of a run."""
+    docs = read_context_files()
+    return "You are a strict, fair evaluator of voice agents. Output JSON only." + (
+        f"\n\nCompany documents the agent has in its prompt:\n<documents>\n{docs}\n</documents>" if docs else "")
+
+
 async def grade(sc: Scenario, trace: Trace, judge_llm) -> dict:
     checks = [(name, bool(fn(trace))) for name, fn in sc.checks]
     said = " ".join(t.agent for t in trace.turns)
     style = [name for name, rx in STYLE if rx.search(said)]
     checks_txt = "\n".join(f"- {'PASS' if ok else 'FAIL'} {name}" for name, ok in checks) or "- (none)"
     prompt = JUDGE_PROMPT.format(title=sc.title, goal=sc.goal, expect=sc.expect, checks=checks_txt, transcript=transcript(trace))
-    raw = await complete(judge_llm, "You are a strict, fair evaluator of voice agents. Output JSON only.", [ChatMessage(role="user", content=prompt)], trace.sim_usage, 4000)
+    raw = await complete(judge_llm, judge_system(), [ChatMessage(role="user", content=prompt)], trace.sim_usage, 4000)
     try:
         judge = json.loads(re.search(r"\{[\s\S]*\}", raw)[0])
     except Exception:

@@ -125,3 +125,12 @@ async def test_finalize_an_already_confirmed_order_is_not_an_error():
     ctx = ToolContext(erp=ErpClient("voice_agent", base_url="http://erp", http=httpx.AsyncClient(transport=httpx.MockTransport(handler))), actor="voice_agent")
     r = await TOOLS["finalize_order"].run({"orderId": "ord_1", "recapConfirmed": True}, ctx)
     assert r["decision"] == "already_confirmed" and r["order"]["status"] == "confirmed"
+
+
+def test_an_invented_event_type_maps_to_the_closest_real_one():
+    from app.tools.history import client_event_type
+
+    assert client_event_type("callback_request") == "call"
+    assert client_event_type("price_request") == "price_negotiation"
+    assert client_event_type("complaint") == "complaint"
+    assert client_event_type("something_else") == "note"

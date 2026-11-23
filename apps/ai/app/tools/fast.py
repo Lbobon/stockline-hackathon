@@ -36,6 +36,12 @@ async def _strip_expiry(coro) -> dict:
     return r
 
 
+# Haiku skipped the discovery questions with the rule only in the prompt: a note in the result is read every time.
+PROSPECT = ("Pas encore client : réponds à ses questions, puis finis chaque réponse par UNE question pour le connaître, une à la fois "
+            "(volumes par semaine, produits clés, fournisseur actuel) ; propose que son commercial le rappelle pour une offre ; "
+            "note ce qu'il dit (log_client_event). Pas de commande ferme sans son accord.")
+
+
 @tool
 async def find_client(
     ctx: ToolContext,
@@ -65,7 +71,9 @@ async def find_client(
     )
     # The register ("Rester formel…") sits deep in the context entries, where the model kept missing it: put it on top.
     talk = next((e.get("body") for e in (context.get("entries") or []) if "comment leur parler" in (e.get("title") or "").lower()), None) if isinstance(context, dict) else None
+    prospect = isinstance(card, dict) and card.get("status") == "prospect"
     return {
+        **({"prospect": PROSPECT} if prospect else {}),
         "client": card, **({"howToTalk": talk} if talk else {}), "context": context,
         **({"otherCandidates": candidates[1:]} if len(candidates) > 1 else {}),
     }
