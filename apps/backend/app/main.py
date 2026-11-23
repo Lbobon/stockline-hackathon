@@ -33,6 +33,7 @@ from app.routers import (
     products,
     purchase_orders,
     shortages,
+    smart,
     stock,
     supplier_events,
     suppliers,
@@ -103,6 +104,8 @@ for router in [
     logistics.route_runs,
     context.router,
     shortages.router,
+    smart.gates_router,
+    smart.retention_router,
 ]:
     app.include_router(router, responses=ERROR_RESPONSES)
 
