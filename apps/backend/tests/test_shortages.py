@@ -18,11 +18,10 @@ from app.main import app  # noqa: E402
 with TestClient(app) as c:
     t = c.get("/api/shortages/today").json()
     by_order = {o["orderId"]: o for o in t["orders"]}
-    assert {p["productId"] for p in t["products"]} >= {"prd_0020", "prd_0044"}, t["products"]
+    assert {p["productId"] for p in t["products"]} == {"prd_0020"}, t["products"]  # the 20 kg skewer is covered
 
-    grill = by_order["ord_029604"]  # Istanbul Grill: today's truck, card silent on substitutions
-    assert grill["leavesToday"] and grill["preference"] == "unknown" and grill["decision"] == "call"
-    assert t["orders"][0]["orderId"] == "ord_029604", "today's truck must come first"
+    # Istanbul Grill's 20 kg skewers were already replaced by 10 kg ones with the client's OK (substituteFor in the seed).
+    assert "ord_029604" not in by_order, "an already-substituted line is not a shortage"
     assert by_order["ord_029511"]["preference"] == "refuses" and by_order["ord_029511"]["decision"] == "call"
     # Chez Karine accepts substitutes, but turkey escalope (the usual substitute) is oversold in the seed → call.
     karine = by_order["ord_029586"]

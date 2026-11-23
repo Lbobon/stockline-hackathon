@@ -66,7 +66,9 @@ def triage(date: str | None = None) -> Doc:
     for o in crud.orders.rows.values():
         if o["status"] not in OPEN_STATUSES or o["deliveryDate"] < day:
             continue
-        hit = [l for l in o["lines"] if l["productId"] in short and (l.get("preparedQty") is None or l["qty"] > l["preparedQty"])]
+        replaced = {l["substituteFor"] for l in o["lines"] if l.get("substituteFor")}  # already substituted with the client's OK
+        hit = [l for l in o["lines"] if l["productId"] in short and l["productId"] not in replaced
+               and (l.get("preparedQty") is None or l["qty"] > l["preparedQty"])]  # fmt: skip
         if not hit:
             continue
         client = crud.clients.require(o["clientId"])
