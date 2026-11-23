@@ -1,6 +1,7 @@
 {
   "setup": [
     "[ -f .env ] || cp \"$SUPERSET_ROOT_PATH/.env\" .env",
-    "npm install --no-audit --no-fund"
+    "[ -e data/seed ] || ln -s \"$SUPERSET_ROOT_PATH/data/seed\" data/seed",
+    "(cd apps/backend && uv sync) && (cd apps/ai && uv sync) && pnpm install"
   ]
 }
