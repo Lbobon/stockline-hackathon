@@ -34,3 +34,6 @@ prototype/server/orders.json
 .vscode/*
 !.vscode/extensions.json
 Thumbs.db
+
+# Demo recordings (large binaries): keep them out of git, share them directly
+demo/*.mp4
