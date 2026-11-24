@@ -13,6 +13,12 @@ One turn:
 Barge-in: a new audio_start / text while the agent is still busy cancels the running turn (asyncio
 cancellation); what was heard and said so far stays in the history.
 
+Hands-free (audio_start {continuous: true}): the mic stays open, one live STT stream for the call (services/handsfree.py).
+At each pause the turn starts at once as a draft behind a Gate: it thinks, looks up and synthesizes, but nothing is
+sent, said or written until the sentence is judged finished (then the held messages go out in order); new words first
+= the draft is dropped and rolled back, the sentence goes on. The caller talking over the agent (not its own echo,
+not a « oui oui ») cuts the audio (agent_audio_cut) and cancels the turn.
+
 The turn runs through the call orchestra (app/orchestra): the Éclaireur reads the live transcript while the caller
 speaks and prefetches the data, the Réflexe answers a plain « oui », a cached filler line plays when the agent has to
 look something up, the Greffier writes notes in the background, and on hangup the Rapporteur writes the call report.
@@ -21,6 +27,7 @@ look something up, the Greffier writes notes in the background, and on hangup th
 import asyncio
 import copy
 import json
+import os
 import re
 import time
 import uuid
@@ -31,7 +38,7 @@ from dataclasses import dataclass, field
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import TypeAdapter, ValidationError
 
-from app.agent import run_agent
+from app.agent import jev, run_agent
 from app.agent.caller import load_caller
 from app.agent.loop import ms_since
 from app.agent.outbound import shortage_brief
@@ -39,6 +46,7 @@ from app.clients import STTUpdate, TTSClient, get_llm_client, get_stt_client, ge
 from app.config import settings
 from app.guard import Guard, Verdict, until
 from app.schemas import (
+    AgentAudioCutMessage,
     AgentAudioEndMessage,
     AgentAudioStartMessage,
     AgentDoneMessage,
@@ -69,7 +77,9 @@ from app.orchestra import store as call_store
 from app.orchestra.session import FILLERS, trim  # noqa: F401  (trim: re-exported for the tests)
 from app.schemas.base import WireModel
 from app.tools import all_tools
+from app.tools.erp import Gate, draft_gate
 
+from .handsfree import MAX_WAIT_S, Listener, backchannel, echo_of, is_complete, same_words
 from .utterance import Utterance
 from .vocabulary import stt_hint
 
@@ -139,6 +149,25 @@ async def cache_fillers(tts: TTSClient, language: str = "fr") -> None:
             return
 
 
+# shortcut: the server sends audio faster than real time and can't see the client's playback; for this long after a turn
+# the agent may still be audible, so the caller's words still cut it. Upgrade: the client reports playback end.
+PLAYBACK_TAIL_S = 8
+HANDSFREE_FILLER_MS = 200  # hands-free: the STT already took ≈0.5 s to show the last word; the cached line comes sooner
+
+
+@dataclass
+class Draft:
+    """A turn started at the caller's pause, not yet kept (see the module docstring)."""
+
+    task: asyncio.Task
+    gate: Gate
+    text: str
+    upto: int  # the listener's final transcript up to here is this turn
+    history: list
+    turns: int
+    utterance: tuple  # the call's (turn_no, speaking, cur) before the draft: the caller's sentence still open
+
+
 # In memory: a reconnect with the same sessionId continues the conversation.
 conversations: dict[str, Conversation] = {}
 
@@ -154,6 +183,11 @@ class VoiceConnection:
         self.warm_up: asyncio.Task | None = None
         self.speaker = "client"  # copilot mode: whose voice is being recorded
         self._send_lock = asyncio.Lock()
+        self.listener: Listener | None = None  # hands-free: the call's live STT stream
+        self.draft: Draft | None = None
+        self.said_lately = ""  # the agent's last words: what its echo in the mic would sound like
+        self.cut = False  # hands-free: agent_audio_cut already sent for the caller's current words
+        self.turn_ended = 0.0
 
     # ── sending ──
 
@@ -164,6 +198,12 @@ class VoiceConnection:
         await self._send(bytes=data)
 
     async def _send(self, **message) -> None:
+        if (gate := draft_gate.get()) is not None:  # a drafted turn: held until kept, gone if dropped
+            if not gate.event.is_set():
+                gate.held.append(message)
+                return
+            if gate.dropped:
+                return
         async with self._send_lock:
             with suppress(WebSocketDisconnect, RuntimeError):  # the client is gone: nothing to do
                 if message.get("text") is not None:
@@ -181,13 +221,16 @@ class VoiceConnection:
                 if frame["type"] == "websocket.disconnect":
                     break
                 if frame.get("bytes") is not None:
-                    if self.recording:
+                    if self.listener:
+                        self.listener.feed(frame["bytes"])
+                    elif self.recording:
                         self.recording.feed(frame["bytes"])
                     continue
                 await self.handle_text(frame.get("text") or "")
         except WebSocketDisconnect:
             pass
         finally:
+            self.stop_listening()
             await self.interrupt()
             self.end_call(report=True)  # the line dropped: still report the call
 
@@ -225,7 +268,16 @@ class VoiceConnection:
             case CopilotConfirmMessage():
                 if self.copilot:
                     spawn(self.conversation.call.confirm())
+            case AudioStartMessage(mime=mime, hint=hint, continuous=True):
+                self.stop_listening()
+                await self.interrupt()
+                self.conversation.call.filler_after_ms = HANDSFREE_FILLER_MS
+                spawn(jev.warm())  # the end-of-sentence check reads in ≈140 ms, not ≈950 ms, from the first sentence
+                self.listener = Listener(get_stt_client(), mime, hint, self.on_words, self.on_endpoint)
+            case AudioEndMessage() if self.listener:
+                self.listener.close()  # the provider finalizes: a last endpoint may still come
             case AudioStartMessage(mime=mime, hint=hint):
+                self.stop_listening()
                 await self.interrupt()  # barge-in
                 self.conversation.call.speech_start()
                 self.recording = Utterance(get_stt_client(), mime, hint, on_partial=self.send_partial)
@@ -238,10 +290,12 @@ class VoiceConnection:
                 await self.interrupt()
                 self.start_turn(text=text, demo_error=demo_error)
             case ResetMessage():
+                self.stop_listening()
                 await self.interrupt()
                 self.end_call(report=False)
                 await self.open(self.conversation.id)
             case HangupMessage():
+                self.stop_listening()
                 await self.interrupt()
                 self.end_call(report=True)
                 await self.open(self.conversation.id)
@@ -325,6 +379,7 @@ class VoiceConnection:
 
     async def interrupt(self) -> None:
         """Barge-in: drop a recording in progress, stop the running turn and wait until it has cleaned up."""
+        await self.drop_draft()
         if self.recording:
             self.recording.cancel()
             self.recording = None
@@ -333,6 +388,94 @@ class VoiceConnection:
             with suppress(asyncio.CancelledError):
                 await self.turn
         self.turn = None
+
+    # ── hands-free: the server finds the end of each sentence (services/handsfree.py) ──
+
+    def stop_listening(self) -> None:
+        if self.listener:
+            self.listener.cancel()
+            self.listener = None
+
+    async def on_words(self, words: str, update: STTUpdate) -> None:
+        """New words since the last kept turn, while the caller speaks."""
+        if self.draft is not None and not same_words(words, self.draft.text):
+            await self.drop_draft()  # they were not done: the sentence goes on, the draft is forgotten
+        if self.conversation and self.conversation.call:
+            self.conversation.call.on_partial(words)
+        stable = self.listener.since(update.stable) if self.listener else ""
+        await self.send(TranscriptMessage(text=words, final=False, stable=stable))
+        if self.draft is not None:
+            return
+        if not self.audible() or self.cut or backchannel(words) or echo_of(words, self.said_lately):
+            return
+        self.cut = True  # talking over the agent: silence it now, on the client too
+        await self.send(AgentAudioCutMessage())
+        if self.turn and not self.turn.done():
+            await self.interrupt()
+
+    async def on_endpoint(self, text: str) -> None:
+        """The caller paused: draft the answer now, decide in the background whether to keep it."""
+        self.cut = False
+        upto = self.listener.fired if self.listener else 0
+        busy = self.turn is not None and not self.turn.done()  # a « oui » once it has finished is an answer
+        if (self.audible() and echo_of(text, self.said_lately)) or (busy and backchannel(text)):
+            if self.listener:
+                self.listener.commit(upto)  # its own voice, or « oui oui » while it talks: not a turn
+            return
+        await self.interrupt()
+        call = self.conversation.call
+        gate = Gate()
+
+        async def drafted() -> None:
+            draft_gate.set(gate)  # this task and the ones it starts (speaker, guard, Greffier) are held by the gate
+            await self.run_turn(self.conversation, text=text)
+
+        self.turn = asyncio.create_task(drafted())
+        utterance = (call.state.turn_no, call.speaking, dict(call.cur) if call.cur else None)
+        self.draft = Draft(self.turn, gate, text, upto, list(call.history), len(call.state.turns), utterance)
+        spawn(self.decide(self.draft))
+
+    def audible(self) -> bool:
+        """The agent may still be heard: its turn is running, or its audio may still be playing on the client."""
+        busy = self.turn is not None and not self.turn.done()
+        return busy or time.perf_counter() - self.turn_ended < PLAYBACK_TAIL_S
+
+    async def decide(self, d: Draft) -> None:
+        t = time.perf_counter()
+        done = await is_complete(d.text)
+        if not done:
+            await asyncio.sleep(MAX_WAIT_S)  # « je voudrais du… »: give them time; new words drop the draft meanwhile
+        kept = self.draft is d
+        print(f"[voice] hands-free « {d.text[-50:]} »: {'fini' if done else 'pas fini'}, "
+              f"{'gardé' if kept else 'abandonné'} après {ms_since(t)} ms", flush=True)  # fmt: skip
+        if kept:
+            await self.keep_draft()
+
+    async def keep_draft(self) -> None:
+        d, self.draft = self.draft, None
+        if d is None:
+            return
+        if self.listener:
+            self.listener.commit(d.upto)
+        while d.gate.held:  # in order; the turn's new messages queue behind until the gate opens
+            await self._send(**d.gate.held.pop(0))
+        d.gate.open()
+
+    async def drop_draft(self) -> None:
+        d, self.draft = self.draft, None
+        if d is None:
+            return
+        d.gate.drop()
+        d.task.cancel()
+        with suppress(asyncio.CancelledError):
+            await d.task
+        if self.turn is d.task:
+            self.turn = None
+        call = self.conversation.call if self.conversation else None
+        if isinstance(call, CallSession):  # as if the draft never ran
+            call.history = d.history
+            del call.state.turns[d.turns :]
+            call.state.turn_no, call.speaking, call.cur = d.utterance
 
     # ── copilot mode: one sentence of the client or of Leïla ──
 
@@ -395,6 +538,7 @@ class VoiceConnection:
                 async def say(delta: str) -> None:
                     nonlocal spoken
                     spoken += delta
+                    self.said_lately = (self.said_lately + delta)[-800:]
                     await self.send(AgentTextMessage(delta=delta))
                     speaker.push(delta)
 
@@ -404,6 +548,7 @@ class VoiceConnection:
                     async for ev in stream:
                         match ev:
                             case FillerEvent(text=filler):
+                                self.said_lately = (self.said_lately + " " + filler)[-800:]
                                 cached = filler_audio.get((call.state.language, filler))
                                 speaker.play(cached) if cached else speaker.speak(filler)
                                 await self.send(OrchestraMessage(event={"type": "filler", "text": filler}))
@@ -459,6 +604,7 @@ class VoiceConnection:
         except Exception as e:
             await self.send(VoiceErrorMessage(message=str(e) or type(e).__name__))
         finally:
+            self.turn_ended = time.perf_counter()
             if utterance:
                 utterance.cancel()  # interrupted while transcribing: close the provider stream
 
@@ -509,8 +655,17 @@ class _Line:
     gen: int = 0  # bumped when the guard blocks: the sentences queued after it are dropped
 
 
+# Word-by-word TTS (ElevenLabs stream-input): the words go to the TTS as the LLM writes them, no wait for the end of the
+# sentence. Off with TTS_STREAM=0, and never with a blocking Garde-fou (it must hear a whole sentence before it is said).
+TTS_STREAM = os.environ.get("TTS_STREAM", "1") != "0"
+SPOKEN_JUNK = re.compile(r"[*_`#]")  # markdown marks inside streamed words (the sentence path strips them with speakable)
+
+
 class Speaker:
     """Buffers the streamed text, cuts it into sentences and speaks them in order, as one audio segment.
+
+    Streaming TTS (a TTS with open_stream, guard not blocking): the words are forwarded as they come into one
+    streaming synthesis for the turn, flushed at each sentence end; sentences are still cut for the guard's checks.
 
     With a Garde-fou: each sentence with a claim is checked by Jev as soon as it is complete. In block mode the TTS
     synthesizes it meanwhile and its audio is only sent once the verdict says the ERP backs it; a contradicted sentence
@@ -541,9 +696,21 @@ class Speaker:
         self.halt = asyncio.Event()
         self.said: list[str] = []  # sentences actually spoken this turn
         self.checks: list[asyncio.Task] = []  # the guard's verdicts on this turn's sentences
+        self.stream = None  # streaming TTS: the turn's one synthesis, opened now (handshake off the critical path)
+        self.words = ""  # streamed text not yet forwarded (an unfinished word)
+        self.queued_stream = False
+        if TTS_STREAM and hasattr(tts, "open_stream") and not (guard is not None and guard.blocking):
+            self.stream = tts.open_stream(settings.tts.voice or None, stability)  # type: ignore[attr-defined]
+        self.stream_start = 0.0  # first word sent to the streaming TTS
 
     def push(self, delta: str) -> None:
         self.buffer += delta
+        if self.stream is not None:
+            self.words += delta
+            cut = max(self.words.rfind(" "), self.words.rfind("\n"))
+            if cut >= 0:
+                self._forward(self.words[: cut + 1])
+                self.words = self.words[cut + 1 :]
         while m := self.SENTENCE.match(self.buffer):
             raw = m[1]
             lead = len(raw) - len(raw.lstrip())
@@ -562,9 +729,25 @@ class Speaker:
         if self.guard is not None and self.guard.enabled and start is not None:
             check = asyncio.create_task(self.guard.check(sentence.strip(), start, end))
             self.checks.append(check)
+        if self.stream is not None and start is not None:  # its words are already in the stream: generate them now
+            self.said.append(text)
+            self.stream.send("", flush=True)
+            return
         if self.worker is None:
             self.worker = asyncio.create_task(self._speak_queued())
         self.sentences.put_nowait(_Line(text, check, self.gen))
+
+    def _forward(self, text: str) -> None:
+        text = SPOKEN_JUNK.sub("", text)
+        if not text.strip():
+            return
+        if not self.queued_stream:  # takes its place in the queue: a filler queued before it is heard first
+            self.queued_stream = True
+            self.stream_start = time.perf_counter()
+            if self.worker is None:
+                self.worker = asyncio.create_task(self._speak_queued())
+            self.sentences.put_nowait(self.stream)  # type: ignore[arg-type]
+        self.stream.send(text)  # type: ignore[union-attr]
 
     def play(self, audio: tuple[str, bytes]) -> None:
         """Queue pre-synthesized audio (mime, bytes): a cached filler line, no TTS round trip."""
@@ -583,6 +766,9 @@ class Speaker:
 
     def flush(self) -> None:
         """Queue what is left in the buffer (the last sentence may have no final punctuation)."""
+        if self.stream is not None and self.words:
+            self._forward(self.words)
+            self.words = ""
         rest = self.buffer
         lead = len(rest) - len(rest.lstrip())
         self.speak(rest, start=self.pos + lead, end=self.pos + len(rest.rstrip()))
@@ -604,6 +790,11 @@ class Speaker:
     async def finish(self) -> None:
         """Speak what is left in the buffer, wait for all the audio, close the segment."""
         self.flush()
+        if self.stream is not None:
+            if self.queued_stream:
+                self.stream.end()
+            else:  # nothing was said through it
+                self.stream.cancel()
         if self.worker:
             self.sentences.put_nowait(None)
             await self.worker
@@ -612,6 +803,8 @@ class Speaker:
 
     async def stop(self) -> None:
         """Interrupted: drop the queued sentences, close the segment if audio was sent."""
+        if self.stream is not None:
+            self.stream.cancel()
         if self.worker:
             self.worker.cancel()
             with suppress(asyncio.CancelledError):
@@ -621,6 +814,9 @@ class Speaker:
 
     async def _speak_queued(self) -> None:
         while (item := await self.sentences.get()) is not None:
+            if item is self.stream:
+                await self._stream_words()
+                continue
             if isinstance(item, tuple):
                 mime, audio = item
                 if not self.started:
@@ -636,6 +832,18 @@ class Speaker:
                 await self._say_gated(item)
             else:
                 await self._say(item.text)
+
+    async def _stream_words(self) -> None:
+        try:
+            async for chunk in self.stream.chunks():  # type: ignore[union-attr]
+                if not self.started:
+                    self.started = True
+                    await self.send(AgentAudioStartMessage(mime=self.stream.mime))  # type: ignore[union-attr]
+                    self.first_byte_at = time.perf_counter()
+                    self.tts_first_byte_ms = ms_since(self.stream_start)
+                await self.send_bytes(chunk)
+        except Exception as e:
+            await self.send(VoiceErrorMessage(message=f"TTS : {e}"))
 
     async def _synthesize(self, text: str):
         extra = {"stability": self.stability, "previous_text": self.previous or None} if self.tts.name == "elevenlabs" else {}

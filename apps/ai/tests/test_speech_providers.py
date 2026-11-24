@@ -153,7 +153,7 @@ async def test_soniox_start_request_tokens_and_end_frame():
     assert text == "Il vous reste du bar ?"
     assert seen["url"] == "wss://stt-rt.soniox.com/transcribe-websocket" and seen["headers"] == {"Authorization": "Bearer sx"}
     assert json.loads(ws.sent[0]) == {
-        "model": "stt-rt-v6", "audio_format": "auto", "language_hints": ["fr"], "enable_endpoint_detection": True,
+        "model": "stt-rt-v6", "audio_format": "auto", "language_hints": ["fr"], "enable_endpoint_detection": True, "max_endpoint_delay_ms": 500,
         "context": {"terms": ["Lemoine", "bar de ligne"]},
     }  # fmt: skip
     assert ws.sent[1:] == [b"WEBM" * 10, FINALIZE] and ws.closed  # audio as binary frames, then finalize
@@ -172,7 +172,7 @@ async def test_soniox_stream_partials_then_final():
     updates = [u async for u in stt.transcribe_stream(once(b"a", b"b"), "audio/webm")]
     assert updates == [
         STTUpdate("Bon"),
-        STTUpdate("Bonjour il", stable="Bonjour"),  # <end> is a pause marker, not text
+        STTUpdate("Bonjour il", stable="Bonjour", endpoint=True),  # <end>: a pause (the hands-free cue), not text
         STTUpdate("Bonjour il", final=True, stable="Bonjour il"),
     ]
     assert ws.sent[1:] == [b"a", b"b", FINALIZE]

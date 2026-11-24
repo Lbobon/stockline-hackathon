@@ -243,6 +243,8 @@ clients passent en premier. Un nom mal entendu, c'est un mauvais client ou un ma
 
 **Difficulté.** Moyenne. Gardez Espace comme mode de secours pour la démo.
 
+**Fait dans ce dépôt** : bouton « Mains libres » de la page Voix, `apps/ai/app/services/handsfree.py`. Il utilise les jetons `<end>` de Soniox, le départ anticipé en brouillon (4.3), l'interruption et la voix mot à mot (4.8). Mesures dans `DECISIONS.md` §4.
+
 <a id="llm-partiel"></a>
 ### 4.3 Démarrer le LLM sur un transcript partiel (spéculatif)
 

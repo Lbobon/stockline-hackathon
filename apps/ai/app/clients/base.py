@@ -66,11 +66,14 @@ class LLMClient(ABC):
 class STTUpdate:
     """Live transcription progress. `text` is the whole transcript so far, provisional words included;
     `stable` is its leading part made of final words only (the provider will not change it any more).
-    The last update of a stream has final=True and the definitive text."""
+    The last update of a stream has final=True and the definitive text.
+    `endpoint`: the provider heard the speaker pause at the end of a sentence (Soniox <end>): the hands-free mode's
+    cue that the caller may have finished their turn (services/handsfree.py)."""
 
     text: str
     final: bool = False
     stable: str = ""
+    endpoint: bool = False
 
 
 class STTClient(ABC):

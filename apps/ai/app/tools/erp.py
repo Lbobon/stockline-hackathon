@@ -6,6 +6,7 @@ All clients share one connection pool (`erp_http`), closed on app shutdown (app/
 """
 
 import asyncio
+from contextvars import ContextVar
 from typing import Any, Literal
 from urllib.parse import quote
 
@@ -14,6 +15,32 @@ import httpx
 from app.config import settings
 
 Actor = Literal["ai_chat", "voice_agent"]
+
+
+class Gate:
+    """Hands-free early start (services/handsfree.py): a turn drafted at the caller's pause, before we know they have
+    finished, reads freely; what it would show, say (voice_session) or write (ErpClient) waits here until the turn is
+    kept. A dropped draft shows, says and writes nothing."""
+
+    def __init__(self) -> None:
+        self.event = asyncio.Event()
+        self.dropped = False
+        self.held: list[dict] = []  # WebSocket messages held until the turn is kept (voice_session)
+
+    def open(self) -> None:
+        self.event.set()
+
+    def drop(self) -> None:
+        self.dropped = True
+        self.held.clear()
+        self.event.set()
+
+    async def passes(self) -> bool:
+        await self.event.wait()
+        return not self.dropped
+
+
+draft_gate: ContextVar[Gate | None] = ContextVar("draft_gate", default=None)  # set in the drafted turn's task
 
 
 class ErpError(Exception):
@@ -73,6 +100,8 @@ class ErpClient:
         return await self._request("DELETE", path, params=params)
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+        if method != "GET" and (gate := draft_gate.get()) is not None and not await gate.passes():
+            raise ErpError("Tour abandonné : le client n'avait pas fini de parler.")
         if method != "GET" or self._writes.locked():
             async with self._writes:  # FIFO: acquired in call order (each tool reaches here before its first await)
                 return await self._send(method, path, **kwargs)
