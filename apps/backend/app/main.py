@@ -16,7 +16,8 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import API_PORT
-from app.core.datapack import counts, reset_from_pack
+from app import crud
+from app.core.datapack import counts, default_calendar, reset_from_pack
 from app.core.db import get_meta, is_seeded, load_all
 from app.core.errors import HttpError
 from app.core.listing import ListQuery
@@ -51,6 +52,8 @@ async def lifespan(_: FastAPI):
     source = "existing database"
     if is_seeded():
         load_all()
+        if not crud.calendar.rows:  # a database seeded before the events calendar existed
+            crud.calendar.table.replace_all(default_calendar())
     else:
         source = reset_from_pack()
     log.info("today=%s — %s: %s", get_meta()["today"], source, counts())

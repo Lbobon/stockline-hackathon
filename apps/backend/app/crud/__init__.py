@@ -26,6 +26,7 @@ tags = CRUDBase(JsonTable("tags", lambda d: f"{d['scope']}|{d['id']}"), "Groupe"
 price_rules = CRUDBase(JsonTable("price_rules"), "Règle de prix")
 context_entries = CRUDBase(JsonTable("context_entries"), "Fiche de contexte")
 events = CRUDBase(JsonTable("events"), "Événement")  # the activity log
+calendar = CRUDBase(JsonTable("calendar"), "Événement du calendrier")  # matches, ramadan, holidays… (services/calendar.py)
 
 # Data pack file name (seed/<key>.json) → CRUD. Missing files load as [].
 PACK: dict[str, CRUDBase] = {
@@ -47,4 +48,5 @@ PACK: dict[str, CRUDBase] = {
     "tags": tags,
     "priceRules": price_rules,
     "contextEntries": context_entries,
+    "calendar": calendar,
 }

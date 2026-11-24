@@ -23,28 +23,36 @@ Specs : [V1](.plans/night-line-shortage-triage-spec.md) · [V2 Radar](.plans/dem
 
 **Le pari** : au lieu d'attendre que les clients appellent, l'ERP sait ce qu'ils vont commander demain, et des agents les appellent tous en même temps pour le leur proposer.
 
-1. **Prévision** (`apps/backend/app/services/radar.py`, `GET /api/radar/forecast`). Pour chaque client livré demain, l'ERP calcule :
+1. **Prévision** (`apps/backend/app/services/radar.py` et `demand.py`, `GET /api/radar/forecast`). Pour chaque client livré demain, l'ERP calcule :
    - son rythme sur ce jour de la semaine (combien de mercredis sur les 12 derniers) ;
-   - son panier de base (les produits présents dans au moins la moitié de ses commandes récentes) ;
+   - sa **base** : la quantité médiane de chaque produit sur ses **8 derniers mêmes jours de semaine** (un produit compte s'il est sur au moins la moitié de ces commandes ; les jours de ramadan et d'Aïd sont sautés pour ne pas gonfler une semaine normale) ;
    - ses prix négociés.
    Un produit en rupture n'est jamais proposé : on prend son remplaçant habituel, sauf si le client refuse les substitutions.
-2. **Événements et commandes spéciales** (`apps/backend/app/radar_events.json`, données ajoutées). Chacun touche un segment de clients :
-   - match OM–PSG mercredi soir : les snacks prennent +40 % de broches, +30 % de frites et de pains ;
-   - mariages du week-end : les traiteurs reçoivent deux agneaux entiers (commande spéciale, à passer la veille avant 14 h) et plus de gigots ;
-   - vague de froid : souris et collier pour les tajines ;
-   - marché de Noël du Vieux-Port : merguez et brochettes.
+2. **Calendrier des événements, dans l'ERP** (table `calendar`, `GET/POST/DELETE /api/radar/calendar`, 39 événements de 2023 à 2027) : ramadan, Aïd el-Fitr, Aïd el-Kébir, vacances scolaires (zone B), fêtes de fin d'année, marché de Noël du Vieux-Port, match OM, vague de froid, mariages du week-end. Ce que fait chaque événement est **mesuré sur l'historique** (29 604 commandes) par type d'événement et par segment de clients (`GET /api/radar/uplift`) :
+   - ramadan : boucheries ×3,4, supérettes ×3,8, traiteurs ×2,7, restaurants ×2,0 sur le chiffre d'affaires, mais les snacks ne bougent pas (×0,9) ;
+   - Aïd el-Kébir (la semaine d'avant) : boucheries ×4 ;
+   - vacances scolaires : cantines ×0,3 (elles ferment), le reste ≈ ×1,1 ;
+   - sur une ligne, l'effet n'est pas le même que sur le chiffre d'affaires : au ramadan, un client commande aussi souvent, avec 35 % de lignes en plus et environ 2,5 fois plus par ligne. On mesure donc aussi un facteur par ligne (client par client : quantité médiane pendant l'événement ÷ quantité médiane des 8 semaines d'avant), par produit quand l'échantillon suffit, ramené vers le facteur du segment sinon.
+   On ajoute aussi les produits qu'un client ne prend que pour l'événement (dattes, leben, smen au ramadan) : ce qu'il a pris à la dernière occurrence. Seuls les événements **déjà terminés** comptent : le rétro-test ne voit jamais l'événement qu'il note.
+   Le match OM, le froid et les mariages n'ont pas d'historique dans les données : ils gardent une **estimation**, marquée comme telle partout (page, API, phrase de synthèse).
    Les clients qui ont **déjà** commandé, mais qu'un événement concerne, reçoivent un **appel d'ajout** (« pour vos mariages de samedi, je vous ajoute deux agneaux ? »).
+   Synthèse calculée (`action` dans la prévision) : « Appeler 26 clients, 102 lignes proposées : 19 255 € HT de commandes attendues, dont 1 925 € de hausse mesurée sur l'historique et 4 738 € estimés (match, météo, mariages) ».
+   Pendant un appel entrant, l'agent appelle `radar_suggestion(client)` (`GET /api/radar/clients/{id}/suggestion`) et propose une fois le produit que l'événement relève.
 3. **Priorisation** (PR #49). Les clients **fidèles** passent d'abord (régularité, fréquence sur 90 jours, ancienneté), puis par **€ net attendu** = probabilité × marge − coût du détour du camion. Un client qui coûte plus à livrer qu'il ne rapporte n'est pas appelé, et on lui propose l'enlèvement au quai. Demain : 24 appels (20 fidèles), 2 clients écartés.
 4. **Appels en parallèle** (`apps/ai/app/campaign/`, `POST /ai/campaigns` et un flux SSE). Pour chaque appel :
    - le vrai agent vocal appelle et parle en premier, à partir d'une consigne cachée (`agent/radar_brief.py`) ;
    - Jev classe chaque réponse du client en environ 300 ms : oui, modifie, non, rappeler ;
    - chaque « oui » crée la commande via les garde-fous (`finalize_order`) ;
    - les tournées de demain sont ré-optimisées et le tracé se met à jour en direct (`services/optimize.py`).
-5. **Tournées sur la vraie géographie** (`services/geo.py`, `services/optimize.py`). Avant, l'ERP rangeait les arrêts sans géographie (« départ + 12 min par arrêt »). Maintenant :
-   - les arrêts sont ordonnés par proximité, sur les coordonnées tirées du code postal ;
-   - on échange des arrêts entre camions ;
-   - capacité et créneau sont respectés.
-   Sur les tournées du jour : **559 km → 352 km**, soit environ 4 h 20 et 240 € économisés. On calcule aussi le coût de livraison de chaque client et on signale les petites commandes lointaines.
+5. **Tournées : vrai solveur, vrais temps de route** (`services/geo.py`, `services/optimize.py`). Avant, l'ERP rangeait les arrêts sans géographie (« départ + 12 min par arrêt »). Maintenant :
+   - **temps et distances de route réels** : une matrice OSRM (le même routeur public que le tracé de la carte), demandée en un appel et gardée dans la base (table `road_legs`) : une paire de clients n'est demandée qu'une fois. Hors ligne, on revient à l'estimation (ligne droite × 1,35) ; `ROAD_TIMES=estimate` la force ;
+   - **Google OR-Tools** (problème de tournées de véhicules) sur les camions du jour, en minimisant les € (km × 0,55 € + heures × 30 €) ;
+   - **créneaux** : chaque client entre 6 h 30 et 11 h, ou plus tôt si sa fiche le dit (« livraison avant 10h ») ; un camion en avance attend ;
+   - **capacité** de chaque camion en kg ;
+   - **chaîne du froid** : au plus 5 h entre le départ du quai et la livraison (hypothèse, réglable : `COLD_CHAIN_MAX_MIN`) ;
+   - un arrêt peut changer de camion, et un camion peut rester au dépôt si c'est moins cher. Si la journée ne peut pas tout respecter, les contraintes deviennent de fortes pénalités et les arrêts en retard sont signalés ;
+   - **re-calcul à chaque « oui »** de la campagne : 0,5 à 0,7 s, mis en cache jusqu'à la prochaine écriture.
+   Sur les tournées du jour (temps OSRM) : **601 km / 807 € → 378 km / 566 €**, 0 arrêt en retard, aucun arrêt plus de 4 h 33 dans le camion, 2 camions laissés au dépôt. L'ancienne heuristique (plus proche voisin + 2-opt) faisait 391 km / 589 €. On calcule aussi le coût de livraison de chaque client et on signale les petites commandes lointaines.
 6. **Page `/radar`** : une carte, les clients qui sonnent, les appels en cours et le tracé qui se redessine à chaque « oui ».
 7. **L'argent, en un chiffre** : chaque campagne calcule ses « € gagnés » = la marge des commandes prises (prix − coût d'achat ; un appel d'ajout ne compte que ce qu'il ajoute) + les € économisés sur les tournées + le temps commercial évité (4 min par appel à 25 €/h, hypothèses affichées).
 
@@ -150,12 +158,27 @@ Les 3 échecs restants des appels génériques changent d'un tirage à l'autre (
 
 | Mesure | Résultat |
 |---|---|
-| Rétro-test sur les 8 derniers mercredis (`GET /api/radar/backtest`) | **95 % des commandes vues venir**, 88 % des prévisions justes, quantités à ±24 %, chiffre d'affaires prévu à **8 % près** |
+| Rétro-test sur les 8 derniers mercredis (`GET /api/radar/backtest`) | **95 % des commandes vues venir**, 87 % des prévisions justes ; voir le tableau radar contre moyenne ci-dessous |
 | Campagne complète sur les données du jour (26 appels, 8 en parallèle, avant la priorisation) | 84 s, 22 commandes, 3 refus, 1 rappel ; 12,1 k€ HT, dont 4,6 k€ grâce aux événements ; tournées de 13 à 27 arrêts |
 | **3 campagnes avec priorisation** (`python -m sim.radar_stats --runs 3`, 24 appels chacune) | **≈ 84 s**, **19 « oui »** en moyenne ; **12,5 k€ HT** (11,0–14,6) ; marge 2,6 k€ ; tournées −136 € ; temps commercial 40 € ; **≈ 2 800 € gagnés par campagne** (2 424 – 3 200 €) |
 | Même campagne sur une **installation propre**, dans l'interface `/radar` | 26 appels, 19 → 32 commandes, 12 244 € HT, tournées −175 km / −198 € |
 | Scénarios d'appel radar (match, ajout mariages, refus) | 6/6 sur Haiku, juge 3,8 / 4,2 |
 | Jev sur les réponses (oui / modifie / non / rappeler) | 5/5 sur un contrôle manuel, ~300 ms |
+
+**Radar contre la simple moyenne** (rétro-test, chaque jour prévu la veille, `GET /api/radar/backtest` et `/backtest/events`, test `apps/backend/tests/test_radar_backtest.py`). Même liste de clients pour les deux modèles ; seule la quantité change. « Moyenne » = le panier moyen des 60 derniers jours sans événement (ce que faisait le radar avant). Chiffre d'affaires : Σ |prévu − livré| ÷ livré, jour par jour. Quantités : écart moyen sur les lignes proposées et commandées.
+
+| Jours testés | Nb | Erreur sur le CA du jour (radar / moyenne) | Erreur sur les quantités | Lignes à ±20 % |
+|---|---|---|---|---|
+| 8 mercredis normaux | 8 | 21 % / 18 % | ±21 % / ±24 % | 62 % / 55 % |
+| Ramadan 2026 (un jour par semaine) | 4 | **26 % / 67 %** | **±23 % / ±42 %** | **56 % / 13 %** |
+| Aïd el-Fitr 2026 | 3 | 30 % / 59 % | ±25 % / ±38 % | 48 % / 22 % |
+| Aïd el-Kébir 2026 (semaine d'avant) | 6 | **23 % / 66 %** | ±23 % / ±36 % | 53 % / 37 % |
+| Vacances scolaires | 16 | 16 % / 27 % | ±22 % / ±30 % | 60 % / 49 % |
+| Marché de Noël 2025 | 4 | 11 % / 10 % | ±19 % / ±19 % | 63 % / 63 % |
+| Fêtes de fin d'année 2025 | 2 | 18 % / 3 % | ±20 % / ±18 % | 61 % / 64 % |
+| **Tous les jours d'événement de l'année** | 32 | **21 % / 47 %** (erreur −55 %) | **±22 % / ±31 %** (−29 %) | 57 % / 43 % |
+
+Lecture honnête : en semaine normale, le radar fait jeu égal avec la moyenne sur le chiffre d'affaires (un mercredi varie de 26 k€ à 52 k€, aucun des deux ne le devine) et il est meilleur sur les quantités. Il gagne nettement là où ça compte : au ramadan et à l'Aïd, il divise l'erreur sur le chiffre d'affaires par 2,5. Noël est un petit échantillon (2 jours), où il fait moins bien. L'erreur client par client reste forte pour les deux modèles (≈ 0,8) : les clients ne prennent pas les mêmes produits chaque semaine, ce que ni une médiane ni une moyenne ne devinent.
 
 Sur ce dernier run, les deux échecs sont : une coupure réseau de l'API (corrigée ensuite par une nouvelle tentative automatique, PR #35) et une remarque du juge sur un prospect. Le coût double avec l'orchestre (agents secondaires), mais reste à 1 centime par appel.
 

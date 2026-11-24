@@ -3,7 +3,7 @@
  * (spec: .plans/demand-radar-spec.md). Local to the radar until the backend ships them in @kit/shared.
  */
 
-export type EventKind = "sport" | "weather" | "wedding" | "local";
+export type EventKind = "sport" | "weather" | "wedding" | "local" | "religious" | "holiday";
 export type ForecastStatus = "ordered" | "upsell" | "predicted";
 
 export interface LatLng { lat: number; lng: number }
@@ -19,6 +19,13 @@ export interface RadarEvent {
   boosts: { productId: string; factor: number; productName: string }[];
   special?: { productId: string; qty: number; note: string; productName: string }[];
   pitch?: string;
+  /** Event type in the ERP calendar (ramadan, aid_kebir, om_home…): occurrences of a type are measured together. */
+  type?: string;
+  source?: string;
+  /** Uplift measured on past occurrences, per client segment; null = no history, the boosts are the team's estimate. */
+  measured?: Record<string, { factor: number; days: number; occurrences: number }> | null;
+  /** One line: « mesuré sur 3 occurrences passées : boucheries ×3,38… » or « estimation : … ». */
+  basis?: string;
 }
 
 export interface ForecastLine {
@@ -92,6 +99,8 @@ export interface Forecast {
   clients: ForecastClient[];
   summary: { ordered: number; predicted: number; upsell: number; expectedHt: number; upliftHt: number;
     toCall?: number; skipped?: number; loyal?: number; expectedNetEur?: number };
+  /** « Appeler N clients, X lignes : Y € HT attendus, dont Z € apportés par les événements ». */
+  action?: { calls: number; lines: number; expectedHt: number; eventUpliftHt: number; measuredUpliftHt: number; estimatedUpliftHt: number; pitch: string };
 }
 
 export interface RouteStop extends LatLng { orderId: string; clientId: string; eta: string }

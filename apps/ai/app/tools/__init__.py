@@ -9,11 +9,12 @@ The tools the model can call, grouped by domain. Each one wraps ERP API endpoint
     orders.py    create_draft_order, add_order_line, confirm_order, get_order
     fast.py      find_client, check_product: composite lookups, one model step instead of two or three
     smart.py     finalize_order, retention_offer, shortage_triage, apply_substitution
+    radar.py     radar_suggestion: the demand radar's forecast for one client (usual order + event uplift)
 
 A new file needs one more line: import it below so its @tool functions get registered.
 """
 
-from . import catalog, context, fast, history, orders, smart  # noqa: F401  (importing registers the tools)
+from . import catalog, context, fast, history, orders, radar, smart  # noqa: F401  (importing registers the tools)
 from .erp import ErpClient
 from .registry import TOOLS, Tool, ToolContext, tool
 

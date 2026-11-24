@@ -131,6 +131,7 @@ function Radar_({ forecast }: { forecast: Forecast & { offline?: boolean } }) {
                   </section>
                   <section>
                     <SectionTitle count={toCall}>À appeler</SectionTitle>
+                    {forecast.action ? <p className="-mt-1 mb-2 text-[12px] leading-4 text-muted-foreground">{forecast.action.pitch}</p> : null}
                     <ClientList forecast={forecast} selected={selected} onSelect={setSelected} />
                   </section>
                   {forecast.summary.skipped ? (

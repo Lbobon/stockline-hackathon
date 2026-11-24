@@ -10,13 +10,15 @@ from app.core.config import SEED_DIR
 from app.core.db import Doc, freeze_heap, reset_sequences, set_meta, transaction
 
 DEV_FIXTURE = Path(__file__).with_name("dev_fixture.json")
+CALENDAR_SEED = Path(__file__).resolve().parents[1] / "calendar_seed.json"  # used when the pack has no calendar.json
 
 
 def read_pack() -> tuple[Doc, str]:
     """The data pack as {meta, products, clients, …} + where it came from.
     Falls back to a tiny built-in fixture when DATA_DIR/seed is missing."""
     if not (SEED_DIR / "meta.json").exists():
-        return json.loads(DEV_FIXTURE.read_text("utf-8")), "dev-fixture (no DATA_DIR/seed found)"
+        pack = json.loads(DEV_FIXTURE.read_text("utf-8"))
+        return {**pack, "calendar": pack.get("calendar") or default_calendar()}, "dev-fixture (no DATA_DIR/seed found)"
 
     def read(key: str):
         f = SEED_DIR / f"{key}.json"
@@ -28,7 +30,12 @@ def read_pack() -> tuple[Doc, str]:
     for key in crud.PACK:
         pack[key] = read(key)
     pack["contextEntries"] = [_context_entry(e) for e in pack["contextEntries"]]
+    pack["calendar"] = pack["calendar"] or default_calendar()
     return pack, str(SEED_DIR)
+
+
+def default_calendar() -> list[Doc]:
+    return json.loads(CALENDAR_SEED.read_text("utf-8"))
 
 
 def _context_entry(e: Doc) -> Doc:
