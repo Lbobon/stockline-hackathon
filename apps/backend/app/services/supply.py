@@ -22,12 +22,15 @@ supplier radar opens on: the spike comes first, the calls follow from it.
 from __future__ import annotations
 
 import math
+import time
 
 from app import crud
 from app.core.activity import today
 from app.core.db import Doc
 from app.core.utils import add_days, round2
 from app.services import geo, radar
+from app.core.errors import not_found
+from app.services.clients import is_sale
 from app.services.purchasing import purchase_price
 from app.services.stock import stock_levels
 
@@ -46,6 +49,31 @@ CITY = {
 def _round_up(qty: float, unit: str) -> float:
     step = 5 if unit == "kg" else 1
     return float(max(step, math.ceil(qty / step) * step))
+
+
+_CACHE: dict[tuple[str, ...], tuple[float, list[Doc]]] = {}
+CACHE_S = 60.0  # the 7 daily forecasts take ~6 s: the radar and its explanations share them for a minute
+
+
+def _forecasts(dates: list[str]) -> list[Doc]:
+    """radar.forecast for each day, cached briefly (stock is always read fresh: only the clients' demand is cached)."""
+    key = tuple(dates)
+    hit = _CACHE.get(key)
+    if hit and time.monotonic() - hit[0] < CACHE_S:
+        return hit[1]
+    out = [radar.forecast(d) for d in dates]
+    _CACHE.clear()
+    _CACHE[key] = (time.monotonic(), out)
+    return out
+
+
+def _demand_lines(c: Doc) -> tuple[list[Doc], float] | None:
+    """The lines of a client's forecast that still have to come out of the stock, and their probability."""
+    if c["status"] == "predicted":
+        return c["lines"], c["probability"]
+    if c["status"] == "upsell":
+        return c.get("addLines") or [], c["probability"]
+    return None
 
 
 def supply(date: str | None = None, days: int = 7) -> Doc:
@@ -71,19 +99,16 @@ def supply(date: str | None = None, days: int = 7) -> Doc:
 
     titles: dict[str, str] = {}
     clients: dict[str, set[str]] = {}
-    for day in dates:
-        f = radar.forecast(day)
+    for day, f in zip(dates, _forecasts(dates)):
         for e in f["events"]:
             titles[e["id"]] = e["title"]
         for c in f["clients"]:
             if c["status"] in ("ordered", "upsell"):  # already ordered: reserved in the stock, only shown in the chart
                 ordered_ht[day] += sum(l["qty"] * _price(l["productId"]) for l in c["lines"])
-            if c["status"] == "predicted":
-                lines, p = c["lines"], c["probability"]
-            elif c["status"] == "upsell":
-                lines, p = c.get("addLines") or [], c["probability"]
-            else:
+            got = _demand_lines(c)
+            if not got:
                 continue
+            lines, p = got
             for l in lines:
                 pid = l["productId"]
                 need[pid] = need.get(pid, 0.0) + p * l["qty"]
@@ -191,3 +216,125 @@ def _day(iso: str) -> str:
 
     d = _d.fromisoformat(iso)
     return f"{_DAYS[d.weekday()]} {d.day}"
+
+
+# ── « Pourquoi cette commande ? » ──
+
+NORMAL_WEEKS = 8
+ACCURACY = 0.19  # backtest: the forecast is ±19 % on quantities (DECISIONS.md §4)
+
+
+def supply_explain(supplier_id: str, date: str | None = None, days: int = 7) -> Doc:
+    """GET /api/radar/supply/{supplier_id}/explain: why we buy each line from this supplier, with the data behind it.
+
+    Per product: the clients that will need it and when (the forecast), what the depot really sold the same week in
+    past years and in a normal week (the orders), what is already in stock or on its way (stock + purchase orders), then
+    the arithmetic: shortfall + 10 % margin, rounded, × the supplier's price, and whether it arrives in time.
+    """
+    sup_doc = crud.suppliers.get(supplier_id)
+    if not sup_doc:
+        raise not_found("Fournisseur", supplier_id)
+    plan = supply(date, days)
+    row = next((x for x in plan["suppliers"] if x["supplierId"] == supplier_id), None)
+    dates = [add_days(plan["from"], k) for k in range(plan["days"])]
+    lines = row["lines"] if row else []
+    pids = {l["productId"] for l in lines}
+
+    # 1. the clients behind the demand, day by day
+    titles: dict[str, str] = {}
+    who: dict[str, dict[str, Doc]] = {pid: {} for pid in pids}
+    per_day: dict[str, dict[str, list[float]]] = {pid: {d: [0.0, 0.0] for d in dates} for pid in pids}
+    ordered: dict[str, float] = {pid: 0.0 for pid in pids}
+    for day, f in zip(dates, _forecasts(dates)):
+        for e in f["events"]:
+            titles[e["id"]] = e["title"]
+        for c in f["clients"]:
+            if c["status"] in ("ordered", "upsell"):
+                for l in c["lines"]:
+                    if l["productId"] in pids:
+                        ordered[l["productId"]] += l["qty"]
+            got = _demand_lines(c)
+            if not got:
+                continue
+            ls, p = got
+            for l in ls:
+                pid = l["productId"]
+                if pid not in pids:
+                    continue
+                extra = p * max(0.0, l["qty"] - l["baseQty"]) if l.get("eventId") else 0.0
+                r = who[pid].setdefault(c["clientId"], {"clientId": c["clientId"], "name": c["name"], "city": c.get("city"),
+                                                         "qty": 0.0, "eventQty": 0.0, "days": [], "probability": 0.0, "events": set()})  # fmt: skip
+                r["qty"] += p * l["qty"]
+                r["eventQty"] += extra
+                r["days"].append(day)
+                r["probability"] = max(r["probability"], p)
+                if l.get("eventId"):
+                    r["events"].add(l["eventId"])
+                per_day[pid][day][0] += p * l["qty"]
+                per_day[pid][day][1] += extra
+
+    # 2. what the depot really sold: the same 7 days 1 and 2 years ago (same weekdays), and a normal week before each
+    windows = {
+        "lastYear": (add_days(dates[0], -364), add_days(dates[-1], -364)),
+        "twoYears": (add_days(dates[0], -728), add_days(dates[-1], -728)),
+        "normal": (add_days(dates[0], -7 * NORMAL_WEEKS), add_days(dates[0], -1)),
+        "normalLastYear": (add_days(dates[0], -364 - 7 * NORMAL_WEEKS), add_days(dates[0], -365)),
+    }
+    lo, hi = min(w[0] for w in windows.values()), max(w[1] for w in windows.values())
+    sold = {pid: {k: {"qty": 0.0, "orders": 0, "clients": set()} for k in windows} for pid in pids}
+    for o in crud.orders.filter(lambda o: lo <= o["deliveryDate"] <= hi and is_sale(o)):
+        d = o["deliveryDate"]
+        for l in o["lines"]:
+            pid = l["productId"]
+            if pid not in pids:
+                continue
+            for k, (a, b) in windows.items():
+                if a <= d <= b:
+                    w = sold[pid][k]
+                    w["qty"] += float(l.get("qty") or 0)
+                    w["orders"] += 1
+                    w["clients"].add(o["clientId"])
+
+    # 3. what is already there: the stock and the purchase orders on their way
+    levels = stock_levels()
+    on_way: dict[str, list[Doc]] = {pid: [] for pid in pids}
+    for po in crud.purchase_orders.rows.values():
+        if po["status"] not in ("sent", "partially_received"):
+            continue
+        for l in po["lines"]:
+            if l["productId"] in pids and l["qty"] - l.get("receivedQty", 0) > 0:
+                on_way[l["productId"]].append({"number": po.get("number"), "qty": round2(l["qty"] - l.get("receivedQty", 0)),
+                                               "expectedDate": po.get("expectedDate"),
+                                               "supplier": (crud.suppliers.get(po["supplierId"]) or {}).get("name")})  # fmt: skip
+
+    out = []
+    for l in lines:
+        pid = l["productId"]
+        lv = levels.get(pid) or {}
+        hist = {k: {"from": windows[k][0], "to": windows[k][1], "qty": round2(v["qty"] / (NORMAL_WEEKS if k.startswith("normal") else 1)),
+                    "orders": v["orders"], "clients": len(v["clients"])}
+                for k, v in sold[pid].items()}  # fmt: skip
+        clients = sorted(who[pid].values(), key=lambda r: -r["qty"])
+        safety = l["qty"] - l["shortQty"]
+        out.append({
+            **{k: l[k] for k in ("productId", "productName", "unit", "needQty", "eventQty", "available", "incoming", "shortQty",
+                                 "firstDay", "events", "qty", "unitPrice", "totalHt")},
+            "orderedQty": round2(ordered[pid]), "onHand": round2(float(lv.get("onHand") or 0)),
+            "reserved": round2(float(lv.get("reserved") or 0)), "onWay": on_way[pid],
+            "safetyPct": SAFETY, "safetyQty": round2(safety),
+            "priceSource": "tarif fournisseur" if crud.supplier_prices.get(f"{supplier_id}|{pid}") else "coût de référence du produit",
+            "days": [{"date": d, "qty": round2(v[0]), "eventQty": round2(v[1])} for d, v in per_day[pid].items()],
+            "clientsCount": len(clients),
+            "clients": [{**{k: v for k, v in c.items() if k not in ("events", "days")}, "qty": round2(c["qty"]),
+                         "eventQty": round2(c["eventQty"]), "probability": round2(c["probability"]),
+                         "days": sorted(set(c["days"])), "events": [titles.get(e, e) for e in sorted(c["events"])]}
+                        for c in clients[:6]],  # fmt: skip
+            "history": hist,
+        })
+    return {
+        "supplierId": supplier_id, "name": sup_doc["name"], "city": sup_doc.get("city"), "from": dates[0], "to": dates[-1],
+        "leadTimeDays": sup_doc.get("leadTimeDays"), "minOrderAmount": sup_doc.get("minOrderAmount"),
+        "arrives": row["arrives"] if row else None, "deliverBy": row["deliverBy"] if row else None,
+        "onTime": row["onTime"] if row else None, "totalHt": row["totalHt"] if row else 0.0,
+        "accuracy": ACCURACY, "lines": out,
+    }  # fmt: skip

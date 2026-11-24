@@ -79,9 +79,6 @@ export function SupplierMap({ depot, pins, selected, onSelect }: {
       <div ref={box} className="!absolute inset-0 [&_.maplibregl-ctrl-attrib]:!bg-card/70 [&_.maplibregl-ctrl-attrib]:text-[10px]" />
       {ready ? (
         <svg className="pointer-events-none absolute inset-0" width={size.w} height={size.h}>
-          <defs>
-            <filter id="sup-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" /></filter>
-          </defs>
           {placed.map((s, i) => {
             const path = arc(at(s), d);
             const st = s.status;
@@ -91,10 +88,9 @@ export function SupplierMap({ depot, pins, selected, onSelect }: {
             const color = bought ? "hsl(var(--primary))" : live ? "hsl(var(--agent-voice))" : "hsl(var(--muted-foreground))";
             return (
               <g key={s.id} opacity={off ? 0.3 : 1}>
-                {bought || live ? <path d={path} fill="none" stroke={color} strokeWidth={7} opacity={0.22} filter="url(#sup-glow)" /> : null}
-                <motion.path d={path} fill="none" stroke={color} strokeWidth={bought ? 3 : 2} strokeLinecap="round"
-                  strokeDasharray={bought ? undefined : live ? "7 6" : "3 6"}
-                  initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ duration: 1.1, delay: 0.3 + i * 0.12, ease: "easeInOut" }}
+                <motion.path d={path} fill="none" stroke={color} strokeWidth={bought ? 2.5 : 2} strokeLinecap="round"
+                  strokeDasharray={bought ? undefined : live ? "7 6" : "3 6"} strokeOpacity={bought ? 0.85 : live ? 0.9 : 0.6}
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.3 + i * 0.12 }}
                   style={live ? { animation: "sup-dash 0.7s linear infinite" } : undefined} />
                 {bought ? <RunningTruck path={path} delay={i * 0.4} /> : null}
               </g>
@@ -162,16 +158,16 @@ const LABEL = {
 /** A truck that keeps driving the arc from the supplier to the depot once the order is sent. */
 function RunningTruck({ path, delay }: { path: string; delay: number }) {
   const ref = useRef<SVGPathElement>(null);
-  const [pt, setPt] = useState<Pt>();
+  const [pt, setPt] = useState<Pt & { o: number }>();
   useEffect(() => {
     let raf = 0;
     const t0 = performance.now() + delay * 1000;
     const tick = (now: number) => {
       const el = ref.current;
       if (el) {
-        const k = Math.max(0, ((now - t0) / 3200) % 1);
+        const k = Math.max(0, ((now - t0) / 3600) % 1);
         const q = el.getPointAtLength(k * el.getTotalLength());
-        setPt({ x: q.x, y: q.y });
+        setPt({ x: q.x, y: q.y, o: Math.min(1, k * 6, (1 - k) * 6) }); // fades in leaving the supplier, out reaching the depot
       }
       raf = requestAnimationFrame(tick);
     };
@@ -182,7 +178,7 @@ function RunningTruck({ path, delay }: { path: string; delay: number }) {
     <>
       <path ref={ref} d={path} fill="none" stroke="none" />
       {pt ? (
-        <g transform={`translate(${pt.x - 10} ${pt.y - 10})`}>
+        <g transform={`translate(${pt.x - 10} ${pt.y - 10})`} opacity={pt.o}>
           <circle cx={10} cy={10} r={10} fill="hsl(var(--primary))" stroke="hsl(var(--card))" strokeWidth={2} />
           <Truck x={4} y={4} width={12} height={12} color="hsl(var(--primary-foreground))" strokeWidth={2.2} />
         </g>
@@ -191,12 +187,19 @@ function RunningTruck({ path, delay }: { path: string; delay: number }) {
   );
 }
 
-/** A gentle curve from a to b (bowing to the left of the direction of travel). */
+/** A gentle curve from a to b, stopping at the edge of both pins (so no line runs under the depot or a truck sits on it). */
 function arc(a: Pt, b: Pt): string {
   const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
   const dx = b.x - a.x, dy = b.y - a.y;
-  const k = 0.22;
-  return `M${a.x},${a.y} Q${mx - dy * k},${my + dx * k} ${b.x},${b.y}`;
+  const k = 0.18;
+  const c = { x: mx - dy * k, y: my + dx * k };
+  const from = toward(a, c, 20), to = toward(b, c, 26);
+  return `M${from.x},${from.y} Q${c.x},${c.y} ${to.x},${to.y}`;
+}
+
+function toward(p: Pt, q: Pt, r: number): Pt {
+  const l = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+  return { x: p.x + ((q.x - p.x) / l) * r, y: p.y + ((q.y - p.y) / l) * r };
 }
 
 function short(name: string) {
