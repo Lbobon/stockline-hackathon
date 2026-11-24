@@ -16,19 +16,41 @@ import { RadarMap } from "./RadarMap";
 import { ClientDetail, ClientList, Count, EventStrip, NotCalledList } from "./Panel";
 import { ActivityFeed, DeliveryCards } from "./Live";
 import { useRoads } from "@/features/radar/roads";
+import { RadarSwitch, SupplyView } from "./Supply";
 
 const DATE = "2026-11-25";
 
+type View = "clients" | "supply";
+const urlView = (): View => (new URLSearchParams(location.search).get("view") === "supply" ? "supply" : "clients");
+
 export default function RadarPage() {
   const { data: forecast } = useForecast(DATE);
+  const [view, setView_] = useState<View>(urlView);
+  const [supplyActions, setSupplyActions] = useState<React.ReactNode>(null);
+  const setView = (v: View) => {
+    const u = new URL(location.href);
+    if (v === "supply") u.searchParams.set("view", "supply");
+    else u.searchParams.delete("view");
+    history.replaceState(history.state, "", u);
+    setView_(v);
+  };
+  const toggle = <RadarSwitch value={view} onChange={setView} />;
+  if (view === "supply") {
+    return (
+      <Page>
+        <PageHeader title="Radar fournisseurs" icon={<Radar size={15} strokeWidth={1.75} />} meta={toggle} actions={supplyActions} />
+        <SupplyView date={DATE} actionsSlot={setSupplyActions} />
+      </Page>
+    );
+  }
   return (
     <Page>
-      {forecast ? <Radar_ forecast={forecast} /> : <PageHeader title="Radar de demande" icon={<Radar size={15} strokeWidth={1.75} />} />}
+      {forecast ? <Radar_ forecast={forecast} toggle={toggle} /> : <PageHeader title="Radar de demande" icon={<Radar size={15} strokeWidth={1.75} />} meta={toggle} />}
     </Page>
   );
 }
 
-function Radar_({ forecast }: { forecast: Forecast & { offline?: boolean } }) {
+function Radar_({ forecast, toggle }: { forecast: Forecast & { offline?: boolean }; toggle: React.ReactNode }) {
   const { state, start, deliver, reset } = useCampaign(forecast);
   const [selected, setSelected] = useState<string>();
   const [focus, setFocus] = useState<string>();
@@ -69,6 +91,7 @@ function Radar_({ forecast }: { forecast: Forecast & { offline?: boolean } }) {
         icon={<Radar size={15} strokeWidth={1.75} />}
         meta={
           <span className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
+            {toggle}
             <span className="first-letter:uppercase">{dateLabel}</span>
             {state.source === "demo" || forecast.offline ? <span className="rounded-[3px] bg-muted px-1.5 py-px text-[11px]">démo</span> : null}
           </span>

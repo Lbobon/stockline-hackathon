@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.campaign import engine
+from app.campaign import engine, supply
 
 router = APIRouter()
 
@@ -16,6 +16,7 @@ class CampaignIn(BaseModel):
     date: str | None = None
     clientIds: list[str] | None = None
     concurrency: int = 8
+    kind: str = "clients"  # "supply": call the suppliers instead (campaign/supply.py); clientIds then = supplierIds
 
 
 class DeliveriesIn(BaseModel):
@@ -31,8 +32,11 @@ def _get(cid: str) -> engine.Campaign:
 
 @router.post("/campaigns")
 async def start_campaign(body: CampaignIn) -> dict:
-    c = await engine.start(body.date, body.clientIds, body.concurrency)
-    return {"id": c.id, "date": c.date, "calls": len(c.calls)}
+    if body.kind == "supply":
+        c = await supply.start(body.date, body.clientIds, min(body.concurrency, 6))
+    else:
+        c = await engine.start(body.date, body.clientIds, body.concurrency)
+    return {"id": c.id, "kind": c.kind, "date": c.date, "calls": len(c.calls)}
 
 
 @router.get("/campaigns/{cid}")

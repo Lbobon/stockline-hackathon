@@ -92,9 +92,10 @@ class Campaign:
     log: list[dict] = field(default_factory=list)  # every event, replayed to late subscribers
     subscribers: list[asyncio.Queue] = field(default_factory=list)
     forecast: dict = field(default_factory=dict)
+    kind: str = "clients"  # clients (the radar's sales calls) | supply (buying from suppliers, campaign/supply.py)
 
     def snapshot(self) -> dict:
-        return {"id": self.id, "date": self.date, "status": self.status, "calls": [asdict(c) for c in self.calls],
+        return {"id": self.id, "kind": self.kind, "date": self.date, "status": self.status, "calls": [asdict(c) for c in self.calls],
                 "route": self.route, "totals": self.totals}  # fmt: skip
 
 
@@ -157,15 +158,15 @@ def _keyword_decision(said: str) -> str | None:
     return None
 
 
-async def decide(agent_said: str, client_said: str) -> dict:
-    """Jev in ~300 ms; keyword fallback when Jev is off, slow or unsure."""
+async def decide(agent_said: str, client_said: str, question: str | None = None, choices: dict | None = None) -> dict:
+    """Jev in ~300 ms; keyword fallback when Jev is off, slow or unsure. The supplier calls pass their own question."""
     obvious = _keyword_decision(client_said)
     jev = get_jev_client()
     if jev:
         try:
             # only what the client said: the agent's long pitch drowned the answer
             ans = await asyncio.wait_for(jev.ask({"reponse_du_client": client_said},
-                                                 {"d": choice_question("Un commercial vient de proposer une commande au client. Que répond le client ?", DECISIONS)}), 3.0)  # fmt: skip
+                                                 {"d": choice_question(question or "Un commercial vient de proposer une commande au client. Que répond le client ?", choices or DECISIONS)}), 3.0)  # fmt: skip
             a = ans["answers"]["d"]
             if not obvious or obvious == a["choice"]:
                 return {"label": a["choice"], "confidence": round(a["confidence"], 2), "source": "jev"}
