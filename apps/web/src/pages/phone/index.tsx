@@ -7,7 +7,7 @@
  * Line: WS /ai/voice/phone (ring / cancel in, answered / declined / hungup out). Call: WS /ai/voice?line=phone.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Phone, PhoneOff, Store } from "lucide-react";
+import { Mic, MicOff, Phone, PhoneOff, Store } from "lucide-react";
 import { AI_BASE } from "@/lib/api";
 import { unlockAudio } from "@/features/assistant/audio-player";
 import { useVoiceSession } from "@/features/assistant/useVoiceSession";
@@ -22,6 +22,7 @@ export default function PhonePage() {
   const [ring, setRing] = useState<Ring>();
   const [lineUp, setLineUp] = useState(false);
   const [startedAt, setStartedAt] = useState<number>();
+  const [muted, setMuted] = useState(false);
   const [, tick] = useState(0);
   const v = useVoiceSession({ line: "phone" });
   const stageRef = useRef(stage);
@@ -117,8 +118,15 @@ export default function PhonePage() {
     say({ type: "answered" });
     setStartedAt(Date.now());
     setStage("call");
+    await setMic(false);
     await v.startHandsFree(); // mic first: a hands-free start cancels a running turn, the opening line must come after
     v.callClient(ring.clientId); // the agent speaks first
+  };
+
+  // Mute = the mic track sends silence: the call, the hands-free mode and the barge-in stay as they are on the server
+  const setMic = async (mute: boolean) => {
+    setMuted(mute);
+    (await v.ensureMic())?.getAudioTracks().forEach((t) => { t.enabled = !mute; });
   };
 
   const decline = () => {
@@ -129,6 +137,7 @@ export default function PhonePage() {
 
   const hangup = () => {
     v.hangup(); // also closes the hands-free mic
+    void setMic(false);
     say({ type: "hungup" });
     setStartedAt(undefined);
     setStage("waiting");
@@ -139,7 +148,7 @@ export default function PhonePage() {
   const secs = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0;
   const clock = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
   const status =
-    v.turns.some((t) => t.caller.status === "recording") ? "Vous parlez…" : v.activity === "speaking" ? "Médina Viandes parle" : v.activity === "thinking" ? "…" : "À vous";
+    muted ? "Micro coupé" : v.turns.some((t) => t.caller.status === "recording") ? "Vous parlez…" : v.activity === "speaking" ? "Médina Viandes parle" : v.activity === "thinking" ? "…" : "À vous";
 
   return (
     <div className="fixed inset-0 flex select-none flex-col items-center justify-between overflow-hidden bg-[radial-gradient(ellipse_at_50%_20%,#123326_0%,#06100c_55%,#000_100%)] px-6 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-[max(3.5rem,env(safe-area-inset-top))] text-white">
@@ -171,7 +180,10 @@ export default function PhonePage() {
             {last && last.caller.text && !last.caller.typed ? <p className="text-[14px] text-white/50">« {last.caller.text} »</p> : null}
             {v.mic === "denied" || v.mic === "unsupported" ? <p className="text-[13px] text-amber-300">Micro refusé : autorisez-le dans les réglages du navigateur.</p> : null}
           </div>
-          <div className="mb-6">
+          <div className="mb-6 flex w-full max-w-[320px] items-center justify-between">
+            <RoundButton label={muted ? "Réactiver" : "Muet"} tone={muted ? "white" : "gray"} onClick={() => void setMic(!muted)}>
+              {muted ? <MicOff size={30} /> : <Mic size={30} />}
+            </RoundButton>
             <RoundButton label="Raccrocher" tone="red" onClick={hangup}><PhoneOff size={30} /></RoundButton>
           </div>
         </>
@@ -206,10 +218,10 @@ function Caller({ sub, ringing, level = 0 }: { sub: string; ringing?: boolean; l
   );
 }
 
-function RoundButton({ label, tone, onClick, pulse, children }: { label: string; tone: "red" | "green"; onClick: () => void; pulse?: boolean; children: React.ReactNode }) {
+function RoundButton({ label, tone, onClick, pulse, children }: { label: string; tone: "red" | "green" | "gray" | "white"; onClick: () => void; pulse?: boolean; children: React.ReactNode }) {
   return (
     <button type="button" onClick={onClick} className="flex flex-col items-center gap-2 active:scale-95">
-      <span className={`relative flex h-[76px] w-[76px] items-center justify-center rounded-full ${tone === "red" ? "bg-red-500" : "bg-emerald-500"}`}>
+      <span className={`relative flex h-[76px] w-[76px] items-center justify-center rounded-full ${{ red: "bg-red-500", green: "bg-emerald-500", gray: "bg-white/15", white: "bg-white text-black" }[tone]}`}>
         {pulse ? <span className="absolute inset-0 animate-ping rounded-full bg-emerald-500/40" /> : null}
         <span className="relative">{children}</span>
       </span>
