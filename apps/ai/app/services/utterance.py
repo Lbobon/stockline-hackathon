@@ -73,7 +73,7 @@ class Utterance:
         text = text.strip()
         if path != "live" or self.stt.name != "mock":
             first = f"{self.first_word_at - self.started_at:.1f}s" if self.first_word_at else "-"
-            print(f"[ai] stt {self.stt.name}: {path}, first words {first}, release→text {time.perf_counter() - released:.2f}s, "
+            print(f"[ai] stt {self.stt.name}: {path}, first words {first}, release->text {time.perf_counter() - released:.2f}s, "
                   f"{len(text)} chars{' (noise: ignored)' if is_noise(text) and text else ''}", flush=True)  # fmt: skip
         return "" if is_noise(text) else text
 

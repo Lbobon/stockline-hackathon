@@ -4,6 +4,16 @@
  */
 export interface PlayerCallbacks { onPlaying: () => void; onEnded: () => void }
 
+// Mobile Safari only lets an <audio> element play without a tap if it was first played inside a tap: the demo phone
+// (/phone) unlocks one element on "Accepter" and every segment then plays through it.
+const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+let shared: HTMLAudioElement | undefined;
+export function unlockAudio() {
+  shared ??= new Audio();
+  shared.src = SILENT;
+  void shared.play().catch(() => undefined);
+}
+
 export class SegmentPlayer {
   private el: HTMLAudioElement | undefined;
   private url: string | undefined;
@@ -37,7 +47,8 @@ export class SegmentPlayer {
 
   private open(url: string) {
     this.url = url;
-    const el = new Audio(url);
+    const el = shared ?? new Audio(url);
+    if (shared) el.src = url;
     this.el = el;
     el.onplaying = () => { if (!this.playingFired) { this.playingFired = true; this.cb.onPlaying(); } };
     el.onended = () => this.finish();

@@ -29,10 +29,12 @@ import ContextPage from "@/pages/context";
 import CallsPage from "@/pages/calls";
 import CallDetailPage from "@/pages/call-detail";
 import MorningPage from "@/pages/morning";
+import PhonePage from "@/pages/phone";
 // Radar: map libraries, loaded with the page only.
 const RadarPage = lazy(() => import("@/pages/radar"));
 
 export const router = createBrowserRouter([
+  { path: "/phone", element: <PhonePage /> }, // the demo phone: full screen, no app shell
   {
     path: "/",
     element: <AppShell />,

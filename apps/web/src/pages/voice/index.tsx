@@ -16,6 +16,7 @@ import { Button, Dot, IconButton, Input, Kbd, Page, PageHeader, Spinner, Tabs } 
 import { useVoiceSession, type Activity, type Conn } from "@/features/assistant/useVoiceSession";
 import { CommandMode } from "./command";
 import { CopilotMode } from "./copilot";
+import { PhoneMode } from "./phone";
 import { LiveActivity } from "./live-activity";
 import { GuardAlertBanner, GuardPanel } from "@/features/guard/guard-ui";
 import { MetricsBar } from "./metrics";
@@ -29,22 +30,24 @@ const isTypingTarget = (t: EventTarget | null) => {
 
 const STATE_LABEL: Record<Activity, string> = { idle: "Prêt", recording: "Enregistrement", thinking: "L'agent réfléchit", speaking: "L'agent parle" };
 
-type Mode = "call" | "copilot" | "command";
+type Mode = "call" | "copilot" | "command" | "phone";
 /** « Provoquer une erreur » with an empty input: a caller asking a price (fictional client of the data pack). */
 const DEMO_LINE = "Bonjour, c'est Antalya Kebab. Le gigot d'agneau, vous me le faites à combien le kilo ?";
 const MODES: { id: Mode; label: string }[] = [
   { id: "call", label: "Appel" },
   { id: "copilot", label: "Copilote" },
   { id: "command", label: "Commande" },
+  { id: "phone", label: "Téléphone" },
 ];
 
 export default function VoicePage() {
   const [modeParam, setModeParam] = useUrlState("mode", "", { keepPage: true });
-  const mode: Mode = modeParam === "command" || modeParam === "copilot" ? modeParam : "call";
+  const mode: Mode = modeParam === "command" || modeParam === "copilot" || modeParam === "phone" ? modeParam : "call";
   // Two modes = two header tabs: "Appel" (conversation over the WS session) and "Commande" (one stateless turn).
   const modeSwitch = <Tabs<Mode> value={mode} items={MODES} onChange={(m) => setModeParam(m === "call" ? "" : m)} />;
   // Each mode owns its connection (WS session vs one POST per command): only the visible one is mounted.
   if (mode === "command") return <CommandMode modeSwitch={modeSwitch} />;
+  if (mode === "phone") return <PhoneMode modeSwitch={modeSwitch} />;
   return mode === "copilot" ? <CopilotMode modeSwitch={modeSwitch} /> : <CallMode modeSwitch={modeSwitch} />;
 }
 

@@ -102,7 +102,7 @@ export interface GuardSummary {
 // ── Voice (push-to-talk, two tracks: the human "caller" and the agent) ──
 
 export type VoiceClientMessage =
-  | { type: "start"; sessionId?: string; actorName?: string; outboundOrderId?: string; mode?: VoiceMode } // opens a conversation (outboundOrderId: the agent calls that order's client and speaks first)
+  | { type: "start"; sessionId?: string; actorName?: string; outboundOrderId?: string; outboundClientId?: string; mode?: VoiceMode } // opens a conversation (outboundOrderId: the agent calls that order's client and speaks first)
   | { type: "audio_start"; mime: string; hint?: string; speaker?: CopilotSpeaker; continuous?: boolean } // caller pressed space (hint: optional STT vocabulary; mock STT returns it). continuous: hands-free, the mic stays open and the server finds each sentence end
   | { type: "audio_end" } // caller released space; binary frames sent in between (every 100–250 ms) are the utterance, streamed to the STT as they arrive
   | { type: "text"; text: string; speaker?: CopilotSpeaker; demoError?: boolean } // typed instead of spoken (debug); demoError: Garde-fou demo, the agent states one wrong figure
