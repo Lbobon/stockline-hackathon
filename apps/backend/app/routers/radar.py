@@ -5,7 +5,7 @@ from fastapi import APIRouter, Query
 from app.core.activity import today
 from app.dependencies import CtxDep, iso_date_query
 from app.schemas.inputs import CalendarEventCreate
-from app.services import calendar, demand, demand_daily, feeds, radar, radar_backtest
+from app.services import calendar, demand, demand_daily, feeds, radar, radar_backtest, supply
 
 router = APIRouter(prefix="/api/radar", tags=["radar"])
 
@@ -25,6 +25,15 @@ async def forecast(date: str | None = Query(None, description="YYYY-MM-DD, defau
     totals, uplift from events and a one-line reason."""
     await feeds.ensure()
     return radar.forecast(iso_date_query(date))
+
+
+@router.get("/supply")
+async def supply_needs(date: str | None = Query(None, description="YYYY-MM-DD, first day, default business tomorrow"),
+                       days: int = Query(7, ge=1, le=14)):
+    """What the depot will run short of over the next `days` days (the forecast summed vs stock + incoming), and the
+    purchase to make from each product's main supplier, with the events behind it. The supplier campaign calls these."""
+    await feeds.ensure()
+    return supply.supply(iso_date_query(date), days)
 
 
 @router.get("/clients/{client_id}/suggestion")
