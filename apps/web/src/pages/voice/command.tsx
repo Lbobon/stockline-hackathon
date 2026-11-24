@@ -73,7 +73,6 @@ export function CommandMode({ modeSwitch }: { modeSwitch: ReactNode }) {
 
   const online = health.isSuccess;
   const runs = [...s.runs].reverse();
-  const p = health.data;
 
   return (
     <Page>
@@ -88,14 +87,6 @@ export function CommandMode({ modeSwitch }: { modeSwitch: ReactNode }) {
         tabs={modeSwitch}
         actions={
           <>
-            {/* Active providers (not filters): informative chips, only where there is room. */}
-            {p ? (
-              <div className="hidden items-center gap-1 xl:flex">
-                <ProviderChip k="llm" v={`${p.llm.provider}${p.llm.model ? `:${p.llm.model}` : ""}`} />
-                <ProviderChip k="stt" v={p.stt.provider} />
-                <ProviderChip k="tts" v={p.tts.provider} />
-              </div>
-            ) : null}
             <Button size="sm" variant="ghost" icon={s.speak ? Volume2 : VolumeX} onClick={() => setSpeak(!s.speak)} aria-pressed={s.speak}>
               {s.speak ? "Réponse vocale" : "Réponse muette"}
             </Button>
@@ -213,15 +204,6 @@ function AverageBar({ runs }: { runs: CommandRun[] }) {
         {COMMAND_METRICS.map((m) => <MsChip key={m.key} k={m.key} label={m.label} ms={avg(m.key)} title={m.title} />)}
       </div>
     </div>
-  );
-}
-
-function ProviderChip({ k, v }: { k: string; v: string }) {
-  return (
-    <span className="inline-flex h-[20px] max-w-[220px] items-center gap-1 truncate rounded-[3px] border border-border px-1.5 font-mono text-[10.5px]" title={`${k} : ${v}`}>
-      <span className="text-muted-foreground">{k}</span>
-      <span className="truncate text-secondary-foreground">{v}</span>
-    </span>
   );
 }
 
