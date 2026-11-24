@@ -15,6 +15,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
+import { loadErpCustomers } from './erp-customers.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -24,6 +25,10 @@ const PORT = Number(env.PORT || 8080);
 const PUBLIC_URL = (env.PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 const ORDERS_FILE = env.ORDERS_FILE || path.join(here, 'orders.json');
 const CUSTOMERS_FILE = env.CUSTOMERS_FILE || path.join(root, 'data', 'sample', 'customers.json');
+// The ERP's real clients (data/seed, git-ignored) are used unless CUSTOMERS_FILE is set or the seed is missing.
+const ERP_SEED_DIR = env.ERP_SEED_DIR || path.resolve(root, '..', 'data', 'seed');
+const USE_ERP = !env.CUSTOMERS_FILE && env.USE_ERP_CUSTOMERS !== '0';
+const ERP_PHONES = env.ERP_PHONES === '1'; // off by default: the seed has phone numbers, don't dial them by accident
 const WEB_DIR = path.join(root, 'web');
 
 // ---------- storage ----------
@@ -44,7 +49,12 @@ const FALLBACK_CUSTOMERS = [{
   todays_offer: 'lotte arrivée ce matin, -15 %',
 }];
 
+let erpCache = { at: 0, list: null };
 function loadCustomers() {
+  if (USE_ERP) {
+    if (Date.now() - erpCache.at > 60000) erpCache = { at: Date.now(), list: loadErpCustomers(ERP_SEED_DIR, { withPhones: ERP_PHONES }) };
+    if (erpCache.list?.length) return erpCache.list;
+  }
   try { return JSON.parse(fs.readFileSync(CUSTOMERS_FILE, 'utf8')); } catch { return FALLBACK_CUSTOMERS; }
 }
 function findCustomer(id) {

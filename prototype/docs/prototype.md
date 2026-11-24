@@ -29,7 +29,7 @@ phone ⇄ Twilio ⇄ (media stream, mu-law 8 kHz) ⇄ server/index.mjs ⇄ (webs
     "notes": "string" } }
 ```
 
-**Dynamic variables** the server sends when the call starts, from `data/sample/customers.json`: `{{restaurant_name}}`, `{{contact_name}}`, `{{usual_order}}`, `{{todays_offer}}`.
+**Dynamic variables** the server sends when the call starts. By default they come from the ERP's real clients (`data/seed/`, git-ignored; `usual_order` = median of each client's last 10 orders, `todays_offer` = a lot expiring within 3 days, -15 % only if it keeps a 5 % margin). Set `CUSTOMERS_FILE` or `USE_ERP_CUSTOMERS=0` to use `data/sample/customers.json` instead; `ERP_PHONES=1` also fills each client's phone (off by default so nobody gets dialled by accident): `{{restaurant_name}}`, `{{contact_name}}`, `{{usual_order}}`, `{{todays_offer}}`.
 
 **HTTP API**
 - `POST /call` with `{"to": "+336...", "customer_id": "cust_001"}`: Twilio dials the number. `to` defaults to the customer's phone.
