@@ -4,6 +4,43 @@
 > setup checklist: [docs/team.md](docs/team.md). To run it you need the `.env` and `data/seed/` from the team zip
 > (both git-ignored), then `make setup`. Our choices and measurements: [DECISIONS.md](DECISIONS.md).
 
+## Essayer nos fonctionnalités (équipe 18) — 5 minutes
+
+### 1. Installer
+
+1. Mettez à la racine du repo le dossier `data/` du zip de l'équipe (il doit contenir `data/seed/meta.json`) et le fichier `.env`.
+2. Dans `.env`, vérifiez ces trois lignes : c'est la configuration avec laquelle tout a été mesuré.
+   ```
+   LLM_MODEL=claude-haiku-5-5
+   GUARD_MODE=block
+   JEV_API_KEY=…          # la clé Jev du zip : le Radar et le Garde-fou s'en servent
+   ```
+   Sans clés (`*_PROVIDER=mock`), l'ERP et les pages marchent, mais l'agent et les appels du Radar sont factices.
+3. Lancez `make setup` (Docker requis, ≈ 5 min la première fois), puis ouvrez **http://localhost:5173**.
+4. Avant chaque essai, remettez les données au départ : `make reset`. Après avoir modifié `.env` : `make restart`.
+
+Les données sont figées au **mardi 24/11/2026 à 5 h 30**. « Demain », c'est mercredi 25. Aucun vrai numéro n'est appelé :
+pendant les campagnes, les clients qui répondent sont joués par un modèle, à partir de leur fiche.
+
+### 2. Ce qu'il faut regarder
+
+| Quoi | Où | Comment |
+|---|---|---|
+| **Radar de demande** : l'ERP prévoit les commandes de demain (avec les événements : match OM–PSG, mariages du week-end), puis appelle 24 clients en même temps. Chaque « oui » crée la commande et redessine la tournée. | `/radar` (menu **Radar**) | Cliquez **Lancer les appels**. En ≈ 90 s, la carte, le fil d'activité et les tournées se mettent à jour en direct. Cliquez un client dans la liste pour voir son panier prévu et pourquoi. |
+| **Appel entrant** : ce que le jury teste. L'agent prend une commande, vérifie stock, prix et règles, puis confirme ou laisse en attente pour l'ADV. | `/voice` (menu **Voix**), onglet **Appel** | **Maintenez la touche Espace** pendant que vous parlez, relâchez, l'agent répond. Ou tapez votre phrase dans le champ texte. Exemple : « Bonjour, c'est Hadj Zerrouki, El Baraka Noailles, comme d'habitude pour demain. » **Raccrocher** termine l'appel et écrit son compte rendu. |
+| **Le Garde-fou** : chaque chiffre que l'agent va dire est vérifié contre l'ERP avant d'être prononcé (✓ vérifié, ? non vérifié, ✗ contredit). | `/voice`, panneau **Garde-fou** | Pendant un appel, chaque phrase porte une marque ; survolez-la pour voir sa source dans l'ERP. Cliquez **Provoquer une erreur**, puis demandez un prix : on force un mauvais chiffre (une « hallucination » provoquée), le Garde-fou l'arrête et l'agent se reprend. Il ne bloque qu'avec `GUARD_MODE=block` ; sinon le panneau affiche « Observation ». |
+| **Copilote** : l'ADV prend l'appel elle-même ; l'agent écoute, remplit la commande et souffle les alertes (plafond, rupture, refus de substitution). | `/voice`, onglet **Copilote** | Parlez comme Leïla et comme le client (Espace). La commande se remplit au fur et à mesure. **Valider la commande** passe par les mêmes règles de l'ERP que l'agent. |
+| **Ruptures du matin** : l'agent appelle les clients touchés par une rupture avant le départ des camions. | `/morning` (menu **Ce matin**) | **Lancer les appels**, ou **Appeler** sur une ligne. |
+| **Comptes rendus d'appel** | `/calls` (menu **Appels**) | Un compte rendu par appel raccroché : résumé, actions pour Leïla, latences, coût, Garde-fou. |
+| **Tournées optimisées** | API `GET /api/routing/optimize?date=2026-11-24` (et la carte du Radar) | 559 km → 352 km sur les tournées du jour. |
+
+### 3. Si quelque chose ne marche pas
+
+- **La page est vide, ou « Service IA injoignable »** : `make logs`, puis `make restart`.
+- **Les appels du Radar échouent tout de suite** : la clé Anthropic manque dans `.env`. La page passe alors en démo hors ligne, marquée « démo ».
+- **Un essai a déjà écrit des commandes** : `make reset` repart des données du zip.
+- **Tester sans le navigateur** : `make chat` pour parler à l'agent dans le terminal, ou `cd apps/ai && uv run python -m sim --generic 10` pour 10 appels simulés notés par un juge.
+
 A small but complete ERP for a food wholesaler, an AI service that reads and writes it through tools, and a
 push-to-talk voice harness. Built for the Stockline voice hackathon: make the voice agent **smart, fast and natural**.
 
