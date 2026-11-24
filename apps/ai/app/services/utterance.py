@@ -26,7 +26,7 @@ from .vocabulary import stt_hint
 # After audio_end, how long to wait for the live stream's final words. Soniox normally answers in ~0.8-1.6 s (measured
 # with real speech); when it is slower, the words heard so far are used instead (a slow provider would be just as
 # slow on the whole recording, which used to cost 5 s of waiting plus a full re-transcription).
-FINAL_TIMEOUT_S = 2.5
+FINAL_TIMEOUT_S = 0.8  # a live call measured 1.9 s release→text: past 0.8 s the live words (near-final) win
 FALLBACK_TIMEOUT_S = 8.0  # nothing heard live: the whole recording must come back within this, or the turn errors
 
 # A transcript made only of these is a noise / hesitation, not a turn (kitchen noise, a breath, "euh…")
