@@ -2,7 +2,7 @@
  * Offline campaign: plays the same events as GET /ai/campaigns/{id}/stream (call_status, line, decision, order, route,
  * totals, done, delivered) from the forecast alone, so the radar demos without the AI server. Deterministic per client.
  */
-import type { CampaignEvent, CampaignTotals, Forecast, ForecastClient, ForecastLine, RoutePlan, RouteStop, Truck } from "./types";
+import { callQueue, type CampaignEvent, type CampaignTotals, type Forecast, type ForecastClient, type ForecastLine, type RoutePlan, type RouteStop, type Truck } from "./types";
 
 const hash = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 const sleep = (ms: number, signal: AbortSignal) =>
@@ -98,10 +98,9 @@ export function planRoutes(f: Forecast, stops: { clientId: string; orderId: stri
 }
 
 export async function runMockCampaign(f: Forecast, emit: (e: CampaignEvent) => void, signal: AbortSignal, concurrency = 6) {
-  const callable = f.clients.filter((c) => c.status !== "ordered");
-  // Same ids as the queued list in useCampaign (forecast order); dialled by expected uplift.
-  const ids = new Map(callable.map((c, i) => [c.clientId, `call_${String(i + 1).padStart(2, "0")}`]));
-  const rows = [...callable].sort((a, b) => b.upliftHt - a.upliftHt);
+  // Same ids and order as the queued list in useCampaign: loyal customers first (callQueue).
+  const rows = callQueue(f);
+  const ids = new Map(rows.map((c, i) => [c.clientId, `call_${String(i + 1).padStart(2, "0")}`]));
   const stops = f.clients.filter((c) => c.status === "ordered").map((c) => ({ clientId: c.clientId, orderId: c.existingOrderId ?? `ord_${c.clientId}`, lat: c.lat, lng: c.lng }));
   const totals: CampaignTotals = { called: 0, confirmed: 0, declined: 0, callback: 0, revenueHt: 0, upliftHt: 0 };
   emit({ type: "route", plan: planRoutes(f, stops) });

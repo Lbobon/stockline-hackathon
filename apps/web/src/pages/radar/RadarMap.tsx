@@ -475,5 +475,6 @@ export function pinLabel(c: ForecastClient, call?: CampaignCall, delivered?: str
   if (s === "declined") return "pas cette fois";
   if (s === "callback") return "à rappeler";
   if (s === "failed") return "appel échoué";
+  if (c.call === false) return "non appelé · enlèvement au quai";
   return c.status === "ordered" ? "déjà commandé" : c.status === "upsell" ? "commandé · ajout possible" : `prévu · ${Math.round(c.probability * 100)} %`;
 }

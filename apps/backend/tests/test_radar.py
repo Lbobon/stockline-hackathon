@@ -45,4 +45,23 @@ with TestClient(app) as c:
     assert all(r.get("existingOrderId") for r in f["clients"] if r["status"] in ("ordered", "upsell"))
     assert "cli_0044" not in by  # Couscous Marion, tagged "perdus"
 
+    # Call order: loyal customers first, then by expected € net; a delivery that isn't worth it is not called.
+    rows = [r for r in f["clients"] if r["status"] in ("predicted", "upsell")]
+    for r in rows:
+        assert r["loyalty"]["tier"] in ("fidele", "regulier", "occasionnel") and 0 <= r["loyalty"]["score"] <= 1
+        assert r["loyalty"]["weeksActive"] <= 13 and r["routeFit"]["costEur"] >= 0 and isinstance(r["call"], bool)
+        if r["status"] == "upsell":
+            assert r["call"]  # an add-on rides on a delivery that happens anyway
+        if not r["call"]:
+            fit = r["routeFit"]
+            assert r["skipReason"] and "priority" not in r
+            assert r["totalHt"] < 120 or fit["costEur"] > 0.5 * r["marginHt"], r
+    called = [r for r in f["clients"] if r.get("call")]
+    assert [r["priority"] for r in called] == list(range(1, len(called) + 1))
+    assert f["clients"][: len(called)] == called  # the forecast lists them in call order
+    keys = [(r["wave"], -r["expectedNetEur"]) for r in called]
+    assert keys == sorted(keys), keys
+    assert called[0]["loyalty"]["tier"] == "fidele"
+    assert s["toCall"] == len(called) and s["skipped"] == len(rows) - len(called) and s["skipped"] >= 1
+
 print("radar OK:", s)

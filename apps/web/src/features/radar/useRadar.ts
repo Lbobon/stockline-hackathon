@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AI_BASE, API_BASE } from "@/lib/api";
 import sample from "./sample-forecast.json";
 import { runMockCampaign, runMockDeliveries } from "./mock";
-import type { CampaignCall, CampaignEvent, CampaignTotals, Forecast, RoutePlan } from "./types";
+import { callQueue, type CampaignCall, type CampaignEvent, type CampaignTotals, type Forecast, type RoutePlan } from "./types";
 
 export const SAMPLE = sample as unknown as Forecast;
 const DELIVERY_SPEED = 8; // route minutes per second of replay
@@ -228,9 +228,9 @@ export function useCampaign(forecast: Forecast | undefined) {
     dispatch({ type: "reset" });
     dispatch({ type: "phase", phase: "starting" });
     const queued = (rows: Forecast["clients"]): CampaignCall[] =>
-      rows.filter((c) => c.status !== "ordered").map((c, i) => ({
+      rows.map((c, i) => ({
         callId: `call_${String(i + 1).padStart(2, "0")}`, clientId: c.clientId, clientName: c.name, lat: c.lat, lng: c.lng,
-        kind: c.status as "predicted" | "upsell", status: "queued", transcript: [], totalHt: 0,
+        kind: c.status as "predicted" | "upsell", priority: c.priority, tier: c.loyalty?.tier, status: "queued", transcript: [], totalHt: 0,
       }));
     try {
       if ((forecast as { offline?: boolean }).offline) throw new Error("offline forecast");
@@ -240,7 +240,7 @@ export function useCampaign(forecast: Forecast | undefined) {
       await attach(id, ctl.signal);
     } catch {
       if (ctl.signal.aborted) return;
-      dispatch({ type: "start", source: "demo", calls: queued(forecast.clients) });
+      dispatch({ type: "start", source: "demo", calls: queued(callQueue(forecast)) });
       runMockCampaign(forecast, emit, ctl.signal).catch(() => {});
     }
   }, [forecast, emit, attach]);

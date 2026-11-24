@@ -68,6 +68,8 @@ class Call:
     lat: float
     lng: float
     kind: str  # predicted | upsell
+    priority: int | None = None  # call order from the forecast: loyal customers first, then by expected € net
+    tier: str | None = None  # fidele | regulier | occasionnel
     status: str = "queued"  # queued | ringing | talking | confirmed | modified | declined | callback | failed
     transcript: list[dict] = field(default_factory=list)
     decision: dict | None = None
@@ -359,9 +361,12 @@ async def run(c: Campaign, rows: list[dict], concurrency: int) -> None:
 async def start(date: str | None, client_ids: list[str] | None, concurrency: int = 8) -> Campaign:
     erp = ErpClient("voice_agent", "Radar")
     forecast = await erp.get("/api/radar/forecast", {"date": date})
-    rows = [r for r in forecast["clients"] if r["status"] in ("predicted", "upsell") and (not client_ids or r["clientId"] in client_ids)]
+    # the forecast lists them in call order (radar.prioritize); `call: false` = not worth a delivery, dock pickup instead
+    rows = [r for r in forecast["clients"] if r["status"] in ("predicted", "upsell") and r.get("call", True)
+            and (not client_ids or r["clientId"] in client_ids)]  # fmt: skip
     c = Campaign(id=f"cmp_{uuid.uuid4().hex[:8]}", date=forecast["date"], forecast=forecast)
-    c.calls = [Call(callId=f"call_{i + 1:02d}", clientId=r["clientId"], clientName=r["name"], lat=r["lat"], lng=r["lng"], kind=r["status"])
+    c.calls = [Call(callId=f"call_{i + 1:02d}", clientId=r["clientId"], clientName=r["name"], lat=r["lat"], lng=r["lng"], kind=r["status"],
+                    priority=r.get("priority"), tier=(r.get("loyalty") or {}).get("tier"))
                for i, r in enumerate(rows)]  # fmt: skip
     CAMPAIGNS[c.id] = c
     try:

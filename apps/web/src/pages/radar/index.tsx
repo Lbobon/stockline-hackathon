@@ -13,7 +13,7 @@ import { fmtMoney } from "@/lib/format";
 import { useCampaign, useForecast } from "@/features/radar/useRadar";
 import type { Forecast } from "@/features/radar/types";
 import { RadarMap } from "./RadarMap";
-import { ClientDetail, ClientList, Count, EventStrip } from "./Panel";
+import { ClientDetail, ClientList, Count, EventStrip, NotCalledList } from "./Panel";
 import { ActivityFeed, DeliveryCards } from "./Live";
 import { useRoads } from "@/features/radar/roads";
 
@@ -39,6 +39,7 @@ function Radar_({ forecast }: { forecast: Forecast & { offline?: boolean } }) {
   const names = useMemo(() => Object.fromEntries(forecast.clients.map((c) => [c.clientId, c.name])), [forecast]);
   const running = phase === "starting" || phase === "running";
   const nCalls = Object.keys(state.calls).length;
+  const toCall = forecast.summary.toCall ?? forecast.summary.predicted + forecast.summary.upsell;
   const dateLabel = new Date(`${forecast.date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
   const k = useMemo(() => {
@@ -83,7 +84,7 @@ function Radar_({ forecast }: { forecast: Forecast & { offline?: boolean } }) {
               </Button>
             ) : (
               <Button variant="primary" icon={running ? undefined : PhoneCall} disabled={running} onClick={launch}>
-                {running ? <><Spinner size={12} /> Appels {totals.called}/{nCalls || "…"}</> : `Lancer les appels (${forecast.summary.predicted + forecast.summary.upsell})`}
+                {running ? <><Spinner size={12} /> Appels {totals.called}/{nCalls || "…"}</> : `Lancer les appels (${toCall})`}
               </Button>
             )}
           </>
@@ -129,9 +130,15 @@ function Radar_({ forecast }: { forecast: Forecast & { offline?: boolean } }) {
                     <EventStrip forecast={forecast} focus={focus} onFocus={setFocus} />
                   </section>
                   <section>
-                    <SectionTitle count={forecast.summary.predicted + forecast.summary.upsell}>À appeler</SectionTitle>
+                    <SectionTitle count={toCall}>À appeler</SectionTitle>
                     <ClientList forecast={forecast} selected={selected} onSelect={setSelected} />
                   </section>
+                  {forecast.summary.skipped ? (
+                    <section>
+                      <SectionTitle count={forecast.summary.skipped}>Non appelés · enlèvement au quai conseillé</SectionTitle>
+                      <NotCalledList forecast={forecast} selected={selected} onSelect={setSelected} />
+                    </section>
+                  ) : null}
                 </motion.div>
               ) : (
                 <motion.div key="live" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.18 }}

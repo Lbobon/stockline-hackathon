@@ -32,6 +32,31 @@ export interface ForecastLine {
   note?: string;
 }
 
+export type LoyaltyTier = "fidele" | "regulier" | "occasionnel";
+
+/** How loyal the client is, from their delivered orders (radar.loyalty). */
+export interface Loyalty {
+  score: number;
+  tier: LoyaltyTier;
+  label: string;
+  weekdayHits: number; // same weekdays with a delivery, out of the last 12
+  weeksActive: number; // weeks with an order, out of the last 13
+  ordersRecent: number;
+  revenueRecentHt: number;
+  tenureMonths: number;
+}
+
+/** The cheapest place for the client's stop in the day's trucks (radar.route_fit). */
+export interface RouteFit {
+  route: string | null;
+  onRoute: boolean;
+  feasible: boolean;
+  detourKm: number;
+  detourMin: number;
+  costEur: number;
+  after: string | null; // the stop (or the depot) it comes right after
+}
+
 export interface ForecastClient extends LatLng {
   clientId: string;
   name: string;
@@ -49,6 +74,15 @@ export interface ForecastClient extends LatLng {
   reason: string;
   eventIds?: string[];
   specialRequirements?: { productId?: string; qty?: number; note: string; productName?: string }[];
+  // who to call first (radar.prioritize): loyal customers first, then by expected € net
+  loyalty?: Loyalty;
+  routeFit?: RouteFit;
+  marginHt?: number;
+  expectedNetEur?: number;
+  call?: boolean; // false: not worth a delivery, dock pickup suggested instead
+  skipReason?: string | null;
+  priority?: number;
+  wave?: number;
 }
 
 export interface Forecast {
@@ -56,7 +90,8 @@ export interface Forecast {
   depot: LatLng & { name: string };
   events: RadarEvent[];
   clients: ForecastClient[];
-  summary: { ordered: number; predicted: number; upsell: number; expectedHt: number; upliftHt: number };
+  summary: { ordered: number; predicted: number; upsell: number; expectedHt: number; upliftHt: number;
+    toCall?: number; skipped?: number; loyal?: number; expectedNetEur?: number };
 }
 
 export interface RouteStop extends LatLng { orderId: string; clientId: string; eta: string }
@@ -88,6 +123,8 @@ export interface CampaignCall extends LatLng {
   clientId: string;
   clientName: string;
   kind?: "predicted" | "upsell";
+  priority?: number | null;
+  tier?: LoyaltyTier | null;
   status: CallStatus;
   transcript: { who: "agent" | "client"; text: string }[];
   decision?: { label: DecisionLabel; confidence: number; source: string } | null;
@@ -109,6 +146,12 @@ export type CampaignEvent =
   | { type: "done"; totals: CampaignTotals }
   | { type: "delivered"; orderId: string; clientId: string; at: string }
   | { type: "deliveries_done"; count: number };
+
+/** The clients the campaign calls, in call order (the server's priority; older forecasts: by expected uplift). */
+export const callQueue = (f: Forecast) =>
+  f.clients.filter((c) => c.status !== "ordered" && c.call !== false)
+    .sort((a, b) => (a.priority ?? 1e9) - (b.priority ?? 1e9) || b.upliftHt - a.upliftHt);
+export const notCalled = (f: Forecast) => f.clients.filter((c) => c.status !== "ordered" && c.call === false);
 
 export const TERMINAL: CallStatus[] = ["confirmed", "modified", "declined", "callback", "failed"];
 export const isYes = (s: CallStatus) => s === "confirmed" || s === "modified";
