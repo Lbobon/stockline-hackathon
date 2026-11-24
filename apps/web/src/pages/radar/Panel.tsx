@@ -1,12 +1,13 @@
 /** Right panel of the radar: the week's events, then the calls (live) or the clients to call, or one client's basket. */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, LayoutGroup, animate, motion } from "framer-motion";
-import { ArrowLeft, Check, Clock, PhoneCall, PhoneOff, Sparkles, Truck, X } from "lucide-react";
+import { ArrowLeft, BarChart3, Check, ChevronDown, Clock, PhoneCall, PhoneOff, Sparkles, Truck, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { fmtMoney, fmtQty } from "@/lib/format";
 import { callQueue, notCalled, type CampaignCall, type Forecast, type ForecastClient, type ForecastLine, type LoyaltyTier, type RadarEvent, type RouteFit } from "@/features/radar/types";
 import { EVENT_STYLE } from "./look";
 import { pinLabel } from "./RadarMap";
+import { PredictionExplain } from "./Explain";
 
 const spring = { type: "spring", stiffness: 420, damping: 34 } as const;
 
@@ -277,6 +278,8 @@ export function ClientDetail({ c, forecast, call, delivered, onBack }: {
   const events = forecast.events.filter((e) => c.eventIds?.includes(e.id));
   const lines = c.status === "upsell" ? c.addLines ?? [] : c.lines;
   const reasons = c.reason.split(" ; ").map((r) => r.replace(/^[^:]+ : /, (m) => m));
+  const [explain, setExplain] = useState(false);
+  useEffect(() => setExplain(false), [c.clientId]);
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-start gap-2">
@@ -288,10 +291,15 @@ export function ClientDetail({ c, forecast, call, delivered, onBack }: {
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <Stat label={c.status === "upsell" ? "Ajout" : "Panier prévu"} value={fmtMoney(c.status === "upsell" ? c.upliftHt : c.totalHt, { compact: true })} />
+        <Stat label={c.status === "upsell" ? "Ajout" : "Panier prévu"} value={fmtMoney(c.status === "upsell" ? c.upliftHt : c.totalHt, { compact: true })}
+          onClick={() => setExplain((v) => !v)} open={explain} />
         <Stat label="Dont événements" value={`+${fmtMoney(c.upliftHt, { compact: true })}`} />
         <Stat label="Probabilité" value={`${Math.round(c.probability * 100)} %`} />
       </div>
+
+      <AnimatePresence initial={false}>
+        {explain ? <PredictionExplain key="explain" c={c} forecast={forecast} onClose={() => setExplain(false)} /> : null}
+      </AnimatePresence>
 
       {c.loyalty && c.routeFit ? <WhyThisOrder c={c} date={forecast.date} /> : null}
 
@@ -386,11 +394,26 @@ function LineRow({ l, delay }: { l: ForecastLine; delay: number }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, onClick, open }: { label: string; value: string; onClick?: () => void; open?: boolean }) {
+  if (!onClick) {
+    return (
+      <div className="rounded-lg border border-border bg-card px-2.5 py-2">
+        <div className="text-[10.5px] text-muted-foreground">{label}</div>
+        <div className="num text-[14px] font-semibold tracking-[-0.01em]">{value}</div>
+      </div>
+    );
+  }
   return (
-    <div className="rounded-lg border border-border bg-card px-2.5 py-2">
-      <div className="text-[10.5px] text-muted-foreground">{label}</div>
+    <motion.button type="button" onClick={onClick} whileHover={{ y: -1 }} whileTap={{ scale: 0.98 }} aria-expanded={open}
+      title="Voir comment on a calculé ce montant"
+      className={cn("group rounded-lg border px-2.5 py-2 text-left transition-colors",
+        open ? "border-primary/50 bg-primary/[.08]" : "border-primary/25 bg-card hover:border-primary/50 hover:bg-primary/[.04]")}>
+      <div className="flex items-center gap-1 text-[10.5px] text-muted-foreground">
+        {label}
+        <ChevronDown size={11} className={cn("ml-auto transition-transform", open && "rotate-180")} />
+      </div>
       <div className="num text-[14px] font-semibold tracking-[-0.01em]">{value}</div>
-    </div>
+      <div className="mt-0.5 flex items-center gap-1 text-[10.5px] font-medium text-primary"><BarChart3 size={10} />{open ? "Masquer" : "Comprendre"}</div>
+    </motion.button>
   );
 }
