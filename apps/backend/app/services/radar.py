@@ -363,19 +363,22 @@ def suggestion(client_id: str, date: str | None = None) -> Doc:
 def action(calls: list[Doc], evs: list[Doc]) -> Doc:
     """« Appeler ces N clients, ces quantités, pour X € »: the campaign's expected take, from the forecast rows
     to call (a predicted order is worth its expectedHt; an add-on, P × the add-on), and the part the events bring,
-    split between uplift measured on history and the team's estimates (weddings)."""
-    estimated = {e["id"] for e in evs if not demand.measured(e)}
+    split between uplift measured on history and the team's estimates (weddings, the OM–PSG night)."""
+    estimated = {e["id"]: e["title"] for e in evs if not demand.measured(e)}
+    used: dict[str, None] = {}
     ht = sum(r["expectedHt"] if r["status"] == "predicted" else r["probability"] * r["upliftHt"] for r in calls)
     up = {"measured": 0.0, "estimated": 0.0}
     for r in calls:
         for l in r["lines"] if r["status"] == "predicted" else r["addLines"]:
             if l.get("eventId"):
                 up["estimated" if l["eventId"] in estimated else "measured"] += r["probability"] * (l["qty"] - l["baseQty"]) * l["unitPrice"]
+                if l["eventId"] in estimated:
+                    used[estimated[l["eventId"]]] = None
     lines = sum(len(r["lines"] if r["status"] == "predicted" else r["addLines"]) for r in calls)
     eur = lambda x: f"{x:,.0f}".replace(",", " ")
     pitch = f"Appeler {len(calls)} clients, {lines} lignes proposées : {eur(ht)} € HT de commandes attendues"
     parts = [f"{eur(up['measured'])} € de hausse mesurée sur l'historique" if up["measured"] > 0 else "",
-             f"{eur(up['estimated'])} € estimés (mariages)" if up["estimated"] > 0 else ""]
+             f"{eur(up['estimated'])} € estimés ({', '.join(used)})" if up["estimated"] > 0 else ""]
     if any(parts):
         pitch += ", dont " + " et ".join(p for p in parts if p)
     return {"calls": len(calls), "lines": lines, "expectedHt": round2(ht), "eventUpliftHt": round2(sum(up.values())),

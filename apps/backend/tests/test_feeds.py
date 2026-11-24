@@ -68,7 +68,9 @@ with TestClient(app) as c:
     assert st["matches"]["count"] == 27 and st["ics"] == [{"type": "concert", "venue": "Le Dôme", "events": 2}], st
     om = c.get("/api/radar/calendar", params={"type": "om_home"}).json()
     assert om[0]["title"] == "OM – Paris au Vélodrome" and om[0]["affects"] == {"from": "2023-09-05", "to": "2023-09-06"}
-    assert all("estimate" not in e and e["feed"] == "openfootball" for e in om)  # measured on the history, not guessed
+    # real fixtures are measured on the history, not guessed; the demo's OM–PSG night (25/11, seed) is the one estimate
+    assert all("estimate" not in e and e["feed"] == "openfootball" for e in om if e["id"] != "om-psg")
+    assert [e for e in om if e["id"] == "om-psg"][0]["estimate"] and "feed" not in [e for e in om if e["id"] == "om-psg"][0]
     cold = c.get("/api/radar/calendar", params={"type": "froid"}).json()
     assert cold and cold[-1]["id"] == "meteo-froid-2026-11-26" and cold[-1]["source"] == "prévision Open-Meteo", cold[-1]
     assert cold[-1]["title"] == "Froid (9 °C max)"
@@ -87,7 +89,7 @@ with TestClient(app) as c:
     c.get("/api/radar/forecast", params={"date": "2026-11-26"})
     assert len(calls) == n, calls[n:]
     assert c.post("/api/admin/reset").status_code == 200
-    assert len(c.get("/api/radar/calendar", params={"type": "om_home"}).json()) == 27
+    assert len(c.get("/api/radar/calendar", params={"type": "om_home"}).json()) == 27 + 1  # + the seed OM–PSG night
 
     # A source down: the last data stays, no error for the user, not retried on every request
     down = True
@@ -95,6 +97,6 @@ with TestClient(app) as c:
     assert c.get("/api/radar/forecast", params={"date": "2026-11-26"}).status_code == 200
     n = len(calls)
     c.get("/api/radar/forecast", params={"date": "2026-11-26"})
-    assert len(calls) == n and len(c.get("/api/radar/calendar", params={"type": "om_home"}).json()) == 27
+    assert len(calls) == n and len(c.get("/api/radar/calendar", params={"type": "om_home"}).json()) == 27 + 1  # + the seed OM–PSG night
 
 print("feeds OK:", {k: v for k, v in st.items() if k != "enabled"})
