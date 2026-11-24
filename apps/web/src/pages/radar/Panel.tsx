@@ -62,6 +62,11 @@ export function EventStrip({ forecast, focus, onFocus }: { forecast: Forecast; f
                 {shortDate(e.date)}{e.time ? ` · ${e.time}` : ""} · {n ? `${n} client${n > 1 ? "s" : ""}` : e.boosts[0]?.productName.split(/[(,]/)[0].trim().toLowerCase()}
               </span>
               {eur > 0 ? <span className="num mt-1 block text-[11.5px] font-medium leading-4 text-foreground">+{fmtMoney(eur, { compact: true })}</span> : null}
+              {e.basis ? (
+                <span title={e.basis} className="mt-0.5 block truncate text-[10.5px] leading-4 text-muted-foreground">
+                  {e.measured ? "Mesuré sur l'historique" : "Estimation, sans historique"}
+                </span>
+              ) : null}
             </span>
           </motion.button>
         );

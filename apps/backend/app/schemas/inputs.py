@@ -373,3 +373,42 @@ class ContextEntryPatch(Input):
     title: Title | None = None
     body: Body | None = None
     tags: list[str] | None = None
+
+
+# ───────── Events calendar (radar) ─────────
+
+CalendarKind = Literal["religious", "holiday", "sport", "weather", "wedding", "local"]
+
+
+class CalendarBoost(Input):
+    product_id: Id
+    factor: float = Field(gt=0, le=5)
+
+
+class CalendarSpecial(Input):
+    product_id: Id
+    qty: float = Field(gt=0)
+    note: str | None = None
+
+
+class CalendarEstimate(Input):
+    boosts: list[CalendarBoost] = []
+    special: list[CalendarSpecial] = []
+
+
+class CalendarEventCreate(Input):
+    """A calendar event. `type` groups occurrences (ramadan, om_home…): an event whose type has past occurrences gets
+    its uplift measured from history; give an `estimate` only for a type with no history to measure."""
+
+    type: Annotated[str, StringConstraints(pattern=r"^[a-z_]{2,40}$")]
+    kind: CalendarKind
+    title: Annotated[str, StringConstraints(min_length=2, max_length=120)]
+    date: IsoDateStr
+    time: str | None = None
+    date_from: IsoDateStr = Field(alias="from")
+    date_to: IsoDateStr = Field(alias="to")
+    segments: list[str] = []  # client tags (« snacking ») or postcodes (« pc:13001 »); empty = every client
+    pitch: Annotated[str, StringConstraints(min_length=2, max_length=200)]
+    source: str | None = None
+    baseline_excluded: bool = False
+    estimate: CalendarEstimate | None = None
