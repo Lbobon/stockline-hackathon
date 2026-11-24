@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from itertools import islice
 
 from app import crud
@@ -16,6 +17,37 @@ from app.services.tags import check_tags, tag_label
 def is_sale(order: Doc) -> bool:
     """Orders that count as sales (revenue, usual basket…)."""
     return order["status"] not in ("draft", "cancelled")
+
+
+WEEKDAYS_FR = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+MONTHS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
+CANTEEN_LEAD_DAYS = 3  # 02-journee-type.md: « Cantines : commande à J-3 avant midi, menus validés »
+
+
+def is_canteen(client: Doc) -> bool:
+    return client.get("type") == "canteen" or "collectivites" in (client.get("tags") or [])
+
+
+def earliest_delivery(client: Doc) -> str:
+    """First date an order taken now can be delivered.
+    shortcut: the pack's clock is 05:30 (after the 3 am same-day cut-off, before the canteens' noon one), so tomorrow
+    for everyone and J+3 for canteens; read the clock from meta.generatedAt if the demo ever moves it."""
+    return add_days(today(), CANTEEN_LEAD_DAYS if is_canteen(client) else 1)
+
+
+def next_deliveries(client: Doc, n: int = 3) -> list[Doc]:
+    """The client's next n real delivery dates: its own days, its zone's truck days, its lead time. Spoken labels."""
+    from app.services import routing  # routing imports orders, which imports this module
+
+    start, days, out = earliest_delivery(client), client.get("deliveryDays") or [], []
+    for i in range(21):
+        d = add_days(start, i)
+        if (not days or weekday_of(d) in days) and routing.zone_served_on(client["zone"], d):
+            dt = date.fromisoformat(d)
+            out.append({"date": d, "label": f"{WEEKDAYS_FR[dt.weekday()]} {dt.day} {MONTHS_FR[dt.month - 1]}"})
+            if len(out) == n:
+                break
+    return out
 
 
 def next_delivery_date(client: Doc) -> str:
@@ -154,6 +186,7 @@ def client_detail(id: str) -> Doc:
         "openInvoiceCount": len(open_invoices),
         "payments": payments.list_payments(ListQuery(limit=20), client_id=id),
         "usual": usual_basket(id),
+        "nextDeliveries": next_deliveries(crud.clients.require(id)),
         **client_events.client_history(id),
     }
 
