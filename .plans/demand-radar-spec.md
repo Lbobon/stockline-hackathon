@@ -34,7 +34,7 @@ The two build in parallel against the contract below.
 
 ## Events (« commandes spéciales »)
 
-New data in `apps/backend/app/radar_events.json`, committed (the data is fictional):
+New data in `apps/backend/app/radar_events.json`, committed (the data is fictional). Since replaced by the ERP calendar table (`calendar_seed.json`, `services/demand.py`: uplift measured from history):
 
 | id | date | title | targets | boost |
 |---|---|---|---|---|
