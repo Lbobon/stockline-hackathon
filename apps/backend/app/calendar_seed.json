@@ -1,0 +1,680 @@
+[
+ {
+  "id": "marche-noel-2023",
+  "type": "christmas_market",
+  "kind": "local",
+  "title": "Marché de Noël du Vieux-Port",
+  "date": "2023-11-25",
+  "time": null,
+  "affects": {
+   "from": "2023-11-25",
+   "to": "2023-12-24"
+  },
+  "segments": [
+   "pc:13001",
+   "pc:13002"
+  ],
+  "pitch": "avec le marché de Noël qui ouvre au Vieux-Port",
+  "source": "Ville de Marseille"
+ },
+ {
+  "id": "noel-2023",
+  "type": "christmas",
+  "kind": "holiday",
+  "title": "Fêtes de fin d'année 2023",
+  "date": "2023-12-25",
+  "time": null,
+  "affects": {
+   "from": "2023-12-20",
+   "to": "2023-12-31"
+  },
+  "segments": [],
+  "pitch": "pour les fêtes de fin d'année",
+  "source": "calendrier public"
+ },
+ {
+  "id": "vacances-2023-12-23",
+  "type": "school_holidays",
+  "kind": "holiday",
+  "title": "Vacances scolaires : Noël",
+  "date": "2023-12-23",
+  "time": null,
+  "affects": {
+   "from": "2023-12-23",
+   "to": "2024-01-07"
+  },
+  "segments": [],
+  "pitch": "avec les vacances scolaires",
+  "source": "calendrier scolaire, zone B"
+ },
+ {
+  "id": "vacances-2024-02-24",
+  "type": "school_holidays",
+  "kind": "holiday",
+  "title": "Vacances scolaires : Hiver",
+  "date": "2024-02-24",
+  "time": null,
+  "affects": {
+   "from": "2024-02-24",
+   "to": "2024-03-10"
+  },
+  "segments": [],
+  "pitch": "avec les vacances scolaires",
+  "source": "calendrier scolaire, zone B"
+ },
+ {
+  "id": "ramadan-2024",
+  "type": "ramadan",
+  "kind": "religious",
+  "title": "Ramadan 2024",
+  "date": "2024-03-11",
+  "time": null,
+  "affects": {
+   "from": "2024-03-11",
+   "to": "2024-04-09"
+  },
+  "segments": [],
+  "pitch": "avec le ramadan, les volumes doublent",
+  "source": "calendrier public",
+  "baselineExcluded": true
+ },
+ {
+  "id": "aid-fitr-2024",
+  "type": "aid_fitr",
+  "kind": "religious",
+  "title": "Aïd el-Fitr 2024",
+  "date": "2024-04-10",
+  "time": null,
+  "affects": {
+   "from": "2024-04-07",
+   "to": "2024-04-09"
+  },
+  "segments": [],
+  "pitch": "pour les repas de l'Aïd el-Fitr",
+  "source": "calendrier public",
+  "baselineExcluded": true
+ },
+ {
+  "id": "vacances-2024-04-20",
+  "type": "school_holidays",
+  "kind": "holiday",
+  "title": "Vacances scolaires : Printemps",
+  "date": "2024-04-20",
+  "time": null,
+  "affects": {
+   "from": "2024-04-20",
+   "to": "2024-05-05"
+  },
+  "segments": [],
+  "pitch": "avec les vacances scolaires",
+  "source": "calendrier scolaire, zone B"
+ },
+ {
+  "id": "aid-kebir-2024",
+  "type": "aid_kebir",
+  "kind": "religious",
+  "title": "Aïd el-Kébir 2024",
+  "date": "2024-06-16",
+  "time": null,
+  "affects": {
+   "from": "2024-06-09",
+   "to": "2024-06-15"
+  },
+  "segments": [],
+  "pitch": "à l'approche de l'Aïd el-Kébir",
+  "source": "calendrier public",
+  "baselineExcluded": true
+ },
+ {
+  "id": "vacances-2024-07-06",
+  "type": "school_holidays",
+  "kind": "holiday",
+  "title": "Vacances scolaires : Été",
+  "date": "2024-07-06",
+  "time": null,
+  "affects": {
+   "from": "2024-07-06",
+   "to": "2024-09-01"
+  },
+  "segments": [],
+  "pitch": "avec les vacances scolaires",
+  "source": "calendrier scolaire, zone B"
+ },
+ {
+  "id": "vacances-2024-10-19",
+  "type": "school_holidays",
+  "kind": "holiday",
+  "title": "Vacances scolaires : Toussaint",
+  "date": "2024-10-19",
+  "time": null,
+  "affects": {
+   "from": "2024-10-19",
+   "to": "2024-11-03"
+  },
+  "segments": [],
+  "pitch": "avec les vacances scolaires",
+  "source": "calendrier scolaire, zone B"
+ },
+ {
+  "id": "marche-noel-2024",
+  "type": "christmas_market",
+  "kind": "local",
+  "title": "Marché de Noël du Vieux-Port",
+  "date": "2024-11-25",
+  "time": null,
+  "affects": {
+   "from": "2024-11-25",
+   "to": "2024-12-24"
+  },
+  "segments": [
+   "pc:13001",
+   "pc:13002"
+  ],
+  "pitch": "avec le marché de Noël qui ouvre au Vieux-Port",
+  "source": "Ville de Marseille"
+ },
+ {
+  "id": "noel-2024",
+  "type": "christmas",
+  "kind": "holiday",
+  "title": "Fêtes de fin d'année 2024",
+  "date": "2024-12-25",
+  "time": null,
+  "affects": {
+   "from": "2024-12-20",
+   "to": "2024-12-31"
+  },
+  "segments": [],
+  "pitch": "pour les fêtes de fin d'année",
+  "source": "calendrier public"
+ },
+ {
+  "id": "vacances-2024-12-21",
+  "type": "school_holidays",
+  "kind": "holiday",
+  "title": "Vacances scolaires : Noël",
+  "date": "2024-12-21",
+  "time": null,
+  "affects": {
+   "from": "2024-12-21",
+   "to": "2025-01-05"
+  },
+  "segments": [],
+  "pitch": "avec les vacances scolaires",
+  "source": "calendrier scolaire, zone B"
+ },
+ {
+  "id": "vacances-2025-02-22",
+  "type": "school_holidays",
+  "kind": "holiday",
+  "title": "Vacances scolaires : Hiver",
+  "date": "2025-02-22",
+  "time": null,
+  "affects": {
+   "from": "2025-02-22",
+   "to": "2025-03-09"
+  },
+  "segments": [],
+  "pitch": "avec les vacances scolaires",
+  "source": "calendrier scolaire, zone B"
+ },
+ {
+  "id": "ramadan-2025",
+  "type": "ramadan",
+  "kind": "religious",
+  "title": "Ramadan 2025",
+  "date": "2025-03-01",
+  "time": null,
+  "affects": {
+   "from": "2025-03-01",
+   "to": "2025-03-29"
+  },
+  "segments": [],
+  "pitch": "avec le ramadan, les volumes doublent",
+  "source": "calendrier public",
+  "baselineExcluded": true
+ },
+ {
+  "id": "aid-fitr-2025",
+  "type": "aid_fitr",
+  "kind": "religious",
+  "title": "Aïd el-Fitr 2025",
+  "date": "2025-03-30",
+  "time": null,
+  "affects": {
+   "from": "2025-03-27",
+   "to": "2025-03-29"
+  },
+  "segments": [],
+  "pitch": "pour les repas de l'Aïd el-Fitr",
+  "source": "calendrier public",
+  "baselineExcluded": true
+ },
+ {
+  "id": "vacances-2025-04-19",
+  "type": "school_holidays",
+  "kind": "holiday",
+  "title": "Vacances scolaires : Printemps",
+  "date": "2025-04-19",
+  "time": null,
+  "affects": {
+   "from": "2025-04-19",
+   "to": "2025-05-04"
+  },
+  "segments": [],
+  "pitch": "avec les vacances scolaires",
+  "source": "calendrier scolaire, zone B"
+ },
+ {
+  "id": "aid-kebir-2025",
+  "type": "aid_kebir",
+  "kind": "religious",
+  "title": "Aïd el-Kébir 2025",
+  "date": "2025-06-06",
+  "time": null,
+  "affects": {
+   "from": "2025-05-30",
+   "to": "2025-06-05"
+  },
+  "segments": [],
+  "pitch": "à l'approche de l'Aïd el-Kébir",
+  "source": "calendrier public",
+  "baselineExcluded": true
+ },
+ {
+  "id": "vacances-2025-07-05",
+  "type": "school_holidays",
+  "kind": "holiday",
+  "title": "Vacances scolaires : Été",
+  "date": "2025-07-05",
+  "time": null,
+  "affects": {
+   "from": "2025-07-05",
+   "to": "2025-08-31"
+  },
+  "segments": [],
+  "pitch": "avec les vacances scolaires",
+  "source": "calendrier scolaire, zone B"
+ },
+ {
+  "id": "vacances-2025-10-18",
+  "type": "school_holidays",
+  "kind": "holiday",
+  "title": "Vacances scolaires : Toussaint",
+  "date": "2025-10-18",
+  "time": null,
+  "affects": {
+   "from": "2025-10-18",
+   "to": "2025-11-02"
+  },
+  "segments": [],
+  "pitch": "avec les vacances scolaires",
+  "source": "calendrier scolaire, zone B"
+ },
+ {
+  "id": "marche-noel-2025",
+  "type": "christmas_market",
+  "kind": "local",
+  "title": "Marché de Noël du Vieux-Port",
+  "date": "2025-11-25",
+  "time": null,
+  "affects": {
+   "from": "2025-11-25",
+   "to": "2025-12-24"
+  },
+  "segments": [
+   "pc:13001",
+   "pc:13002"
+  ],
+  "pitch": "avec le marché de Noël qui ouvre au Vieux-Port",
+  "source": "Ville de Marseille"
+ },
+ {
+  "id": "noel-2025",
+  "type": "christmas",
+  "kind": "holiday",
+  "title": "Fêtes de fin d'année 2025",
+  "date": "2025-12-25",
+  "time": null,
+  "affects": {
+   "from": "2025-12-20",
+   "to": "2025-12-31"
+  },
+  "segments": [],
+  "pitch": "pour les fêtes de fin d'année",
+  "source": "calendrier public"
+ },
+ {
+  "id": "vacances-2025-12-20",
+  "type": "school_holidays",
+  "kind": "holiday",
+  "title": "Vacances scolaires : Noël",
+  "date": "2025-12-20",
+  "time": null,
+  "affects": {
+   "from": "2025-12-20",
+   "to": "2026-01-04"
+  },
+  "segments": [],
+  "pitch": "avec les vacances scolaires",
+  "source": "calendrier scolaire, zone B"
+ },
+ {
+  "id": "ramadan-2026",
+  "type": "ramadan",
+  "kind": "religious",
+  "title": "Ramadan 2026",
+  "date": "2026-02-18",
+  "time": null,
+  "affects": {
+   "from": "2026-02-18",
+   "to": "2026-03-19"
+  },
+  "segments": [],
+  "pitch": "avec le ramadan, les volumes doublent",
+  "source": "calendrier public",
+  "baselineExcluded": true
+ },
+ {
+  "id": "vacances-2026-02-21",
+  "type": "school_holidays",
+  "kind": "holiday",
+  "title": "Vacances scolaires : Hiver",
+  "date": "2026-02-21",
+  "time": null,
+  "affects": {
+   "from": "2026-02-21",
+   "to": "2026-03-08"
+  },
+  "segments": [],
+  "pitch": "avec les vacances scolaires",
+  "source": "calendrier scolaire, zone B"
+ },
+ {
+  "id": "aid-fitr-2026",
+  "type": "aid_fitr",
+  "kind": "religious",
+  "title": "Aïd el-Fitr 2026",
+  "date": "2026-03-20",
+  "time": null,
+  "affects": {
+   "from": "2026-03-17",
+   "to": "2026-03-19"
+  },
+  "segments": [],
+  "pitch": "pour les repas de l'Aïd el-Fitr",
+  "source": "calendrier public",
+  "baselineExcluded": true
+ },
+ {
+  "id": "vacances-2026-04-18",
+  "type": "school_holidays",
+  "kind": "holiday",
+  "title": "Vacances scolaires : Printemps",
+  "date": "2026-04-18",
+  "time": null,
+  "affects": {
+   "from": "2026-04-18",
+   "to": "2026-05-03"
+  },
+  "segments": [],
+  "pitch": "avec les vacances scolaires",
+  "source": "calendrier scolaire, zone B"
+ },
+ {
+  "id": "aid-kebir-2026",
+  "type": "aid_kebir",
+  "kind": "religious",
+  "title": "Aïd el-Kébir 2026",
+  "date": "2026-05-27",
+  "time": null,
+  "affects": {
+   "from": "2026-05-20",
+   "to": "2026-05-26"
+  },
+  "segments": [],
+  "pitch": "à l'approche de l'Aïd el-Kébir",
+  "source": "calendrier public",
+  "baselineExcluded": true
+ },
+ {
+  "id": "vacances-2026-07-04",
+  "type": "school_holidays",
+  "kind": "holiday",
+  "title": "Vacances scolaires : Été",
+  "date": "2026-07-04",
+  "time": null,
+  "affects": {
+   "from": "2026-07-04",
+   "to": "2026-08-31"
+  },
+  "segments": [],
+  "pitch": "avec les vacances scolaires",
+  "source": "calendrier scolaire, zone B"
+ },
+ {
+  "id": "vacances-2026-10-17",
+  "type": "school_holidays",
+  "kind": "holiday",
+  "title": "Vacances scolaires : Toussaint",
+  "date": "2026-10-17",
+  "time": null,
+  "affects": {
+   "from": "2026-10-17",
+   "to": "2026-11-01"
+  },
+  "segments": [],
+  "pitch": "avec les vacances scolaires",
+  "source": "calendrier scolaire, zone B"
+ },
+ {
+  "id": "froid",
+  "kind": "weather",
+  "date": "2026-11-25",
+  "time": null,
+  "title": "Vague de froid : 4 °C le matin",
+  "affects": {
+   "from": "2026-11-25",
+   "to": "2026-11-27"
+  },
+  "segments": [
+   "restaurants"
+  ],
+  "pitch": "avec le froid qui arrive, les tajines et les couscous repartent",
+  "type": "cold",
+  "source": "prévision Météo-France",
+  "estimate": {
+   "boosts": [
+    {
+     "productId": "prd_0007",
+     "factor": 1.25
+    },
+    {
+     "productId": "prd_0008",
+     "factor": 1.25
+    },
+    {
+     "productId": "prd_0030",
+     "factor": 1.2
+    }
+   ]
+  }
+ },
+ {
+  "id": "marche-noel-2026",
+  "type": "christmas_market",
+  "kind": "local",
+  "title": "Marché de Noël du Vieux-Port",
+  "date": "2026-11-25",
+  "time": null,
+  "affects": {
+   "from": "2026-11-25",
+   "to": "2026-12-24"
+  },
+  "segments": [
+   "pc:13001",
+   "pc:13002"
+  ],
+  "pitch": "avec le marché de Noël qui ouvre au Vieux-Port",
+  "source": "Ville de Marseille"
+ },
+ {
+  "id": "mariages",
+  "kind": "wedding",
+  "date": "2026-11-28",
+  "time": null,
+  "title": "Mariages du week-end",
+  "affects": {
+   "from": "2026-11-25",
+   "to": "2026-11-28"
+  },
+  "segments": [
+   "traiteurs"
+  ],
+  "pitch": "pour vos mariages de samedi",
+  "type": "weddings",
+  "source": "carnet des traiteurs",
+  "estimate": {
+   "boosts": [
+    {
+     "productId": "prd_0004",
+     "factor": 1.5
+    },
+    {
+     "productId": "prd_0005",
+     "factor": 1.5
+    },
+    {
+     "productId": "prd_0023",
+     "factor": 1.4
+    }
+   ],
+   "special": [
+    {
+     "productId": "prd_0001",
+     "qty": 36,
+     "note": "2 agneaux entiers pour le méchoui du samedi : carcasses à commander la veille avant 14 h"
+    }
+   ]
+  }
+ },
+ {
+  "id": "om-psg",
+  "kind": "sport",
+  "date": "2026-11-25",
+  "time": "21:00",
+  "title": "OM – PSG au Vélodrome",
+  "affects": {
+   "from": "2026-11-25",
+   "to": "2026-11-25"
+  },
+  "segments": [
+   "snacking"
+  ],
+  "pitch": "avec le match OM–PSG demain soir, les snacks tournent à fond",
+  "type": "om_home",
+  "source": "calendrier Ligue 1",
+  "estimate": {
+   "boosts": [
+    {
+     "productId": "prd_0043",
+     "factor": 1.4
+    },
+    {
+     "productId": "prd_0044",
+     "factor": 1.4
+    },
+    {
+     "productId": "prd_0045",
+     "factor": 1.4
+    },
+    {
+     "productId": "prd_0049",
+     "factor": 1.3
+    },
+    {
+     "productId": "prd_0050",
+     "factor": 1.3
+    }
+   ]
+  }
+ },
+ {
+  "id": "vacances-2026-12-19",
+  "type": "school_holidays",
+  "kind": "holiday",
+  "title": "Vacances scolaires : Noël",
+  "date": "2026-12-19",
+  "time": null,
+  "affects": {
+   "from": "2026-12-19",
+   "to": "2027-01-03"
+  },
+  "segments": [],
+  "pitch": "avec les vacances scolaires",
+  "source": "calendrier scolaire, zone B"
+ },
+ {
+  "id": "noel-2026",
+  "type": "christmas",
+  "kind": "holiday",
+  "title": "Fêtes de fin d'année 2026",
+  "date": "2026-12-25",
+  "time": null,
+  "affects": {
+   "from": "2026-12-20",
+   "to": "2026-12-31"
+  },
+  "segments": [],
+  "pitch": "pour les fêtes de fin d'année",
+  "source": "calendrier public"
+ },
+ {
+  "id": "ramadan-2027",
+  "type": "ramadan",
+  "kind": "religious",
+  "title": "Ramadan 2027",
+  "date": "2027-02-08",
+  "time": null,
+  "affects": {
+   "from": "2027-02-08",
+   "to": "2027-03-09"
+  },
+  "segments": [],
+  "pitch": "avec le ramadan, les volumes doublent",
+  "source": "calendrier public",
+  "baselineExcluded": true
+ },
+ {
+  "id": "aid-fitr-2027",
+  "type": "aid_fitr",
+  "kind": "religious",
+  "title": "Aïd el-Fitr 2027",
+  "date": "2027-03-10",
+  "time": null,
+  "affects": {
+   "from": "2027-03-07",
+   "to": "2027-03-09"
+  },
+  "segments": [],
+  "pitch": "pour les repas de l'Aïd el-Fitr",
+  "source": "calendrier public",
+  "baselineExcluded": true
+ },
+ {
+  "id": "aid-kebir-2027",
+  "type": "aid_kebir",
+  "kind": "religious",
+  "title": "Aïd el-Kébir 2027",
+  "date": "2027-05-16",
+  "time": null,
+  "affects": {
+   "from": "2027-05-09",
+   "to": "2027-05-15"
+  },
+  "segments": [],
+  "pitch": "à l'approche de l'Aïd el-Kébir",
+  "source": "calendrier public",
+  "baselineExcluded": true
+ }
+]
