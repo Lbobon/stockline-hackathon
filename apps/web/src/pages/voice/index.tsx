@@ -113,14 +113,6 @@ function CallMode({ modeSwitch }: { modeSwitch: ReactNode }) {
         tabs={modeSwitch}
         actions={
           <>
-            {/* Active providers (not filters): informative chips, only where there is room. */}
-            {v.providers ? (
-              <div className="hidden items-center gap-1 xl:flex">
-                <Provider k="llm" v={v.providers.llm} />
-                <Provider k="stt" v={v.providers.stt} />
-                <Provider k="tts" v={v.providers.tts} />
-              </div>
-            ) : null}
             {v.activity === "speaking" ? <Button size="sm" variant="ghost" icon={VolumeX} kbd="Échap" onClick={v.stopPlayback}>Couper</Button> : null}
             <Button size="sm" icon={PhoneOff} onClick={v.hangup} disabled={!ready || !v.turns.length}>Raccrocher</Button>
             <Button size="sm" variant="ghost" icon={RotateCcw} onClick={v.reset} disabled={!ready}>Nouvelle session</Button>
@@ -205,15 +197,6 @@ function ConnState({ conn }: { conn: Conn }) {
     <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
       <Dot tone={conn === "ready" ? "success" : conn === "connecting" ? "warning" : "destructive"} pulse={conn === "connecting"} />
       {conn === "ready" ? "Connecté" : conn === "connecting" ? "Connexion…" : "Service IA injoignable · nouvel essai…"}
-    </span>
-  );
-}
-
-function Provider({ k, v }: { k: string; v: string }) {
-  return (
-    <span className="inline-flex h-[20px] max-w-[220px] items-center gap-1 truncate rounded-[3px] border border-border px-1.5 font-mono text-[10.5px]" title={`${k} : ${v}`}>
-      <span className="text-muted-foreground">{k}</span>
-      <span className="truncate text-secondary-foreground">{v}</span>
     </span>
   );
 }

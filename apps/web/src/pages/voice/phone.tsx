@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PhoneCall, PhoneOff, Smartphone } from "lucide-react";
 import type { ClientSummary } from "@kit/shared";
 import { api } from "@/lib/api";
-import { Button, Dot, Page, PageHeader } from "@/ui";
+import { Button, Dot, Page, PageHeader, Select } from "@/ui";
 import { useVoiceSession } from "@/features/assistant/useVoiceSession";
 import { MetricsBar } from "./metrics";
 import { OrchestraStrip, ReportBanner } from "./orchestra";
@@ -61,25 +61,6 @@ export function PhoneMode({ modeSwitch }: { modeSwitch: ReactNode }) {
           </span>
         }
         tabs={modeSwitch}
-        actions={
-          <>
-            <select
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              className="h-8 max-w-[260px] rounded-[4px] border border-border bg-background px-2 text-[13px]"
-              title="Le client que joue le téléphone"
-            >
-              {ordered.length ? ordered.map((c) => <option key={c.id} value={c.id}>{radar.has(c.id) ? `Radar · ${c.name}` : c.name}</option>) : <option value={clientId}>{clientId}</option>}
-            </select>
-            {ringing ? (
-              <Button size="sm" variant="ghost" icon={PhoneOff} onClick={v.cancelRing}>Annuler</Button>
-            ) : (
-              <Button size="sm" icon={PhoneCall} disabled={!phones || v.conn !== "ready"} onClick={() => v.ring(clientId, client?.name ?? clientId)}>
-                Faire sonner
-              </Button>
-            )}
-          </>
-        }
       />
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-2.5 text-[12.5px]">
@@ -90,6 +71,18 @@ export function PhoneMode({ modeSwitch }: { modeSwitch: ReactNode }) {
             {client ? <> <span className="text-foreground">{client.name}</span></> : " le client choisi"} ;
             {radar.has(clientId) ? <> l'agent l'appelle avec la prévision du Radar{radar.get(clientId) ? <> : <span className="text-foreground">{radar.get(clientId)}</span></> : null}.</> : " l'agent l'appelle pour sa commande."}
           </span>
+          {/* Here, not in the header: the header keeps its room for the four mode tabs */}
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <Select size="sm" value={clientId} onChange={setClientId} aria-label="Le client que joue le téléphone" className="w-[240px]"
+              options={ordered.length ? ordered.map((c) => ({ value: c.id, label: radar.has(c.id) ? `Radar · ${c.name}` : c.name })) : [{ value: clientId, label: clientId }]} />
+            {ringing ? (
+              <Button size="sm" variant="ghost" icon={PhoneOff} onClick={v.cancelRing}>Annuler</Button>
+            ) : (
+              <Button size="sm" icon={PhoneCall} disabled={!phones || v.conn !== "ready"} onClick={() => v.ring(clientId, client?.name ?? clientId)}>
+                Faire sonner
+              </Button>
+            )}
+          </div>
         </div>
         <ReportBanner report={v.report} onClose={v.dismissReport} />
         <MetricsBar turns={v.turns} />
