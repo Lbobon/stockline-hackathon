@@ -1,6 +1,7 @@
 """Le Garde-fou: Jev fact-checks each sentence of the agent against the ERP before it is spoken (guard.py)."""
 
 import asyncio
+from contextlib import suppress
 import re
 from collections.abc import AsyncIterator
 
@@ -40,6 +41,10 @@ async def until(events: AsyncIterator, stop: asyncio.Event) -> AsyncIterator:
         except BaseException:
             nxt.cancel()
             halt.cancel()
+            # Let the cancelled step finish before re-raising: otherwise the caller's aclose() finds the source generator
+            # still running ("already running"), and a barge-in turns into an error instead of a clean interruption.
+            with suppress(BaseException):
+                await nxt
             raise
         halt.cancel()
         if nxt in done:
