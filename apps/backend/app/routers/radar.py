@@ -5,7 +5,7 @@ from fastapi import APIRouter, Query
 from app.core.activity import today
 from app.dependencies import CtxDep, iso_date_query
 from app.schemas.inputs import CalendarEventCreate
-from app.services import calendar, demand, feeds, radar, radar_backtest
+from app.services import calendar, demand, demand_daily, feeds, radar, radar_backtest
 
 router = APIRouter(prefix="/api/radar", tags=["radar"])
 
@@ -83,3 +83,18 @@ async def add_calendar_event(body: CalendarEventCreate, ctx: CtxDep):
 @router.delete("/calendar/{id}", status_code=204)
 async def delete_calendar_event(id: str, ctx: CtxDep):
     calendar.delete_event(ctx, id)
+
+
+@router.get("/outlook")
+async def outlook(days: int = Query(14, ge=1, le=30)):
+    """The next `days` delivery days, from the day-level model (services/demand_daily.py): € HT expected per day and
+    per segment against a normal week, the events covering each day and those coming up."""
+    await feeds.ensure()
+    return demand_daily.outlook(days)
+
+
+@router.get("/outlook/backtest")
+async def outlook_backtest(months: int = Query(12, ge=1, le=24)):
+    """The day-level model replayed month by month (walk-forward) against three simple forecasts: revenue error per
+    day on all days, normal days and each event type."""
+    return demand_daily.backtest(months)
