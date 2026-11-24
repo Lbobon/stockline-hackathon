@@ -9,13 +9,14 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, Clock, Factory, PackageX, PhoneCall, PhoneOff, RotateCcw, Sparkles, X } from "lucide-react";
+import { ArrowLeft, BarChart3, Check, ChevronRight, Clock, Factory, PackageX, PhoneCall, PhoneOff, RotateCcw, Sparkles, X } from "lucide-react";
 import { Button, Spinner } from "@/ui";
 import { cn } from "@/lib/cn";
 import { fmtMoney, fmtQty } from "@/lib/format";
 import { AI_BASE, API_BASE } from "@/lib/api";
 import { Count } from "./Panel";
 import { SupplierMap } from "./SupplierMap";
+import { SupplyExplain } from "./SupplyExplain";
 
 // ── data ──
 
@@ -74,13 +75,22 @@ function useSupplyCampaign(supply?: Supply) {
   const es = useRef<EventSource | null>(null);
   const qc = useQueryClient();
   useEffect(() => () => es.current?.close(), []);
+  const starting = useRef(false);
   const start = useCallback(async () => {
-    if (!supply) return;
+    // one campaign at a time: a double click used to start two, and both streams wrote into the same cards
+    if (!supply || starting.current) return;
+    starting.current = true;
     es.current?.close();
-    const r = await fetch(`${AI_BASE}/campaigns`, { method: "POST", headers: { "content-type": "application/json", "x-actor": "user" },
-      body: JSON.stringify({ kind: "supply", date: supply.from, concurrency: 6 }) });
-    if (!r.ok) throw new Error(`${r.status}`);
-    const { id } = await r.json();
+    es.current = null;
+    let id: string;
+    try {
+      const r = await fetch(`${AI_BASE}/campaigns`, { method: "POST", headers: { "content-type": "application/json", "x-actor": "user" },
+        body: JSON.stringify({ kind: "supply", date: supply.from, concurrency: 6 }) });
+      if (!r.ok) throw new Error(`${r.status}`);
+      ({ id } = await r.json());
+    } finally {
+      starting.current = false;
+    }
     dispatch({ type: "start", id, calls: supply.suppliers.map((s, i) => ({ callId: `buy_${String(i + 1).padStart(2, "0")}`, supplierId: s.supplierId, name: s.name,
       status: "queued", transcript: [], totalHt: 0, lines: [] })) });
     const src = new EventSource(`${AI_BASE}/campaigns/${id}/stream`);
@@ -127,7 +137,13 @@ export function SupplyView({ date, actionsSlot }: { date: string; actionsSlot: (
   const [selected, setSelected] = useState<string>();
   const running = state.phase === "running";
 
-  const launch = useCallback(() => { setSelected(undefined); setPlan(supply); start().catch(() => reset()); }, [supply, start, reset]);
+  const [launching, setLaunching] = useState(false);
+  const launch = useCallback(() => {
+    if (launching) return;
+    setLaunching(true);
+    setSelected(undefined); setPlan(supply);
+    start().catch(() => reset()).finally(() => setLaunching(false));
+  }, [supply, start, reset, launching]);
   const again = useCallback(() => { reset(); setPlan(undefined); setSelected(undefined); }, [reset]);
 
   const answered = Object.values(state.calls).filter((c) => !["queued", "ringing", "talking"].includes(c.status)).length;
@@ -135,13 +151,13 @@ export function SupplyView({ date, actionsSlot }: { date: string; actionsSlot: (
     actionsSlot(
       <>
         {state.phase === "done" ? <Button variant="ghost" icon={RotateCcw} onClick={again}>Recommencer</Button> : null}
-        <Button variant="primary" icon={running ? undefined : PhoneCall} disabled={running || !shown?.suppliers.length || state.phase === "done"} onClick={launch}>
-          {running ? <><Spinner size={12} /> Fournisseurs {answered}/{shown?.suppliers.length ?? 0}</>
+        <Button variant="primary" icon={running ? undefined : PhoneCall} disabled={running || launching || !shown?.suppliers.length || state.phase === "done"} onClick={launch}>
+          {running || launching ? <><Spinner size={12} /> Fournisseurs {answered}/{shown?.suppliers.length ?? 0}</>
             : state.phase === "done" ? "Commandes passées" : `Appeler les fournisseurs (${shown?.suppliers.length ?? 0})`}
         </Button>
       </>,
     );
-  }, [actionsSlot, running, answered, shown, state.phase, launch, again]);
+  }, [actionsSlot, running, launching, answered, shown, state.phase, launch, again]);
 
   if (isLoading || !shown) return <div className="grid flex-1 place-items-center"><Spinner /></div>;
 
@@ -198,8 +214,8 @@ export function SupplyView({ date, actionsSlot }: { date: string; actionsSlot: (
             <AnimatePresence>
               {sup ? (
                 <motion.div key={sup.supplierId} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24 }} transition={{ duration: 0.2 }}
-                  className="absolute bottom-3 right-3 top-3 z-30 w-[360px] max-w-[calc(100%-24px)] overflow-y-auto rounded-xl border border-border bg-background/95 p-4 shadow-pop backdrop-blur">
-                  <SupplierDetail s={sup} call={state.calls[sup.supplierId]} onBack={() => setSelected(undefined)} />
+                  className="absolute bottom-3 right-3 top-3 z-30 w-[400px] max-w-[calc(100%-24px)] overflow-y-auto rounded-xl border border-border bg-background/95 p-4 shadow-pop backdrop-blur">
+                  <SupplierDetail s={sup} date={shown.from} call={state.calls[sup.supplierId]} onBack={() => setSelected(undefined)} />
                 </motion.div>
               ) : null}
             </AnimatePresence>
@@ -429,8 +445,9 @@ function SupplierCard({ s, call, selected, onClick }: { s: SupplierNeed; call?: 
   );
 }
 
-function SupplierDetail({ s, call, onBack }: { s: SupplierNeed; call?: BuyCall; onBack: () => void }) {
+function SupplierDetail({ s, date, call, onBack }: { s: SupplierNeed; date: string; call?: BuyCall; onBack: () => void }) {
   const st = STATUS[call?.status ?? "queued"];
+  const [explain, setExplain] = useState(false);
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-start gap-2">
@@ -444,6 +461,24 @@ function SupplierDetail({ s, call, onBack }: { s: SupplierNeed; call?: BuyCall; 
         <p className="flex items-start gap-1.5"><Sparkles size={13} className="mt-0.5 shrink-0 text-chart-3" />{s.reason}.</p>
         <p className="mt-1 text-muted-foreground">À livrer avant {dayLabel(s.deliverBy)} · {s.onTime ? "le délai du fournisseur le permet" : "délai serré : à confirmer au téléphone"}</p>
       </div>
+      {!explain ? (
+        <motion.button type="button" onClick={() => setExplain(true)}
+          initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 0.1 }}
+          whileHover={{ y: -1 }} whileTap={{ scale: 0.985 }}
+          className="group relative -mt-1 flex w-full items-center gap-3 overflow-hidden rounded-xl border border-primary/40 bg-primary/[.08] px-3 py-2.5 text-left transition-colors hover:border-primary/70 hover:bg-primary/[.12]">
+          <motion.span aria-hidden className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-primary/15 to-transparent"
+            animate={{ x: ["0%", "450%"] }} transition={{ duration: 2.6, repeat: Infinity, repeatDelay: 1.8, ease: "easeInOut" }} />
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground"><BarChart3 size={16} /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-semibold">Pourquoi commander {fmtMoney(s.totalHt, { compact: true })} ?</span>
+            <span className="block truncate text-[11.5px] text-muted-foreground">Les clients, la même semaine l'an dernier, le stock, le calcul</span>
+          </span>
+          <ChevronRight size={16} className="shrink-0 text-primary transition-transform group-hover:translate-x-0.5" />
+        </motion.button>
+      ) : null}
+      <AnimatePresence initial={false}>
+        {explain ? <SupplyExplain key="explain" supplierId={s.supplierId} date={date} onClose={() => setExplain(false)} /> : null}
+      </AnimatePresence>
       <div>
         <h3 className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">{call?.orderId ? `Commande ${call.number ?? ""} envoyée` : "Ce qu'on va commander"}</h3>
         <ul className="divide-y divide-border rounded-lg border border-border bg-card">

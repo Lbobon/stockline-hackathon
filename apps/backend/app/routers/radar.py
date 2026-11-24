@@ -36,6 +36,15 @@ async def supply_needs(date: str | None = Query(None, description="YYYY-MM-DD, f
     return supply.supply(iso_date_query(date), days)
 
 
+@router.get("/supply/{supplier_id}/explain")
+async def supply_explain(supplier_id: str, date: str | None = Query(None, description="YYYY-MM-DD, same first day as /supply"),
+                         days: int = Query(7, ge=1, le=14)):
+    """Why we buy each line from this supplier: the clients behind the demand, the same week in past years, the stock
+    and purchase orders already on their way, then shortfall + margin × price. Opens from the supplier panel."""
+    await feeds.ensure()
+    return supply.supply_explain(supplier_id, iso_date_query(date), days)
+
+
 @router.get("/clients/{client_id}/suggestion")
 async def client_suggestion(client_id: str, date: str | None = Query(None, description="YYYY-MM-DD, default their next delivery")):
     """One client: what the radar expects them to order (status predicted / upsell / ordered / unlikely), the lines with
