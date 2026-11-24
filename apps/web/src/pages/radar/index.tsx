@@ -20,8 +20,10 @@ import { RadarSwitch, SupplyView } from "./Supply";
 
 const DATE = "2026-11-25";
 
+// The radar opens on supply: we predict the spike in sales, then call the suppliers in advance. The client calls are the
+// second tab (?view=clients).
 type View = "clients" | "supply";
-const urlView = (): View => (new URLSearchParams(location.search).get("view") === "supply" ? "supply" : "clients");
+const urlView = (): View => (new URLSearchParams(location.search).get("view") === "clients" ? "clients" : "supply");
 
 export default function RadarPage() {
   const { data: forecast } = useForecast(DATE);
@@ -29,7 +31,7 @@ export default function RadarPage() {
   const [supplyActions, setSupplyActions] = useState<React.ReactNode>(null);
   const setView = (v: View) => {
     const u = new URL(location.href);
-    if (v === "supply") u.searchParams.set("view", "supply");
+    if (v === "clients") u.searchParams.set("view", "clients");
     else u.searchParams.delete("view");
     history.replaceState(history.state, "", u);
     setView_(v);
@@ -38,7 +40,7 @@ export default function RadarPage() {
   if (view === "supply") {
     return (
       <Page>
-        <PageHeader title="Radar fournisseurs" icon={<Radar size={15} strokeWidth={1.75} />} meta={toggle} actions={supplyActions} />
+        <PageHeader title="Radar d'approvisionnement" icon={<Radar size={15} strokeWidth={1.75} />} meta={toggle} actions={supplyActions} />
         <SupplyView date={DATE} actionsSlot={setSupplyActions} />
       </Page>
     );
