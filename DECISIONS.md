@@ -187,6 +187,23 @@ Les 3 échecs restants des appels génériques changent d'un tirage à l'autre (
 
 Lecture honnête : en semaine normale, personne ne devine le chiffre d'affaires du jour (≈ 19 % pour les trois : un mercredi varie de 26 k€ à 52 k€), mais LightGBM propose les bonnes lignes et les bonnes quantités plus souvent (erreur client par client 0,74 contre 0,92 pour le radar). Sur les jours d'événement, il fait mieux que le radar presque partout (ramadan : CA à 12 % contre 25 %), sauf la semaine de l'Aïd el-Kébir où la hausse mesurée du radar reste meilleure (23 % contre 38 % : une seule occurrence passée dans ses données d'entraînement). Il est devenu le modèle par défaut parce qu'il gagne sur l'ensemble, pas sur chaque ligne. La météo et les matchs n'expliquent presque rien de la demande d'un grossiste halal : les sources sont branchées et mesurées, et le disent.
 
+**Prévision au niveau de la journée** (`apps/backend/app/services/demand_daily.py`, `GET /api/radar/outlook`, `GET /api/radar/outlook/backtest`, test `apps/backend/tests/test_demand_daily.py`). La question du grossiste avant un événement : combien d'agneau les boucheries vont-elles prendre dans les dix jours avant l'Aïd ? Un modèle LightGBM (perte Tweedie, adaptée aux ventes) sur **toutes les journées livrées depuis 3 ans**, découpées en segment de clients × catégorie de produits × jour (≈ 44 000 lignes). Variables : jour, mois, tendance ; les mêmes jours des 8 dernières semaines et de l'an dernier ; la météo du jour ; et, pour chaque type d'événement mesuré, « dedans », « depuis combien de jours », « jusqu'à la fin » et « dans combien de jours il commence » (21 jours avant), pour qu'un événement qui bouge (le ramadan avance de 11 jours par an) soit appris par sa position et non par sa date. Les estimations de l'équipe (OM–PSG, mariages) n'entrent pas dans l'entraînement.
+Rétro-test mois par mois sur les 12 derniers mois (entraîné sur tout ce qui précède le 1er du mois, chaque jour prévu la veille), erreur sur le chiffre d'affaires du jour :
+
+| Jours | Nb | Modèle jour | Médiane 8 semaines | Moyenne 60 jours | L'an dernier |
+|---|---|---|---|---|---|
+| Tous | 303 | **17 %** | 29 % | 31 % | 27 % |
+| Jours normaux | 114 | **18 %** | 24 % | 26 % | 30 % |
+| Jours d'événement | 189 | **16 %** | 32 % | 33 % | 25 % |
+| Ramadan | 26 | **15 %** | 58 % | 51 % | 30 % |
+| Aïd el-Kébir | 6 | **18 %** | 66 % | 64 % | 59 % |
+| Aïd el-Fitr | 3 | **8 %** | 60 % | 54 % | 33 % |
+| Vacances scolaires | 100 | **15 %** | 26 % | 31 % | 20 % |
+| Matchs de l'OM | 23 | **22 %** | 42 % | 40 % | 23 % |
+| Froid / chaleur / marché de Noël | 22–26 | 13–17 % | 10–15 % | 10–15 % | 14–30 % |
+
+Lecture honnête : il gagne nettement là où l'argent se joue (ramadan, aïds, vacances), pas sur les petits événements (froid, chaleur, marché de Noël : la médiane fait aussi bien). Sur les 3 derniers mois seuls (septembre–novembre, sans grand événement), la médiane des 8 semaines fait mieux (13 % contre 15 %). Il sous-estime d'environ 7 % en moyenne. La météo passée utilisée dans le rétro-test est la météo observée, un léger avantage sur une vraie prévision de la veille. `GET /api/radar/outlook` donne les 14 prochains jours de livraison, par segment, comparés à une semaine normale, avec les événements en cours et à venir.
+
 Sur ce dernier run, les deux échecs sont : une coupure réseau de l'API (corrigée ensuite par une nouvelle tentative automatique, PR #35) et une remarque du juge sur un prospect. Le coût double avec l'orchestre (agents secondaires), mais reste à 1 centime par appel.
 
 **Latence en mains libres** (bout en bout, vrais services : voix d'appelant ElevenLabs envoyée en temps réel à WS /voice, Soniox, Sonnet 5.5, ElevenLabs ; mesurée depuis le dernier échantillon parlé). Premier son de l'agent :
