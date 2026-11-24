@@ -1,10 +1,10 @@
 /** Right panel of the radar: the week's events, then the calls (live) or the clients to call, or one client's basket. */
 import { useEffect, useRef } from "react";
 import { AnimatePresence, LayoutGroup, animate, motion } from "framer-motion";
-import { ArrowLeft, Check, Clock, PhoneCall, PhoneOff, Sparkles, X } from "lucide-react";
+import { ArrowLeft, Check, Clock, PhoneCall, PhoneOff, Sparkles, Truck, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { fmtMoney, fmtQty } from "@/lib/format";
-import type { CampaignCall, Forecast, ForecastClient, ForecastLine, RadarEvent } from "@/features/radar/types";
+import { callQueue, notCalled, type CampaignCall, type Forecast, type ForecastClient, type ForecastLine, type LoyaltyTier, type RadarEvent, type RouteFit } from "@/features/radar/types";
 import { EVENT_STYLE } from "./look";
 import { pinLabel } from "./RadarMap";
 
@@ -90,7 +90,8 @@ export function CallList({ forecast, calls, order, selected, onSelect }: {
 }) {
   const byId = Object.fromEntries(forecast.clients.map((c) => [c.clientId, c]));
   const started = (id: string) => order.indexOf(id);
-  const list = Object.values(calls).sort((a, b) => RANK[a.status] - RANK[b.status] || started(b.clientId) - started(a.clientId) || (byId[b.clientId]?.upliftHt ?? 0) - (byId[a.clientId]?.upliftHt ?? 0));
+  const list = Object.values(calls).sort((a, b) => RANK[a.status] - RANK[b.status] || started(b.clientId) - started(a.clientId)
+    || (a.priority ?? 1e9) - (b.priority ?? 1e9) || (byId[b.clientId]?.upliftHt ?? 0) - (byId[a.clientId]?.upliftHt ?? 0));
   return (
     <LayoutGroup>
       <ul className="flex flex-col gap-1.5">
@@ -126,7 +127,9 @@ function CallCard({ call, client, selected, onClick }: { call: CampaignCall; cli
           {live ? <Eq /> : <Icon size={12} strokeWidth={2} />}
           {m.label}
         </span>
+        {call.priority ? <span className="num text-[10.5px] text-muted-foreground">#{call.priority}</span> : null}
         <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium">{call.clientName}</span>
+        {call.tier && !done ? <TierTag tier={call.tier} /> : null}
         {call.decision && done ? <Jev d={call.decision} /> : null}
         {call.totalHt > 0 ? (
           <motion.span initial={{ opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} className="num text-[12px] font-medium">
@@ -173,22 +176,77 @@ function Eq() {
   );
 }
 
+const WAVE = { 1: "Fidèles d'abord", 2: "Réguliers", 3: "Occasionnels" } as Record<number, string>;
+const TIER_CLS: Record<LoyaltyTier, string> = {
+  fidele: "bg-primary/10 text-primary",
+  regulier: "bg-chart-2/10 text-chart-2",
+  occasionnel: "bg-muted text-muted-foreground",
+};
+const TIER_LABEL: Record<LoyaltyTier, string> = { fidele: "Fidèle", regulier: "Régulier", occasionnel: "Occasionnel" };
+
+function TierTag({ tier }: { tier: LoyaltyTier }) {
+  return <span className={cn("rounded-[3px] px-1 py-px text-[10.5px] font-medium", TIER_CLS[tier])}>{TIER_LABEL[tier]}</span>;
+}
+
+const km = (v: number) => `${v.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km`;
+
+/** « Tournée Centre · +1,6 km », « déjà sur la Tournée Nord », « hors tournée · +42 km ». */
+export function routeText(f?: RouteFit) {
+  if (!f) return "";
+  if (f.onRoute) return `déjà sur la ${f.route}`;
+  if (!f.route) return `hors tournée · +${km(f.detourKm)}`;
+  return f.detourKm < 0.1 ? `${f.route} · sur le chemin` : `${f.route} · +${km(f.detourKm)}`;
+}
+
+/** The clients to call, in call order: loyal customers first (wave 1), then by expected € net. */
 export function ClientList({ forecast, selected, onSelect }: { forecast: Forecast; selected?: string; onSelect: (id: string) => void }) {
-  const rows = forecast.clients.filter((c) => c.status !== "ordered").sort((a, b) => b.upliftHt - a.upliftHt || b.totalHt - a.totalHt);
+  const rows = callQueue(forecast);
   return (
     <ul className="flex flex-col gap-1.5">
       {rows.map((c, i) => (
         <motion.li key={c.clientId} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 0.35 + Math.min(i, 12) * 0.03 }}>
+          {c.wave && c.wave !== rows[i - 1]?.wave ? (
+            <div className={cn("mb-1 flex items-center gap-2 text-[11px] text-muted-foreground", i > 0 && "mt-2")}>
+              <span className="font-medium text-foreground">Vague {c.wave}</span>{WAVE[c.wave]}
+              <span className="num">· {rows.filter((r) => r.wave === c.wave).length}</span>
+            </div>
+          ) : null}
           <button type="button" onClick={() => onSelect(c.clientId)}
             className={cn("w-full rounded-lg border bg-card px-3 py-2.5 text-left transition-colors", selected === c.clientId ? "border-foreground/30" : "border-border hover:border-border-hover")}>
             <div className="flex items-center gap-2">
+              {c.priority ? <span className="num w-5 shrink-0 text-[11px] text-muted-foreground">#{c.priority}</span> : null}
               <KindTag c={c} />
+              {c.loyalty ? <TierTag tier={c.loyalty.tier} /> : null}
               <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium">{c.name}</span>
               <span className="num text-[12px] text-muted-foreground">{c.status === "upsell" ? `+${fmtMoney(c.upliftHt, { compact: true })}` : fmtMoney(c.totalHt, { compact: true })}</span>
             </div>
-            <p className="mt-1 truncate text-[11.5px] text-muted-foreground">{c.city} · {firstReason(c.reason)}</p>
+            <div className="mt-1 flex items-center gap-2 text-[11.5px] text-muted-foreground">
+              <span className="min-w-0 flex-1 truncate">{c.routeFit ? `${c.city} · ${routeText(c.routeFit)}` : `${c.city} · ${firstReason(c.reason)}`}</span>
+              {c.expectedNetEur !== undefined ? <span className="num shrink-0 text-foreground/80">≈ {fmtMoney(c.expectedNetEur, { compact: true })} net</span> : null}
+            </div>
           </button>
         </motion.li>
+      ))}
+    </ul>
+  );
+}
+
+/** Clients the radar does not call: the delivery would eat their margin, or the basket is under the minimum. */
+export function NotCalledList({ forecast, selected, onSelect }: { forecast: Forecast; selected?: string; onSelect: (id: string) => void }) {
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {notCalled(forecast).map((c) => (
+        <li key={c.clientId}>
+          <button type="button" onClick={() => onSelect(c.clientId)}
+            className={cn("w-full rounded-lg border border-dashed bg-card/60 px-3 py-2 text-left transition-colors", selected === c.clientId ? "border-foreground/30" : "border-border hover:border-border-hover")}>
+            <div className="flex items-center gap-2">
+              <Truck size={12} className="shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-muted-foreground">{c.name}</span>
+              <span className="num text-[12px] text-muted-foreground">{fmtMoney(c.totalHt, { compact: true })}</span>
+            </div>
+            <p className="mt-1 line-clamp-2 text-[11.5px] leading-4 text-muted-foreground">{c.skipReason}</p>
+          </button>
+        </li>
       ))}
     </ul>
   );
@@ -229,6 +287,8 @@ export function ClientDetail({ c, forecast, call, delivered, onBack }: {
         <Stat label="Dont événements" value={`+${fmtMoney(c.upliftHt, { compact: true })}`} />
         <Stat label="Probabilité" value={`${Math.round(c.probability * 100)} %`} />
       </div>
+
+      {c.loyalty && c.routeFit ? <WhyThisOrder c={c} date={forecast.date} /> : null}
 
       {events.length ? (
         <div className="flex flex-wrap gap-1.5">
@@ -273,6 +333,39 @@ export function ClientDetail({ c, forecast, call, delivered, onBack }: {
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Why the radar calls this client at this rank (or not at all): loyalty, the delivery detour, the expected € net. */
+function WhyThisOrder({ c, date }: { c: ForecastClient; date: string }) {
+  const l = c.loyalty!;
+  const f = c.routeFit!;
+  const weekday = new Date(`${date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long" });
+  const tenure = l.tenureMonths >= 24 ? `${Math.floor(l.tenureMonths / 12)} ans` : `${l.tenureMonths} mois`;
+  const detour = c.status === "upsell" ? 0 : f.costEur;
+  return (
+    <div className="rounded-lg border border-border bg-card p-2.5">
+      <div className="mb-2 flex items-center gap-2">
+        <h3 className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
+          {c.call === false ? "Pas appelé" : `Appelé en n°${c.priority}`}
+        </h3>
+        <TierTag tier={l.tier} />
+        <span className="num ml-auto text-[11px] text-muted-foreground">fidélité {Math.round(l.score * 100)} %</span>
+      </div>
+      <ul className="flex flex-col gap-1 text-[12px] leading-[17px] text-secondary-foreground">
+        <li className="flex gap-2"><span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-primary" />
+          {l.weekdayHits} {weekday}s sur 12 · actif {l.weeksActive} semaines sur 13 · client depuis {tenure}</li>
+        <li className="flex gap-2"><span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-agent-scout" />
+          {f.onRoute ? `Déjà livré par la ${f.route} : ${c.status === "upsell" ? "l'ajout part avec sa commande, sans détour" : "aucun détour"}.`
+            : f.route ? `S'insère dans la ${f.route}${f.after ? ` après ${f.after}` : ""} : +${km(f.detourKm)}, +${f.detourMin} min, ${fmtMoney(f.costEur)}.${f.feasible ? "" : " Camion plein ou hors créneau."}`
+            : `Aucune tournée ce jour-là : aller-retour de ${km(f.detourKm)} (${fmtMoney(f.costEur)}).`}</li>
+        {c.marginHt !== undefined && c.expectedNetEur !== undefined ? (
+          <li className="flex gap-2"><span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-chart-2" />
+            <span>Marge {fmtMoney(c.marginHt)}{detour ? ` − livraison ${fmtMoney(detour)}` : ""}{c.probability < 1 ? ` × ${Math.round(c.probability * 100)} %` : ""} = <span className="num font-medium text-foreground">{fmtMoney(c.expectedNetEur)} attendus</span></span></li>
+        ) : null}
+      </ul>
+      {c.skipReason ? <p className="mt-2 rounded-md bg-warning/10 px-2 py-1.5 text-[12px] text-warning">{c.skipReason}</p> : null}
     </div>
   );
 }

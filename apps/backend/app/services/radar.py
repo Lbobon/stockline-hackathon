@@ -9,6 +9,13 @@
 Clients who already have an order for the date are "ordered", or "upsell" when an event calls for more (addLines);
 the others are "predicted" (probability ≥ 0.35, or an
 event targets them and they order at least now and then) or "unlikely" (left out of the forecast).
+
+Who the campaign calls first (prioritize): loyal repeat customers first, then by what the call is expected to earn.
+    loyalty      weekday regularity, weeks with an order over the last 13, tenure → fidèle / régulier / occasionnel
+    routeFit     cheapest insertion of the client's stop into the day's trucks (services/optimize.py's distances and €)
+    expectedNet  P(order) × (margin − delivery detour): margin = qty × (price − cost), as the campaign counts it
+    call         False when delivering would eat more than half the order's margin, or the order is under the 120 € minimum
+                 and off every truck's path: the client is not called, dock pickup is suggested instead.
 """
 
 from __future__ import annotations
@@ -21,9 +28,9 @@ from pathlib import Path
 from app import crud
 from app.core.activity import today
 from app.core.db import Doc
-from app.core.utils import add_days, round2, weekday_of
+from app.core.utils import add_days, days_between, round2, weekday_of
 from app.services import clients as client_svc
-from app.services import geo, pricing, shortages
+from app.services import geo, optimize, pricing, routing, shortages
 from app.services.stock import stock_levels
 from app.services.clients import is_sale
 
@@ -184,17 +191,136 @@ def forecast_client(client: Doc, date: str, evs: list[Doc], as_of: str | None = 
             "specialRequirements": _requirements(client)}  # fmt: skip
 
 
+# ── who to call first ──
+
+LOYAL_AT, REGULAR_AT = 0.9, 0.6  # nearly every client in a forecast orders most weeks: fidèle means almost every week, for long
+SKIP_COST_SHARE = 0.5  # not called when delivering would eat more than half of the order's margin
+TIERS = {"fidele": (1, "Fidèle"), "regulier": (2, "Régulier"), "occasionnel": (3, "Occasionnel")}
+HISTORY_WEEKS = 13
+
+
+def _sales_by_client(as_of: str) -> dict[str, list[Doc]]:
+    out: dict[str, list[Doc]] = {}
+    for o in crud.orders.rows.values():
+        if is_sale(o) and o["deliveryDate"] <= as_of:
+            out.setdefault(o["clientId"], []).append(o)
+    return out
+
+
+def loyalty(client_id: str, date: str, sales: list[Doc], as_of: str) -> Doc:
+    """How loyal a client is, from their delivered orders up to `as_of`: regular on this weekday, active most weeks,
+    a customer for long. Score 0–1 and a tier."""
+    weekday_share, hits = _probability(client_id, date)
+    since = add_days(as_of, -7 * HISTORY_WEEKS)
+    recent = [o for o in sales if o["deliveryDate"] > since]
+    weeks = len({days_between(o["deliveryDate"], as_of) // 7 for o in recent})  # 0 … 12
+    tenure_days = days_between(min((o["deliveryDate"] for o in sales), default=as_of), as_of)
+    score = 0.45 * weekday_share + 0.35 * min(1.0, weeks / HISTORY_WEEKS) + 0.2 * min(1.0, tenure_days / 365)
+    tier = "fidele" if score >= LOYAL_AT else "regulier" if score >= REGULAR_AT else "occasionnel"
+    return {"score": round2(score), "tier": tier, "label": TIERS[tier][1], "weekdayHits": hits, "weeksActive": weeks,
+            "ordersRecent": len(recent), "revenueRecentHt": round2(sum(o["totalHt"] for o in recent)),
+            "tenureMonths": tenure_days // 30}  # fmt: skip
+
+
+def _margin(lines: list[Doc]) -> float:
+    """qty × (price − purchase cost): the campaign's own formula (campaign/engine._margin)."""
+    total = 0.0
+    for l in lines:
+        p = crud.products.get(l["productId"])
+        price = float(l.get("unitPrice") or 0)
+        total += float(l["qty"]) * (price - (float(p["cost"]) if p else price))
+    return total
+
+
+def _weight(lines: list[Doc]) -> float:
+    return sum(routing.weight_kg(crud.products.get(l["productId"]), float(l["qty"])) for l in lines)
+
+
+def _tours(date: str) -> list[tuple[Doc, list[Doc]]]:
+    """(route, stops in optimized order) for each truck out on `date`: where a new stop would be inserted."""
+    runs = optimize._runs(date)
+    return [(route, pts) for (_, route, _), pts in zip(runs, optimize._optimize(runs))] if runs else []
+
+
+def route_fit(client: Doc, weight_kg: float, tours: list[tuple[Doc, list[Doc]]]) -> Doc:
+    """Cheapest place for this client's stop in the day's trucks: extra km, minutes and € (fuel + driver), and whether
+    the truck still fits it (capacity, back before the end of the delivery window)."""
+    p = {**geo.locate(client), "clientId": client["id"]}
+    for route, pts in tours:
+        if any(x["clientId"] == client["id"] for x in pts):
+            return {"route": route["name"], "onRoute": True, "feasible": True, "detourKm": 0.0, "detourMin": 0, "costEur": 0.0, "after": None}
+    best = None
+    for route, pts in tours:
+        load = sum(optimize._order_weight(x["orderId"]) for x in pts) + weight_kg
+        for i in range(len(pts) + 1):
+            prev = pts[i - 1] if i else geo.DEPOT
+            nxt = pts[i] if i < len(pts) else geo.DEPOT
+            km_ = geo.km(prev, p) + geo.km(p, nxt) - geo.km(prev, nxt)
+            min_ = geo.minutes(prev, p) + geo.minutes(p, nxt) - geo.minutes(prev, nxt) + geo.DROP_MIN
+            etas = optimize._etas(pts[:i] + [p] + pts[i:], route["departureTime"])
+            fits = load <= route["capacityKg"] and optimize._mins(etas[-1]) <= optimize._mins(optimize.WINDOW_END)
+            cand = (not fits, optimize._cost(km_, min_), route, km_, min_, prev, fits)
+            if best is None or cand[:2] < best[:2]:
+                best = cand
+    if best is None:  # no truck out that day: a dedicated round trip
+        km_, min_ = 2 * geo.km(geo.DEPOT, p), 2 * geo.minutes(geo.DEPOT, p) + geo.DROP_MIN
+        return {"route": None, "onRoute": False, "feasible": False, "detourKm": round2(km_), "detourMin": round(min_),
+                "costEur": round2(optimize._cost(km_, min_)), "after": None}  # fmt: skip
+    _, cost, route, km_, min_, prev, fits = best
+    after = crud.clients.get(prev["clientId"])["name"] if prev.get("clientId") and crud.clients.get(prev["clientId"]) else geo.DEPOT["name"]
+    return {"route": route["name"], "onRoute": False, "feasible": fits, "detourKm": round2(km_), "detourMin": round(min_),
+            "costEur": round2(cost), "after": after}  # fmt: skip
+
+
+def prioritize(rows: list[Doc], date: str, as_of: str | None = None) -> list[Doc]:
+    """Adds loyalty, routeFit, marginHt, expectedNetEur, call / skipReason, wave and priority to the rows to call
+    (predicted, upsell), and returns every row in call order: called by priority, then not called, then ordered."""
+    as_of = as_of or today()
+    sales = _sales_by_client(as_of)
+    tours = _tours(date)
+    for r in rows:
+        if r["status"] not in ("predicted", "upsell"):
+            continue
+        client = crud.clients.require(r["clientId"])
+        offer = r["addLines"] if r["status"] == "upsell" else r["lines"]
+        r["loyalty"] = loyalty(r["clientId"], date, sales.get(r["clientId"], []), as_of)
+        r["routeFit"] = fit = route_fit(client, _weight(offer), tours)
+        margin = _margin(offer)
+        r["marginHt"] = round2(margin)
+        detour = 0.0 if r["status"] == "upsell" else fit["costEur"]  # an add-on rides on a delivery that happens anyway
+        r["expectedNetEur"] = round2(r["probability"] * (margin - detour))
+        r["call"], r["skipReason"] = True, None
+        if r["status"] == "predicted" and not fit["onRoute"]:
+            if r["totalHt"] < optimize.MIN_ORDER_HT:
+                r["call"], r["skipReason"] = False, f"Panier prévu sous le minimum de {optimize.MIN_ORDER_HT:.0f} € HT : enlèvement au quai conseillé"
+            elif fit["costEur"] > SKIP_COST_SHARE * margin:
+                r["call"], r["skipReason"] = False, (f"La livraison coûterait {fit['costEur']:.0f} € pour {margin:.0f} € de marge : "
+                                                     "enlèvement au quai ou regroupement conseillé")  # fmt: skip
+    to_call = [r for r in rows if r.get("call")]
+    to_call.sort(key=lambda r: (TIERS[r["loyalty"]["tier"]][0], -r["expectedNetEur"], r["name"]))
+    for i, r in enumerate(to_call):
+        r["priority"], r["wave"] = i + 1, TIERS[r["loyalty"]["tier"]][0]
+    skipped = sorted((r for r in rows if r.get("call") is False), key=lambda r: r["name"])
+    rest = [r for r in rows if "call" not in r]
+    return to_call + skipped + rest
+
+
 def forecast(date: str | None = None) -> Doc:
     """GET /api/radar/forecast: every client served on `date` (default: tomorrow), ordered or predicted."""
     day = date or add_days(today(), 1)
     evs = [e for e in events(day, day)]
     rows = [f for c in crud.clients.all() if (f := forecast_client(c, day, evs))]
     rows.sort(key=lambda r: ({"predicted": 0, "upsell": 1}.get(r["status"], 2), -r["probability"], r["name"]))
+    rows = prioritize(rows, day)
     pred = [r for r in rows if r["status"] == "predicted"]
     ups = [r for r in rows if r["status"] == "upsell"]
+    calls = [r for r in rows if r.get("call")]
     return {
         "date": day, "depot": geo.DEPOT, "events": evs, "clients": rows,
         "summary": {"ordered": sum(r["status"] in ("ordered", "upsell") for r in rows), "predicted": len(pred), "upsell": len(ups),
                     "expectedHt": round2(sum(r["totalHt"] * r["probability"] for r in pred)),
-                    "upliftHt": round2(sum(r["upliftHt"] for r in pred + ups))},
+                    "upliftHt": round2(sum(r["upliftHt"] for r in pred + ups)),
+                    "toCall": len(calls), "skipped": sum(r.get("call") is False for r in rows),
+                    "loyal": sum(r["loyalty"]["tier"] == "fidele" for r in calls),
+                    "expectedNetEur": round2(sum(r["expectedNetEur"] for r in calls))},
     }  # fmt: skip
