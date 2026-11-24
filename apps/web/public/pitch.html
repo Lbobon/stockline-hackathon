@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Médina Viandes — Pitch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* Same tokens as the ERP (apps/web/src/styles/tokens.css, .dark) */
+  :root {
+    --background: 155 22% 7%; --foreground: 150 12% 92%; --card: 155 20% 9%; --muted: 155 13% 17%;
+    --muted-foreground: 150 8% 63%; --border: 155 14% 18%; --primary: 150 58% 46%;
+    --success: 150 55% 45%; --warning: 40 90% 56%; --destructive: 0 72% 60%; --info: 213 82% 62%;
+    --agent-voice: 258 90% 66%; --agent-fast: 151 59% 38%; --agent-scout: 224 62% 63%;
+    --agent-scribe: 35 83% 42%; --agent-linguist: 342 66% 64%; --agent-guard: 184 62% 46%;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: hsl(var(--background)); color: hsl(var(--foreground));
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-feature-settings: "cv11", "ss01"; overflow: hidden; }
+  .num { font-variant-numeric: tabular-nums; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+
+  /* 16:9 stage scaled to the window */
+  #stage { position: absolute; width: 1280px; height: 720px; left: 50%; top: 50%; transform-origin: center; }
+  .slide { position: absolute; inset: 0; padding: 56px 64px 48px; display: none; flex-direction: column; }
+  .slide.on { display: flex; animation: in .25s ease-out; }
+  @keyframes in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  .kicker { font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: hsl(var(--primary)); margin-bottom: 10px; }
+  h1 { font-size: 54px; line-height: 1.05; font-weight: 800; letter-spacing: -.02em; }
+  h2 { font-size: 36px; line-height: 1.1; font-weight: 700; letter-spacing: -.015em; margin-bottom: 8px; }
+  .lead { font-size: 19px; line-height: 1.45; color: hsl(var(--muted-foreground)); max-width: 900px; }
+  .muted { color: hsl(var(--muted-foreground)); }
+  b, strong { color: hsl(var(--foreground)); font-weight: 600; }
+
+  .card { background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 12px; padding: 18px 20px; }
+  .grid { display: grid; gap: 14px; }
+  .g2 { grid-template-columns: 1fr 1fr; } .g3 { grid-template-columns: repeat(3, 1fr); } .g4 { grid-template-columns: repeat(4, 1fr); }
+  .card h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .card p, .card li { font-size: 14px; line-height: 1.5; color: hsl(var(--muted-foreground)); }
+  .card ul { padding-left: 18px; }
+  .big { white-space: nowrap; font-size: 44px; font-weight: 800; letter-spacing: -.02em; line-height: 1; }
+  .unit { font-size: 15px; color: hsl(var(--muted-foreground)); margin-top: 6px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+    border: 1px solid hsl(var(--border)); background: hsl(var(--muted)); color: hsl(var(--foreground)); white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+  .ok { color: hsl(var(--success)); } .bad { color: hsl(var(--destructive)); } .warn { color: hsl(var(--warning)); }
+
+  /* step pipelines (Radar, Garde-fou) */
+  .steps { display: grid; gap: 8px; align-content: start; }
+  .step { display: grid; grid-template-columns: 30px 1fr; gap: 12px; align-items: start; }
+  .step .n { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+  .step h4 { font-size: 15px; font-weight: 600; margin: 4px 0 2px; }
+  .step p { font-size: 13px; line-height: 1.4; color: hsl(var(--muted-foreground)); }
+
+  /* transcript bubbles */
+  .bubble { font-size: 14px; line-height: 1.45; padding: 10px 12px; border-radius: 10px; border: 1px solid hsl(var(--border)); background: hsl(var(--muted) / .5); }
+  .bubble .who { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 4px; }
+  .src { margin-top: 6px; font-size: 12px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+  footer { position: absolute; left: 64px; right: 64px; bottom: 20px; display: flex; justify-content: space-between; font-size: 12px; color: hsl(var(--muted-foreground)); }
+  #nav { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; z-index: 5; }
+  #nav button { width: 9px; height: 9px; border-radius: 50%; border: 0; background: hsl(var(--border)); cursor: pointer; }
+  #nav button.on { background: hsl(var(--primary)); width: 22px; border-radius: 6px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+  .logo { width: 34px; height: 34px; border-radius: 9px; background: hsl(var(--primary)); color: hsl(var(--background)); display: grid; place-items: center; font-weight: 800; }
+  svg text { font-family: Inter, sans-serif; }
+</style>
+</head>
+<body>
+<div id="stage">
+
+<!-- 1 · Titre -->
+<section class="slide">
+  <div class="brand"><div class="logo">M</div><span>Médina Viandes</span><span class="muted" style="font-weight:500">· équipe 18 · Stockline voice hackathon</span></div>
+  <div style="margin-top:110px">
+    <div class="kicker">Agent vocal dans l'ERP</div>
+    <h1>Le grossiste qui décroche<br/>même quand personne n'est là.<br/><span style="color:hsl(var(--primary))">Et maintenant, c'est lui qui appelle.</span></h1>
+    <p class="lead" style="margin-top:22px">Un agent vocal qui prend les commandes la nuit, prévoit celles de demain, appelle les clients en parallèle et ne dit jamais un chiffre qu'il ne peut pas prouver.</p>
+  </div>
+  <div style="margin-top:auto;display:flex;gap:10px;flex-wrap:wrap">
+    <span class="pill"><span class="dot" style="background:hsl(var(--primary))"></span>Radar de demande</span>
+    <span class="pill"><span class="dot" style="background:hsl(var(--agent-guard))"></span>Le Garde-fou</span>
+    <span class="pill"><span class="dot" style="background:hsl(var(--agent-voice))"></span>Standard de nuit</span>
+    <span class="pill"><span class="dot" style="background:hsl(var(--agent-scout))"></span>Tournées optimisées</span>
+  </div>
+</section>
+
+<!-- 2 · Le défi -->
+<section class="slide">
+  <div class="kicker">Le défi</div>
+  <h2>Construire l'agent vocal le plus utile sur l'ERP d'un grossiste</h2>
+  <p class="lead">24 h, aucun sujet imposé : choisir un vrai problème, le justifier, et un agent qui agit dans l'ERP pendant l'appel. Le jury l'appelle en direct, sur ses propres scénarios.</p>
+  <div class="grid g3" style="margin-top:26px">
+    <div class="card"><h3><span class="dot" style="background:hsl(var(--agent-scout))"></span>Smart</h3><p>Connaît l'entreprise, le client, les produits, l'historique. Ne se trompe pas, propose des alternatives, agit juste dans l'ERP.</p></div>
+    <div class="card"><h3><span class="dot" style="background:hsl(var(--agent-fast))"></span>Fast</h3><p>La réponse arrive vite, sans blanc gênant. Peu d'allers-retours modèle / outils, un coût par appel faible.</p></div>
+    <div class="card"><h3><span class="dot" style="background:hsl(var(--agent-voice))"></span>Natural</h3><p>On oublie que c'est une machine : phrases courtes, ton juste, chiffres dits à l'oral, relecture de la commande.</p></div>
+  </div>
+  <div class="card" style="margin-top:14px;display:flex;gap:28px;align-items:center">
+    <span class="muted" style="font-size:14px">Livrables</span>
+    <span style="font-size:14px">Repo qui tourne avec <span class="mono">make setup</span> · <span class="mono">DECISIONS.md</span> · slides 5 min · vidéo 2 min · démo live</span>
+  </div>
+  <p class="muted" style="margin-top:auto;font-size:13px">Source : BRIEF.md (énoncé Stockline).</p>
+</section>
+
+<!-- 3 · Le problème -->
+<section class="slide">
+  <div class="kicker">Le problème</div>
+  <h2>Chez Médina Viandes, tout passe par le téléphone, et personne ne décroche la nuit</h2>
+  <div class="grid g4" style="margin-top:26px">
+    <div class="card"><div class="big num">95</div><div class="unit">clients : boucheries, snacks, traiteurs, cantines</div></div>
+    <div class="card"><div class="big num">91 %</div><div class="unit">des commandes par téléphone (46 %) et WhatsApp (45 %)</div></div>
+    <div class="card"><div class="big num">3 h</div><div class="unit">heure limite pour être livré le matin même, sans standard de nuit</div></div>
+    <div class="card"><div class="big num">6 h</div><div class="unit">départ des camions : les ruptures se découvrent à 5 h 30</div></div>
+  </div>
+  <div class="grid g3" style="margin-top:14px">
+    <div class="card"><h3>Commandes perdues</h3><p>Les commandes du soir attendent l'ouverture à 5 h, puis sont retapées à la main.</p></div>
+    <div class="card"><h3>Ventes ratées</h3><p>Personne n'a le temps d'appeler les clients avant le match ou les mariages du week-end.</p></div>
+    <div class="card"><h3>Tournées coûteuses</h3><p>L'ERP range les arrêts « départ + 12 min par arrêt », sans aucune géographie.</p></div>
+  </div>
+</section>
+
+<!-- 4 · Ce qu'on a construit -->
+<section class="slide">
+  <div class="kicker">Ce qu'on a construit</div>
+  <h2>Un agent qui travaille dans l'ERP, de 20 h à 15 h</h2>
+  <div class="grid g2" style="margin-top:22px">
+    <div class="card"><h3><span class="dot" style="background:hsl(var(--agent-voice))"></span>La nuit · standard vocal</h3><p>Identifie le client, propose « comme d'habitude », vérifie stock et prix négociés, relit la commande et la <b>confirme lui-même</b> si les règles de l'ERP le permettent, sinon la laisse à Leïla avec la raison.</p></div>
+    <div class="card"><h3><span class="dot" style="background:hsl(var(--warning))"></span>5 h 30 · ruptures</h3><p>Trouve les commandes touchées, lit la préférence de chaque client, appelle ceux qui doivent l'être et propose un geste calculé sur leur historique.</p></div>
+    <div class="card"><h3><span class="dot" style="background:hsl(var(--agent-fast))"></span>0,7 s · l'orchestre</h3><p>Des agents autour de l'agent vocal : un Éclaireur pré-charge l'ERP pendant que le client parle, un Réflexe répond aux « oui », un Greffier tient la fiche, un Linguiste suit la langue.</p></div>
+    <div class="card"><h3><span class="dot" style="background:hsl(var(--agent-scribe))"></span>Leïla · « Ce matin » et copilote</h3><p>Une page lisible en une minute (à vérifier, rappeler, valider), et un mode copilote : Leïla parle, l'agent remplit la commande et lui souffle les alertes.</p></div>
+  </div>
+  <div class="card" style="margin-top:14px"><p><b>Les règles sont dans l'ERP, pas dans le prompt</b> : compte bloqué, plafond d'encours, heure limite, carcasses la veille avant 14 h, cantines à J-3, minimum de 120 € HT, stock avec arrivages, quantité inhabituelle. L'agent ne peut pas les contourner : <span class="mono">finalize_order</span> confirme, ou laisse en brouillon avec la raison.</p></div>
+</section>
+
+<!-- 5 · RADAR -->
+<section class="slide">
+  <div class="kicker">Unique n°1 · Radar de demande</div>
+  <h2>La commande qui s'écrit toute seule</h2>
+  <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:22px;margin-top:14px;flex:1">
+    <div class="steps">
+      <div class="step"><div class="n" style="background:hsl(var(--primary) / .15);color:hsl(var(--primary))">1</div><div><h4>Prévoir</h4><p>Pour chaque client livré demain : son rythme (combien de mercredis sur 12), son panier de base, ses prix négociés. Jamais un produit en rupture.</p></div></div>
+      <div class="step"><div class="n" style="background:hsl(var(--primary) / .15);color:hsl(var(--primary))">2</div><div><h4>Les événements de la ville</h4><p>OM–PSG mercredi : +40 % de broches pour les snacks. Mariages samedi : 2 agneaux entiers pour les traiteurs, en <b>appel d'ajout</b>.</p></div></div>
+      <div class="step"><div class="n" style="background:hsl(var(--primary) / .15);color:hsl(var(--primary))">3</div><div><h4>Prioriser</h4><p>Les fidèles d'abord, puis par € net attendu (marge × probabilité − détour du camion). Pas rentable à livrer : retrait au quai.</p></div></div>
+      <div class="step"><div class="n" style="background:hsl(var(--agent-voice) / .15);color:hsl(var(--agent-voice))">4</div><div><h4>Appeler en parallèle</h4><p>24 appels à la fois. L'agent parle en premier ; <b>Jev</b> classe chaque réponse en ~300 ms : oui, modifie, non, rappeler.</p></div></div>
+      <div class="step"><div class="n" style="background:hsl(var(--agent-scout) / .15);color:hsl(var(--agent-scout))">5</div><div><h4>Chaque « oui » redessine la tournée</h4><p>La commande passe les règles de l'ERP, les tournées sont ré-optimisées, le tracé bouge en direct.</p></div></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="card" style="padding:12px">
+        <svg viewBox="0 0 420 210" width="100%" aria-label="Carte du radar : dépôt, clients appelés, tournée">
+          <rect width="420" height="210" rx="8" fill="hsl(155 20% 6%)"/>
+          <path d="M210 120 C 180 100, 120 80, 90 60 S 40 40, 60 25" stroke="hsl(40 88% 60%)" stroke-width="3" fill="none" opacity=".9"/>
+          <path d="M210 120 C 240 135, 300 150, 330 140 S 380 110, 395 95" stroke="hsl(175 50% 52%)" stroke-width="3" fill="none" opacity=".9"/>
+          <path d="M210 120 C 215 150, 205 175, 230 190" stroke="hsl(258 90% 66%)" stroke-width="3" fill="none" opacity=".9"/>
+          <g fill="hsl(150 58% 46%)"><circle cx="90" cy="60" r="6"/><circle cx="60" cy="25" r="6"/><circle cx="330" cy="140" r="6"/><circle cx="395" cy="95" r="6"/><circle cx="230" cy="190" r="6"/></g>
+          <g fill="none" stroke="hsl(150 8% 63%)" stroke-dasharray="3 3"><circle cx="150" cy="150" r="6"/><circle cx="300" cy="60" r="6"/></g>
+          <circle cx="270" cy="95" r="6" fill="hsl(258 90% 66%)"/><circle cx="270" cy="95" r="13" fill="none" stroke="hsl(258 90% 66%)" opacity=".5"/>
+          <rect x="198" y="108" width="24" height="24" rx="6" fill="hsl(150 12% 92%)"/><text x="210" y="125" text-anchor="middle" font-size="12" font-weight="700" fill="hsl(155 22% 7%)">M</text>
+          <text x="12" y="200" font-size="10" fill="hsl(150 8% 63%)">● commandé   ○ à appeler   ◉ en appel   — tournée</text>
+        </svg>
+      </div>
+      <div class="grid g2" style="gap:10px">
+        <div class="card" style="padding:14px"><div class="big num" style="font-size:34px">95 %</div><div class="unit">des commandes vues venir sur les 8 derniers mercredis, CA prévu à 8 % près</div></div>
+        <div class="card" style="padding:14px"><div class="big num" style="font-size:34px">≈ 85 s</div><div class="unit">pour 24 appels : 19 « oui » en moyenne sur 3 campagnes</div></div>
+      </div>
+      <div class="card" style="padding:14px;border-color:hsl(var(--primary) / .5)"><div class="big num" style="color:hsl(var(--primary));font-size:38px;white-space:nowrap">≈ 2 800 € gagnés</div><div class="unit">par campagne : marge + tournées + temps commercial (moyenne de 3)</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 · GARDE-FOU -->
+<section class="slide">
+  <div class="kicker" style="color:hsl(var(--agent-guard))">Unique n°2 · Le Garde-fou</div>
+  <h2>L'agent ne peut pas inventer un chiffre</h2>
+  <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:22px;margin-top:14px;flex:1">
+    <div class="steps">
+      <div class="step"><div class="n" style="background:hsl(var(--agent-guard) / .15);color:hsl(var(--agent-guard))">1</div><div><h4>Phrase par phrase</h4><p>Le texte de l'agent est coupé en phrases ; chacune est vérifiée dès qu'elle est complète, pendant que la suivante s'écrit.</p></div></div>
+      <div class="step"><div class="n" style="background:hsl(var(--agent-guard) / .15);color:hsl(var(--agent-guard))">2</div><div><h4>Y a-t-il un fait à vérifier ?</h4><p>Prix, remise, quantité, stock, date, état de commande, y compris les chiffres dits en toutes lettres. « Je regarde. » ne contient rien : dite tout de suite.</p></div></div>
+      <div class="step"><div class="n" style="background:hsl(var(--agent-guard) / .15);color:hsl(var(--agent-guard))">3</div><div><h4>Le carnet de preuves</h4><p>Tout ce que l'ERP a dit pendant l'appel : résultats des outils, faits pré-chargés par l'Éclaireur, consigne d'un appel sortant, date du jour.</p></div></div>
+      <div class="step"><div class="n" style="background:hsl(var(--agent-guard) / .15);color:hsl(var(--agent-guard))">4</div><div><h4>Jev tranche en ~150 ms</h4><p>Une requête, cinq questions : appuyée par l'ERP ? la contredit ? promet ce que personne n'a accordé ? un chiffre différent ? quelle est la source ? En parallèle de la synthèse vocale.</p></div></div>
+      <div class="step"><div class="n" style="background:hsl(var(--agent-guard) / .15);color:hsl(var(--agent-guard))">5</div><div><h4>Verdict</h4><p><span class="ok">✓ vérifié</span> avec sa source · <span class="warn">? non vérifié</span> · <span class="bad">✗ contredit</span> : jamais envoyé à la voix, l'agent se reprend à partir du fait de l'ERP. Si Jev tarde, la phrase passe : jamais de silence.</p></div></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="bubble"><div class="who" style="color:hsl(var(--agent-voice))">Agent</div>« Le gigot d'agneau est à 14 euros 20 le kilo pour vous. »
+        <div class="src"><span class="pill ok">✓ vérifié</span><span class="muted">Prix client · Gigot d'agneau → 14,20 €</span></div></div>
+      <div class="bubble" style="border-color:hsl(var(--destructive) / .5)"><div class="who" style="color:hsl(var(--agent-voice))">Agent · hallucination provoquée (jamais entendue)</div><s class="muted">« L'épaule d'agneau est à 8 euros 80 le kilo pour vous. »</s>
+        <div class="src"><span class="pill bad">✗ contredit · 196 ms</span><span class="muted">Prix client · Épaule d'agneau → 11,80 €</span></div></div>
+      <div class="bubble" style="border-color:hsl(var(--success) / .5)"><div class="who" style="color:hsl(var(--agent-voice))">Agent · se reprend depuis l'ERP</div>« L'épaule d'agneau est à 11 euros 80 le kilo pour vous. »</div>
+      <div class="card" style="padding:12px 14px"><h3 style="font-size:13px"><span class="dot" style="background:hsl(var(--agent-guard))"></span>En direct dans l'ERP</h3><p style="font-size:12.5px">Page Voix : ✓ ? ✗ après chaque phrase, source au survol, bouton « Provoquer une erreur ». Le compte rendu d'appel liste les phrases bloquées, « jamais dites ».</p></div>
+      <div class="grid g2" style="gap:10px;margin-top:auto">
+        <div class="card" style="padding:14px"><div class="big num" style="font-size:34px">0</div><div class="unit">phrase juste bloquée : 27/27 au test, 156 phrases vérifiées en simulation</div></div>
+        <div class="card" style="padding:14px"><div class="big num" style="font-size:34px">0,70 s</div><div class="unit">premier son, inchangé avec le blocage actif</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 7 · Les chiffres -->
+<section class="slide">
+  <div class="kicker">Les chiffres</div>
+  <h2>D'abord l'argent</h2>
+  <div class="grid g3" style="margin-top:20px">
+    <div class="card" style="border-color:hsl(var(--primary) / .5)"><div class="big num" style="color:hsl(var(--primary))">≈ 2 800 €</div><div class="unit">gagnés par campagne Radar (3 campagnes : 2 424 → 3 200 €)</div></div>
+    <div class="card"><div class="big num">12,5 k€</div><div class="unit">de commandes prises en ~85 s, dont 4,6 k€ dus aux événements</div></div>
+    <div class="card"><div class="big num">−207 km</div><div class="unit">par jour : 559 → 352 km sur les tournées du jour, ≈ 240 € et 4 h de chauffeur</div></div>
+  </div>
+  <div class="grid g4" style="margin-top:14px">
+    <div class="card"><div class="big num" style="font-size:32px">0,7 s</div><div class="unit">avant le premier son</div></div>
+    <div class="card"><div class="big num" style="font-size:32px">1 ct</div><div class="unit">par appel (modèle Haiku)</div></div>
+    <div class="card"><div class="big num" style="font-size:32px">39/40</div><div class="unit">appels simulés réussis (scénarios métier)</div></div>
+    <div class="card"><div class="big num" style="font-size:32px">27/30</div><div class="unit">appels générés au hasard : client × situation</div></div>
+  </div>
+  <div class="card" style="margin-top:14px"><p><b>Comment on mesure</b> : un simulateur fait jouer chaque client par un modèle à partir de sa fiche, contre le vrai agent et le vrai ERP, puis un juge note. Les tests « génériques » tirent un client et une situation au hasard, pour ne pas sur-ajuster l'agent à nos propres scénarios.</p></div>
+</section>
+
+<!-- 8 · Confiance -->
+<section class="slide">
+  <div class="kicker">Pourquoi on peut lui faire confiance</div>
+  <h2>Ce qui est garanti, et ce qui est simulé</h2>
+  <div class="grid g3" style="margin-top:22px">
+    <div class="card"><h3><span class="dot" style="background:hsl(var(--primary))"></span>Les règles dans l'ERP</h3><ul><li>Compte bloqué, plafond d'encours</li><li>Heures limites, cantines à J-3</li><li>Minimum 120 € HT, stock + arrivages</li><li>Une commande modifiée est revérifiée</li></ul></div>
+    <div class="card"><h3><span class="dot" style="background:hsl(var(--agent-guard))"></span>Le Garde-fou</h3><ul><li>Chaque chiffre dit est vérifié</li><li>Une phrase contredite n'est jamais entendue</li><li>Source affichée pour chaque ✓</li></ul></div>
+    <div class="card"><h3><span class="dot" style="background:hsl(var(--warning))"></span>Ce qu'on simule (on le dit)</h3><ul><li>Les clients qui répondent pendant la campagne Radar (joués par un modèle à partir de leur fiche)</li><li>Le calendrier des événements</li><li>Aucun vrai numéro n'est appelé</li></ul></div>
+  </div>
+  <div class="card" style="margin-top:14px"><p><b>Réel</b> : la prévision, la priorisation, l'agent vocal et ses outils, les règles, l'écriture des commandes, l'optimisation des tournées, le Garde-fou. Tout tourne en local avec <span class="mono">make setup</span>, testé sur une installation propre.</p></div>
+</section>
+
+<!-- 9 · Fin -->
+<section class="slide">
+  <div class="kicker">Et demain</div>
+  <h2>Il prévoit. Il appelle. Il ne ment pas.</h2>
+  <div class="grid g3" style="margin-top:26px">
+    <div class="card"><h3>Les fournisseurs</h3><p>Le même moteur d'appels en parallèle pour négocier les prix de la nuit avec tous les abattoirs, sur de vraies offres.</p></div>
+    <div class="card"><h3>Un vrai numéro</h3><p>L'agent est prêt : il ne manque que la ligne téléphonique et WhatsApp.</p></div>
+    <div class="card"><h3>Toute la journée</h3><p>Les ruptures, le Radar et les tournées s'enchaînent seuls ; Leïla valide ce qui demande un humain.</p></div>
+  </div>
+  <div style="margin-top:auto" class="brand"><div class="logo">M</div><span>Médina décroche, même quand personne n'est là.</span></div>
+</section>
+
+<footer><span>Médina Viandes · équipe 18</span><span id="count" class="num"></span></footer>
+</div>
+<div id="nav"></div>
+<script>
+  const slides = [...document.querySelectorAll(".slide")];
+  const nav = document.getElementById("nav"), count = document.getElementById("count"), stage = document.getElementById("stage");
+  let i = Math.min(slides.length - 1, Math.max(0, (parseInt(location.hash.slice(1)) || 1) - 1));
+  slides.forEach((_, k) => { const b = document.createElement("button"); b.ariaLabel = `Diapositive ${k + 1}`; b.onclick = () => go(k); nav.appendChild(b); });
+  function go(k) {
+    i = Math.max(0, Math.min(slides.length - 1, k));
+    slides.forEach((s, k2) => s.classList.toggle("on", k2 === i));
+    [...nav.children].forEach((b, k2) => b.classList.toggle("on", k2 === i));
+    count.textContent = `${i + 1} / ${slides.length}`;
+    history.replaceState(null, "", `#${i + 1}`);
+  }
+  function fit() { const s = Math.min(innerWidth / 1280, innerHeight / 720); stage.style.transform = `translate(-50%, -50%) scale(${s})`; }
+  addEventListener("keydown", (e) => {
+    if (["ArrowRight", "PageDown", " "].includes(e.key)) { e.preventDefault(); go(i + 1); }
+    if (["ArrowLeft", "PageUp"].includes(e.key)) { e.preventDefault(); go(i - 1); }
+    if (e.key === "Home") go(0); if (e.key === "End") go(slides.length - 1);
+  });
+  stage.addEventListener("click", (e) => { if (!e.target.closest("a,button")) go(e.clientX > innerWidth / 2 ? i + 1 : i - 1); });
+  addEventListener("hashchange", () => { const k = (parseInt(location.hash.slice(1)) || 1) - 1; if (k !== i) go(k); });
+  addEventListener("resize", fit); fit(); go(i);
+</script>
+</body>
+</html>
