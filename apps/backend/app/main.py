@@ -15,8 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.core.config import API_PORT
 from app import crud
+from app.core.config import API_PORT
 from app.core.datapack import counts, default_calendar, reset_from_pack
 from app.core.db import get_meta, is_seeded, load_all
 from app.core.errors import HttpError
@@ -42,6 +42,7 @@ from app.routers import (
     suppliers,
     system,
 )
+from app.services import feeds
 
 logging.basicConfig(level=logging.INFO, format="[api] %(message)s")
 log = logging.getLogger("api")
@@ -54,8 +55,10 @@ async def lifespan(_: FastAPI):
         load_all()
         if not crud.calendar.rows:  # a database seeded before the events calendar existed
             crud.calendar.table.replace_all(default_calendar())
+        feeds.materialize()  # weather, matches, agendas from the last fetch (no network at boot)
     else:
         source = reset_from_pack()
+        feeds.materialize()
     log.info("today=%s — %s: %s", get_meta()["today"], source, counts())
     warm_up()
     yield
@@ -64,12 +67,14 @@ async def lifespan(_: FastAPI):
 def warm_up() -> None:
     """Build the derived indexes once at boot (movement index, sorted lists, stock levels) so the first
     list request after a start doesn't pay for them."""
-    from app.services import dashboard, invoices, orders, stock
+    from app.services import dashboard, demand_gbm, invoices, orders, radar, stock
 
     stock.list_movements(limit=1)
     orders.orders_newest_first()
     invoices.list_invoices(ListQuery(limit=1))
     dashboard.dashboard()
+    if radar.MODEL == "gbm":  # the radar's model: trained now (~5 s) rather than on a caller's first question
+        demand_gbm.warm()
 
 
 app = FastAPI(

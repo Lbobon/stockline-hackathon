@@ -3,7 +3,7 @@
  * (spec: .plans/demand-radar-spec.md). Local to the radar until the backend ships them in @kit/shared.
  */
 
-export type EventKind = "sport" | "weather" | "wedding" | "local" | "religious" | "holiday";
+export type EventKind = "sport" | "weather" | "wedding" | "local" | "religious" | "holiday" | "concert";
 export type ForecastStatus = "ordered" | "upsell" | "predicted";
 
 export interface LatLng { lat: number; lng: number }
@@ -22,6 +22,8 @@ export interface RadarEvent {
   /** Event type in the ERP calendar (ramadan, aid_kebir, om_home…): occurrences of a type are measured together. */
   type?: string;
   source?: string;
+  /** Live source that wrote it (open-meteo, openfootball, ics:concert); absent for the team's own events. */
+  feed?: string;
   /** Uplift measured on past occurrences, per client segment; null = no history, the boosts are the team's estimate. */
   measured?: Record<string, { factor: number; days: number; occurrences: number }> | null;
   /** One line: « mesuré sur 3 occurrences passées : boucheries ×3,38… » or « estimation : … ». */

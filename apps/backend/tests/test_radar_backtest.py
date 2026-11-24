@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 
 os.environ["DB_PATH"] = str(Path(tempfile.mkdtemp()) / "erp.db")
+os.environ["FEEDS"] = "off"  # the calendar as seeded; tests/test_feeds.py covers the live sources
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -34,6 +35,9 @@ with TestClient(app) as c:
         assert t["radar"]["revenueError"] < 0.6 * t["average"]["revenueError"], (typ, t)
         assert t["radar"]["quantityMape"] < t["average"]["quantityMape"], (typ, t)
     assert ev["all"]["errorReduction"]["revenueError"] > 0.3, ev["all"]
+    # LightGBM (the model in use) against median × uplift: better quantities in normal weeks, better € on event days
+    assert r["model"] == "gbm" and r["gbm"]["quantityMape"] <= r["radar"]["quantityMape"], r
+    assert ev["all"]["gbmVsRadar"]["revenueError"] > 0, ev["all"]
     # as_of really hides the future: a backtest day's forecast never sees that day's own orders.
     from app.services import radar
     from app import crud
@@ -42,4 +46,4 @@ with TestClient(app) as c:
     ordered = {o["clientId"] for o in crud.orders.rows.values() if o["deliveryDate"] == day}
     rows = [f for cl in crud.clients.all() if (f := radar.forecast_client(cl, day, [], as_of="2026-01-01"))]
     assert all(f["status"] == "predicted" and "existingOrderId" not in f for f in rows)
-    print("radar backtest OK:", r["pitch"], "| events:", ev["all"]["errorReduction"])
+    print("radar backtest OK:", r["pitch"], "| events vs average:", ev["all"]["errorReduction"], "| gbm vs radar:", ev["all"]["gbmVsRadar"])

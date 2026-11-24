@@ -3,10 +3,12 @@ average? (the numbers in DECISIONS.md)
 
 Each day is forecast as of the day before (radar.forecast_client with as_of: history up to then, no existing orders,
 uplift measured only from events finished before) and compared with the sales actually delivered that day.
-Two models, same clients (who orders comes from the same 12-weekday rhythm), different quantities:
+Three models, same clients (who orders comes from the same 12-weekday rhythm), different lines and quantities:
     radar     median of the last 8 same weekdays × the uplift measured per event type and segment, plus the
               products a client only buys for the event
+    gbm       LightGBM (services/demand_gbm.py), trained only on the days before the 1st of the scored day's month
     average   the client's plain 60-day average basket, no events (what the radar did before)
+The flat fields and the pitch are the model in use (radar.MODEL).
 Scores:
     clients     precision / recall on "will order"
     revenue     € forecast for the day vs € delivered: Σ |forecast − delivered| ÷ Σ delivered over the days
@@ -28,7 +30,7 @@ from app.services import demand, radar
 from app.services.clients import is_sale
 
 DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
-MODELS = ("radar", "average")
+MODELS = ("radar", "average", "gbm")
 LABEL = {"mon": "lundis", "tue": "mardis", "wed": "mercredis", "thu": "jeudis", "fri": "vendredis", "sat": "samedis", "sun": "dimanches"}
 KEYS = ("predicted", "actual", "hits", "clientErr", "lines", "apeSum", "within20", "expectedHt", "actualHt")
 
@@ -94,8 +96,11 @@ def _compare(days: list[str]) -> Doc:
     actual = {d: _actual(d) for d in days}
     out = {m: [backtest_day(d, m, actual[d]) for d in days] for m in MODELS}
     s = {m: _summary(out[m]) for m in MODELS}
-    gain = {k: round2(1 - s["radar"][k] / s["average"][k]) if s["average"][k] else 0 for k in ("revenueError", "clientError", "quantityMape")}
-    return {**s, "errorReduction": gain,
+    def gain(m: str, vs: str) -> Doc:
+        return {k: round2(1 - s[m][k] / s[vs][k]) if s[vs][k] else 0 for k in ("revenueError", "clientError", "quantityMape")}
+
+    # errorReduction: the model in use (radar.MODEL) against the plain average; gbmVsRadar: LightGBM against median × uplift
+    return {**s, "model": radar.MODEL, "errorReduction": gain(radar.MODEL, "average"), "gbmVsRadar": gain("gbm", "radar"),
             "days": [{"date": d, "actualHt": round2(out["radar"][i]["actualHt"]),
                       **{m: round2(out[m][i]["expectedHt"]) for m in MODELS}} for i, d in enumerate(days)]}  # fmt: skip
 
@@ -123,7 +128,7 @@ def backtest(weeks: int = 8, weekday: str = "wed") -> Doc:
         weekday = "wed"
     days = _past_days(weekday, max(1, min(weeks, 26)))
     res = _compare(days)
-    r, a = res["radar"], res["average"]
+    r, a = res[radar.MODEL], res["average"]
     return {
         "weekday": weekday, "weeks": len(days), **res,
         # kept flat for the radar page
