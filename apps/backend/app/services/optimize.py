@@ -1,32 +1,59 @@
-"""Delivery optimization on real geography (services/geo.py) instead of « departure + 12 min per stop ».
+"""Delivery optimization on real road times (services/geo.py: OSRM, cached) instead of « departure + 12 min per stop ».
 
     plan(date)        current runs vs optimized runs: km, hours, €, ETAs, load, plus the cost to serve each stop
     apply(date)       writes the optimized stops / ETAs to the route runs (and moves orders that changed truck)
     breakdown(...)    a truck stops after stop N: its remaining stops go to the other trucks, else dock pickup / tomorrow
 
-Optimization: nearest neighbour + 2-opt inside each truck, then moving single stops between trucks when it saves
-km, within capacity (kg) and the delivery window. Small enough (≤ ~60 stops a day) to run on every request.
+Solver: Google OR-Tools, a vehicle routing problem over the day's trucks, minimising € (km × fuel + hours × driver):
+    time windows    each client between 06:30 and 11:00 (before shops open), or earlier when their file says so
+                    (« livraison avant 10h »); a truck that arrives early waits
+    capacity        each truck's kg (orders weighed with routing.weight_kg)
+    cold chain      at most COLD_CHAIN_MAX_MIN between leaving the depot and the drop (chilled meat in a frigo van)
+    trucks          a stop may change truck when that is cheaper (the zone runs are a starting point, not a rule)
+Every one of these is hard; if the day can't satisfy them all (too many orders), they turn into heavy penalties so
+there is still a plan, and the late / over-time stops are flagged. No OR-Tools solution: the old heuristic
+(nearest neighbour + 2-opt + moving stops between trucks). Results are cached until the data changes, so the radar
+and the campaign can ask on every « oui ».
 """
 
 from __future__ import annotations
 
+import re
+from functools import lru_cache
+
+from ortools.constraint_solver import pywrapcp, routing_enums_pb2
+
 from app import crud
 from app.core.activity import Ctx, log_event, today
-from app.core.db import Doc, transactional
+from app.core.db import Doc, data_version, transactional
 from app.core.errors import bad_request
 from app.core.utils import add_minutes, fr_day, round2
 from app.services import clients, geo, routing
 from app.services.stock import line_qty
 
-WINDOW_END = "11:00"  # deliveries 06:30 – 11:00 (before shops open)
+WINDOW_START, WINDOW_END = "06:30", "11:00"  # deliveries 06:30 – 11:00 (before shops open), 02-journee-type.md
 CRISIS_WINDOW_END = "11:30"  # a rescued stop may arrive a bit later
 MIN_ORDER_HT = 120.0  # house rule: below, pickup at the Arnavaux dock
 COSTLY_SHARE = 0.25  # delivering costs more than 25 % of the order's margin
+COLD_CHAIN_MAX_MIN = 300  # assumption: chilled meat stays at most 5 h in the frigo van (05:45 departure → 10:45)
+SOLVER_MS = 500
 
 
 def _mins(hhmm: str) -> int:
     h, m = (int(x) for x in hhmm.split(":"))
     return h * 60 + m
+
+
+def window(client_id: str) -> tuple[int, int]:
+    """(earliest, latest) delivery minute for a client: the house window, narrowed by their file
+    (« livraison avant 10h », « après 7h30 »)."""
+    lo, hi = _mins(WINDOW_START), _mins(WINDOW_END)
+    text = ((crud.clients.get(client_id) or {}).get("preferences") or "").lower()
+    if m := re.search(r"livr\w* avant (\d{1,2}) ?h ?(\d{2})?", text):
+        hi = min(hi, int(m[1]) * 60 + int(m[2] or 0))
+    if m := re.search(r"livr\w* (?:après|apres|à partir de) (\d{1,2}) ?h ?(\d{2})?", text):
+        lo = max(lo, int(m[1]) * 60 + int(m[2] or 0))
+    return lo, hi
 
 
 # ── points and tours ──
@@ -52,10 +79,14 @@ def _tour(points: list[Doc], start: Doc = geo.DEPOT, back_to: Doc | None = geo.D
 
 
 def _etas(points: list[Doc], departure: str, start: Doc = geo.DEPOT, already: float = 0) -> list[str]:
-    """Arrival time at each point, leaving `start` at departure + `already` minutes."""
+    """Arrival time at each point, leaving `start` at departure + `already` minutes; a truck early for a client's
+    window waits for it to open."""
     out, t, prev = [], float(already), start
+    dep = _mins(departure)
     for p in points:
         t += geo.minutes(prev, p)
+        if p.get("clientId"):
+            t = max(t, window(p["clientId"])[0] - dep)
         out.append(add_minutes(departure, round(t)))
         t += geo.DROP_MIN
         prev = p
@@ -109,15 +140,22 @@ def _summary(run: Doc, route: Doc, points: list[Doc]) -> Doc:
         "departure": route["departureTime"], "capacityKg": route["capacityKg"], "loadKg": round2(load),
         "km": round2(km_total), "hours": round2(minutes / 60), "costEur": round2(_cost(km_total, minutes)),
         "lastEta": etas[-1] if etas else route["departureTime"],
-        "stops": [{"orderId": p["orderId"], "clientId": p["clientId"], "lat": p["lat"], "lng": p["lng"], "eta": e}
+        "maxInVanMin": max((_mins(e) - _mins(route["departureTime"]) for e in etas), default=0),
+        "lateStops": sum(_mins(e) > window(p["clientId"])[1] for p, e in zip(points, etas)),
+        "stops": [{"orderId": p["orderId"], "clientId": p["clientId"], "lat": p["lat"], "lng": p["lng"], "eta": e,
+                   **({"late": True} if _mins(e) > window(p["clientId"])[1] else {})}
                   for p, e in zip(points, etas)],
     }  # fmt: skip
 
 
 def _feasible(points: list[Doc], route: Doc, window_end: str = WINDOW_END) -> bool:
+    """Capacity, every client inside their window (capped by `window_end`) and the cold chain."""
     etas = _etas(points, route["departureTime"])
     load = sum(_order_weight(p["orderId"]) for p in points)
-    return load <= route["capacityKg"] and (not etas or _mins(etas[-1]) <= _mins(window_end))
+    dep, cap = _mins(route["departureTime"]), _mins(window_end)
+    return load <= route["capacityKg"] and all(
+        _mins(e) <= min(window(p["clientId"])[1], cap) if window_end == WINDOW_END else _mins(e) <= cap for p, e in zip(points, etas)
+    ) and all(_mins(e) - dep <= COLD_CHAIN_MAX_MIN for e in etas)
 
 
 def _runs(date: str) -> list[tuple[Doc, Doc, list[Doc]]]:
@@ -126,7 +164,84 @@ def _runs(date: str) -> list[tuple[Doc, Doc, list[Doc]]]:
 
 
 def _optimize(runs: list[tuple[Doc, Doc, list[Doc]]]) -> list[list[Doc]]:
-    """Optimized point lists, same order as `runs`."""
+    """Optimized point lists, same order as `runs`: OR-Tools, else the heuristic."""
+    key = tuple((r["id"], tuple(p["orderId"] for p in pts)) for r, _, pts in runs)
+    order = _optimize_cached(key, data_version(), geo.source())
+    by_id = {p["orderId"]: p for _, _, pts in runs for p in pts}
+    return [[by_id[o] for o in tour] for tour in order]
+
+
+@lru_cache(maxsize=16)
+def _optimize_cached(key: tuple, _version: int, _source: str) -> list[tuple[str, ...]]:
+    runs = [(crud.route_runs.require(rid), None, None) for rid, _ in key]
+    runs = [(r, crud.routes.require(r["routeId"]), [_stop_point(s) for s in sorted(r["stops"], key=lambda s: s["seq"])]) for r, _, _ in runs]
+    tours = solve(runs) or _heuristic(runs)
+    return [tuple(p["orderId"] for p in t) for t in tours]
+
+
+def solve(runs: list[tuple[Doc, Doc, list[Doc]]], hard: bool = True) -> list[list[Doc]] | None:
+    """OR-Tools VRP over the day's trucks: € cost, time windows, capacity, cold chain. With hard constraints first;
+    when the day can't meet them all, again with heavy penalties instead (so there is a plan, with flagged stops)."""
+    points = [p for _, _, pts in runs for p in pts]
+    if not points:
+        return [[] for _ in runs]
+    geo.prefetch([geo.DEPOT, *points])
+    nodes = [geo.DEPOT, *points]
+    n, nv = len(nodes), len(runs)
+    km_ = [[geo.km(a, b) if i != j else 0.0 for j, b in enumerate(nodes)] for i, a in enumerate(nodes)]
+    mn = [[geo.minutes(a, b) if i != j else 0.0 for j, b in enumerate(nodes)] for i, a in enumerate(nodes)]
+    service = [0] + [geo.DROP_MIN] * len(points)
+    manager = pywrapcp.RoutingIndexManager(n, nv, 0)
+    model = pywrapcp.RoutingModel(manager)
+
+    # matrices evaluated in C++: no Python callback in the search loop
+    cost = [[round(100 * _cost(km_[a][b], mn[a][b] + service[a])) for b in range(n)] for a in range(n)]  # euro cents
+    model.SetArcCostEvaluatorOfAllVehicles(model.RegisterTransitMatrix(cost))
+    t_cb = model.RegisterTransitMatrix([[round(mn[a][b] + service[a]) for b in range(n)] for a in range(n)])
+    model.AddDimension(t_cb, 180, 24 * 60, False, "time")  # waiting allowed (early for a window)
+    time_dim = model.GetDimensionOrDie("time")
+    model.AddDimension(t_cb, 180, COLD_CHAIN_MAX_MIN if hard else 24 * 60, True, "van")  # minutes since departure
+    van = model.GetDimensionOrDie("van")
+    weights = [0] + [round(_order_weight(p["orderId"])) for p in points]
+    w_cb = model.RegisterUnaryTransitVector(weights)
+    model.AddDimensionWithVehicleCapacity(w_cb, 0, [round(route["capacityKg"]) for _, route, _ in runs], True, "load")
+
+    for v, (_, route, _) in enumerate(runs):
+        dep = _mins(route["departureTime"])
+        time_dim.CumulVar(model.Start(v)).SetRange(dep, dep)
+        model.SetFixedCostOfVehicle(0, v)
+    for k, p in enumerate(points, start=1):
+        idx = manager.NodeToIndex(k)
+        lo, hi = window(p["clientId"])
+        if hard:
+            time_dim.CumulVar(idx).SetRange(lo, hi)
+        else:
+            time_dim.CumulVar(idx).SetMin(lo)
+            time_dim.SetCumulVarSoftUpperBound(idx, hi, 500)  # 5 € a minute late
+            van.SetCumulVarSoftUpperBound(idx, COLD_CHAIN_MAX_MIN, 500)
+    for i in range(model.Size()):
+        if not model.IsEnd(i):  # time in the van grows exactly like the clock, waits included
+            model.solver().Add(van.SlackVar(i) == time_dim.SlackVar(i))
+
+    params = pywrapcp.DefaultRoutingSearchParameters()
+    params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+    params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+    params.time_limit.FromMilliseconds(SOLVER_MS)
+    sol = model.SolveWithParameters(params)
+    if sol is None:
+        return solve(runs, hard=False) if hard else None
+    tours = []
+    for v in range(nv):
+        i, tour = sol.Value(model.NextVar(model.Start(v))), []
+        while not model.IsEnd(i):
+            tour.append(points[manager.IndexToNode(i) - 1])
+            i = sol.Value(model.NextVar(i))
+        tours.append(tour)
+    return tours
+
+
+def _heuristic(runs: list[tuple[Doc, Doc, list[Doc]]]) -> list[list[Doc]]:
+    """Fallback: nearest neighbour + 2-opt per truck, then single stops moved between trucks when it saves km."""
     tours = [_two_opt(_nearest_neighbour(pts)) for _, _, pts in runs]
     # Move single stops between trucks while it saves at least 0.5 km and both trucks stay feasible.
     for _ in range(60):
@@ -199,9 +314,11 @@ def plan(date: str | None = None) -> Doc:
     runs = _runs(day)
     if not runs:
         raise bad_request("no_runs", f"Aucune tournée avec des arrêts le {day}")
+    roads = geo.prefetch([geo.DEPOT, *(p for _, _, pts in runs for p in pts)])
     current = [_summary(r, route, pts) for r, route, pts in runs]
     optimized_points = _optimize(runs)
-    optimized = [_summary(r, route, pts) for (r, route, _), pts in zip(runs, optimized_points)]
+    optimized = [_summary(r, route, pts) for (r, route, _), pts in zip(runs, optimized_points) if pts]
+    parked = [route["name"] for (_, route, _), pts in zip(runs, optimized_points) if not pts]  # cheaper to leave home
     moved = [
         {"orderId": p["orderId"], "clientId": p["clientId"], "from": runs[a][1]["name"], "to": runs[b][1]["name"]}
         for b, pts in enumerate(optimized_points) for p in pts
@@ -215,6 +332,7 @@ def plan(date: str | None = None) -> Doc:
     serve = sorted((c for pts in optimized_points for c in _cost_to_serve(pts)), key=lambda c: -(c["costShare"] or 0))
     return {
         "date": day, "depot": geo.DEPOT, "current": current, "optimized": optimized, "moved": moved,
+        "parked": parked, "roads": roads, "solver": "or-tools", "constraints": {"window": [WINDOW_START, WINDOW_END], "coldChainMaxMin": COLD_CHAIN_MAX_MIN},
         "totals": {"before": before, "after": after, "savedKm": round2(before["km"] - after["km"]),
                    "savedHours": round2(before["hours"] - after["hours"]), "savedEur": round2(before["costEur"] - after["costEur"])},
         "costToServe": serve,
@@ -235,10 +353,14 @@ def apply(ctx: Ctx, date: str | None = None) -> Doc:
             o = crud.orders.get(s["orderId"])
             if o and o.get("routeRunId") != run["id"]:
                 crud.orders.put({**o, "routeRunId": run["id"]})
+    used = {t["runId"] for t in result["optimized"]}
+    for run in crud.route_runs.filter(lambda r: r["date"] == result["date"] and r["stops"] and r["id"] not in used):
+        crud.route_runs.put({**run, "stops": []})  # a parked truck: its stops went to the others
     t = result["totals"]
     log_event(ctx, "route_run.optimized", "route_run", result["date"],
               f"Tournées du {result['date']} optimisées : {t['savedKm']:.0f} km et {t['savedEur']:.0f} € économisés, "
-              f"{len(result['moved'])} arrêt(s) changé(s) de camion")  # fmt: skip
+              f"{len(result['moved'])} arrêt(s) changé(s) de camion"
+              + (f", {len(result['parked'])} camion(s) laissé(s) au dépôt" if result["parked"] else ""))  # fmt: skip
     return result
 
 
@@ -268,6 +390,7 @@ def breakdown(run_id: str, after_stop: int) -> Doc:
     if not 0 <= after_stop < len(stops):
         raise bad_request("bad_stop", f"Arrêt {after_stop} hors de la tournée ({len(stops)} arrêts)")
     pts = [_stop_point(s) for s in stops]
+    geo.prefetch([geo.DEPOT, *(p for _, _, ps in _runs(run["date"]) for p in ps)])
     etas = _etas(pts, route["departureTime"])
     done, left = pts[:after_stop], pts[after_stop:]
     at = etas[after_stop - 1] if after_stop else add_minutes(route["departureTime"], 10)

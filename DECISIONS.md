@@ -40,11 +40,15 @@ Specs : [V1](.plans/night-line-shortage-triage-spec.md) · [V2 Radar](.plans/dem
    - Jev classe chaque réponse du client en environ 300 ms : oui, modifie, non, rappeler ;
    - chaque « oui » crée la commande via les garde-fous (`finalize_order`) ;
    - les tournées de demain sont ré-optimisées et le tracé se met à jour en direct (`services/optimize.py`).
-5. **Tournées sur la vraie géographie** (`services/geo.py`, `services/optimize.py`). Avant, l'ERP rangeait les arrêts sans géographie (« départ + 12 min par arrêt »). Maintenant :
-   - les arrêts sont ordonnés par proximité, sur les coordonnées tirées du code postal ;
-   - on échange des arrêts entre camions ;
-   - capacité et créneau sont respectés.
-   Sur les tournées du jour : **559 km → 352 km**, soit environ 4 h 20 et 240 € économisés. On calcule aussi le coût de livraison de chaque client et on signale les petites commandes lointaines.
+5. **Tournées : vrai solveur, vrais temps de route** (`services/geo.py`, `services/optimize.py`). Avant, l'ERP rangeait les arrêts sans géographie (« départ + 12 min par arrêt »). Maintenant :
+   - **temps et distances de route réels** : une matrice OSRM (le même routeur public que le tracé de la carte), demandée en un appel et gardée dans la base (table `road_legs`) : une paire de clients n'est demandée qu'une fois. Hors ligne, on revient à l'estimation (ligne droite × 1,35) ; `ROAD_TIMES=estimate` la force ;
+   - **Google OR-Tools** (problème de tournées de véhicules) sur les camions du jour, en minimisant les € (km × 0,55 € + heures × 30 €) ;
+   - **créneaux** : chaque client entre 6 h 30 et 11 h, ou plus tôt si sa fiche le dit (« livraison avant 10h ») ; un camion en avance attend ;
+   - **capacité** de chaque camion en kg ;
+   - **chaîne du froid** : au plus 5 h entre le départ du quai et la livraison (hypothèse, réglable : `COLD_CHAIN_MAX_MIN`) ;
+   - un arrêt peut changer de camion, et un camion peut rester au dépôt si c'est moins cher. Si la journée ne peut pas tout respecter, les contraintes deviennent de fortes pénalités et les arrêts en retard sont signalés ;
+   - **re-calcul à chaque « oui »** de la campagne : 0,5 à 0,7 s, mis en cache jusqu'à la prochaine écriture.
+   Sur les tournées du jour (temps OSRM) : **601 km / 807 € → 378 km / 566 €**, 0 arrêt en retard, aucun arrêt plus de 4 h 33 dans le camion, 2 camions laissés au dépôt. L'ancienne heuristique (plus proche voisin + 2-opt) faisait 391 km / 589 €. On calcule aussi le coût de livraison de chaque client et on signale les petites commandes lointaines.
 6. **Page `/radar`** : une carte, les clients qui sonnent, les appels en cours et le tracé qui se redessine à chaque « oui ».
 7. **L'argent, en un chiffre** : chaque campagne calcule ses « € gagnés » = la marge des commandes prises (prix − coût d'achat ; un appel d'ajout ne compte que ce qu'il ajoute) + les € économisés sur les tournées + le temps commercial évité (4 min par appel à 25 €/h, hypothèses affichées).
 
