@@ -297,6 +297,22 @@ export function ClientDetail({ c, forecast, call, delivered, onBack }: {
         <Stat label="Probabilité" value={`${Math.round(c.probability * 100)} %`} />
       </div>
 
+      {!explain ? (
+        <motion.button type="button" onClick={() => setExplain(true)}
+          initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 0.15 }}
+          whileHover={{ y: -1 }} whileTap={{ scale: 0.985 }}
+          className="group relative -mt-1 flex w-full items-center gap-3 overflow-hidden rounded-xl border border-primary/40 bg-primary/[.08] px-3 py-2.5 text-left transition-colors hover:border-primary/70 hover:bg-primary/[.12]">
+          <motion.span aria-hidden className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-primary/15 to-transparent"
+            animate={{ x: ["0%", "450%"] }} transition={{ duration: 2.6, repeat: Infinity, repeatDelay: 1.8, ease: "easeInOut" }} />
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground"><BarChart3 size={16} /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-semibold">Comment on a calculé {fmtMoney(c.status === "upsell" ? c.upliftHt : c.totalHt, { compact: true })} ?</span>
+            <span className="block truncate text-[11.5px] text-muted-foreground">Ses commandes, les mêmes semaines l'an dernier, produit par produit</span>
+          </span>
+          <ChevronDown size={16} className="shrink-0 -rotate-90 text-primary transition-transform group-hover:translate-x-0.5" />
+        </motion.button>
+      ) : null}
+
       <AnimatePresence initial={false}>
         {explain ? <PredictionExplain key="explain" c={c} forecast={forecast} onClose={() => setExplain(false)} /> : null}
       </AnimatePresence>
