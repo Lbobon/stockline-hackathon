@@ -4,6 +4,8 @@ FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 ARG APP
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/venv PATH=/venv/bin:$PATH PYTHONUNBUFFERED=1
 WORKDIR /app/apps/${APP}
+# LightGBM (backend's demand model) needs OpenMP at runtime
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
 
 COPY apps/${APP}/pyproject.toml apps/${APP}/uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-project

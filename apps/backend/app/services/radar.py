@@ -6,7 +6,8 @@
     events       the ERP's events calendar (crud.calendar: ramadan, aïds, school holidays, christmas, OM matches…);
                  each one multiplies what a segment buys by the uplift MEASURED on its past occurrences
                  (services/demand.uplift), adds what the client only buys for it (dates at ramadan), or, when there
-                 is no history (a match, a cold snap, weddings), applies the team's labelled estimate
+                 is no history (weddings), applies the team's labelled estimate. Matches, weather and concerts come
+                 from live feeds (services/feeds.py) and are measured like the rest
     price        the client's own price (services/pricing.price_for)
 
 Clients who already have an order for the date are "ordered", or "upsell" when an event calls for more (addLines);
@@ -24,17 +25,21 @@ Who the campaign calls first (prioritize): loyal repeat customers first, then by
 from __future__ import annotations
 
 import math
+import os
 
 from app import crud
 from app.core.activity import today
 from app.core.db import Doc
 from app.core.utils import add_days, days_between, round2, weekday_of
 from app.services import clients as client_svc
-from app.services import demand, geo, optimize, pricing, routing, shortages
-from app.services.stock import stock_levels
+from app.services import demand, demand_gbm, geo, optimize, pricing, routing, shortages
 from app.services.clients import is_sale
+from app.services.stock import stock_levels
 
 WEEKS = 12
+# Who picks the lines and quantities of a predicted order: "gbm" (LightGBM, services/demand_gbm.py) won the backtest
+# (DECISIONS.md §4: CA error 17 % vs 19 % on event days, quantities ±19 % vs ±21 % in normal weeks); "radar" = median × uplift.
+MODEL = os.environ.get("RADAR_MODEL", "gbm")
 MIN_PROBABILITY = 0.35
 EVENT_MIN_PROBABILITY = 0.15
 BASKET_MIN_FREQUENCY = 0.5  # a usual product is proposed when it is in at least half the client's recent orders (backtest: € forecast ≈ € delivered)
@@ -137,10 +142,12 @@ def _pitch(e: Doc) -> str:
     return f"{e['title']} : {e['pitch']}"
 
 
-def forecast_client(client: Doc, date: str, evs: list[Doc], as_of: str | None = None, model: str = "radar") -> Doc | None:
+def forecast_client(client: Doc, date: str, evs: list[Doc], as_of: str | None = None, model: str | None = None) -> Doc | None:
     """One client's forecast for `date`, or None when they are not served that day / not likely to order.
     `as_of` (backtest): forecast as it would have been made that day: history up to it only, existing orders ignored.
-    `model` (backtest): "radar" (baseline + measured uplift) or "average" (the plain 60-day average, no events)."""
+    `model`: "radar" (baseline + measured uplift), "gbm" (services/demand_gbm: LightGBM picks the lines and quantities,
+    measured events included; estimated ones still apply their boost) or "average" (the plain 60-day average, no events)."""
+    model = model or MODEL
     if client["status"] != "active" or "perdus" in (client.get("tags") or []):
         return None
     if weekday_of(date) not in (client.get("deliveryDays") or []):
@@ -154,7 +161,8 @@ def forecast_client(client: Doc, date: str, evs: list[Doc], as_of: str | None = 
     existing = None if as_of else next((o for o in crud.orders.rows.values()
                      if o["clientId"] == client["id"] and o["deliveryDate"] == date and o["status"] != "cancelled"), None)  # fmt: skip
     ups = demand.uplift(known)
-    mine = [e for e in evs if demand.targets(e, client)] if model == "radar" else []
+    mine = [e for e in evs if demand.targets(e, client)] if model != "average" else []
+    boosting = mine if model == "radar" else [e for e in mine if not demand.measured(e)]  # gbm learnt the measured ones
     if existing:
         lines = [{"productId": l["productId"], "productName": _product_name(l["productId"]), "unit": (crud.products.get(l["productId"]) or {}).get("unit", ""),
                   "qty": l["qty"], "baseQty": l["qty"], "unitPrice": l["unitPrice"], "eventId": None} for l in existing["lines"]]  # fmt: skip
@@ -180,6 +188,8 @@ def forecast_client(client: Doc, date: str, evs: list[Doc], as_of: str | None = 
         return None
     lines: list[Doc] = []
     every = demand.baseline(client["id"], date, known, min_frequency=0) if model == "radar" else []
+    if model == "gbm" and (g := demand_gbm.predict(client, date, known)):
+        every = [{"productId": x["productId"], "qty": x["qty"], "frequency": x["p"], "base": x["ref"]} for x in g]
     usual = [u for u in every if u["frequency"] >= demand.IN_BASKET_AT]
     if not usual:  # too few orders on this weekday (or the plain-average model): the 60-day basket
         basket = _basket(client["id"], as_of)
@@ -191,11 +201,13 @@ def forecast_client(client: Doc, date: str, evs: list[Doc], as_of: str | None = 
         if not pid or any(l["productId"] == pid for l in lines):
             continue
         unit = crud.products.require(pid)["unit"]
-        base_qty = _rounded(u["qty"], unit)
-        factor, eid = _boost(client, u["productId"], mine, ups)
-        lines.append({**_line(client["id"], pid, _rounded(u["qty"] * factor, unit) if eid else base_qty, base_qty, date, eid, note),
+        base_qty = _rounded(u.get("base", u["qty"]), unit)
+        factor, eid = _boost(client, u["productId"], boosting, ups)
+        if model == "gbm" and not eid and u["qty"] * factor > base_qty * (1 + demand.MIN_EFFECT):
+            eid = _boost(client, u["productId"], mine, ups)[1]  # the model raised it: named after the event it measured
+        lines.append({**_line(client["id"], pid, _rounded(u["qty"] * factor, unit), base_qty, date, eid, note),
                       "frequency": u.get("frequency", 1.0)})
-    lines += _extras(client, mine, {l["productId"] for l in lines}, known, date)
+    lines += _extras(client, boosting, {l["productId"] for l in lines}, known, date)
     if not lines:
         return None
     used = {l["eventId"] for l in lines if l["eventId"]}
@@ -206,7 +218,7 @@ def forecast_client(client: Doc, date: str, evs: list[Doc], as_of: str | None = 
         reason += " ; " + " ; ".join(_pitch(e) for e in mine if e["id"] in used)
     # what the client is worth that day on average: each product weighted by how often they actually take it,
     # the ones not proposed (taken now and then) included
-    occasional = sum(u["qty"] * _boost(client, u["productId"], mine, ups)[0] * u["frequency"] * float((crud.products.get(u["productId"]) or {}).get("price", 0))
+    occasional = sum(u["qty"] * _boost(client, u["productId"], boosting, ups)[0] * u["frequency"] * float((crud.products.get(u["productId"]) or {}).get("price", 0))
                      for u in every if not any(l["productId"] == u["productId"] for l in lines))  # fmt: skip
     expected = prob * (sum(l["qty"] * l["unitPrice"] * l["frequency"] for l in lines) + occasional)
     return {**base, "status": "predicted", "probability": round2(prob), "lines": lines, "totalHt": round2(total),
@@ -351,7 +363,7 @@ def suggestion(client_id: str, date: str | None = None) -> Doc:
 def action(calls: list[Doc], evs: list[Doc]) -> Doc:
     """« Appeler ces N clients, ces quantités, pour X € »: the campaign's expected take, from the forecast rows
     to call (a predicted order is worth its expectedHt; an add-on, P × the add-on), and the part the events bring,
-    split between uplift measured on history and the team's estimates (a match, the weather)."""
+    split between uplift measured on history and the team's estimates (weddings)."""
     estimated = {e["id"] for e in evs if not demand.measured(e)}
     ht = sum(r["expectedHt"] if r["status"] == "predicted" else r["probability"] * r["upliftHt"] for r in calls)
     up = {"measured": 0.0, "estimated": 0.0}
@@ -360,10 +372,10 @@ def action(calls: list[Doc], evs: list[Doc]) -> Doc:
             if l.get("eventId"):
                 up["estimated" if l["eventId"] in estimated else "measured"] += r["probability"] * (l["qty"] - l["baseQty"]) * l["unitPrice"]
     lines = sum(len(r["lines"] if r["status"] == "predicted" else r["addLines"]) for r in calls)
-    eur = lambda x: f"{x:,.0f}".replace(",", " ")  # noqa: E731
+    eur = lambda x: f"{x:,.0f}".replace(",", " ")
     pitch = f"Appeler {len(calls)} clients, {lines} lignes proposées : {eur(ht)} € HT de commandes attendues"
     parts = [f"{eur(up['measured'])} € de hausse mesurée sur l'historique" if up["measured"] > 0 else "",
-             f"{eur(up['estimated'])} € estimés (match, météo, mariages)" if up["estimated"] > 0 else ""]
+             f"{eur(up['estimated'])} € estimés (mariages)" if up["estimated"] > 0 else ""]
     if any(parts):
         pitch += ", dont " + " et ".join(p for p in parts if p)
     return {"calls": len(calls), "lines": lines, "expectedHt": round2(ht), "eventUpliftHt": round2(sum(up.values())),

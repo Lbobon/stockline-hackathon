@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 
 os.environ["DB_PATH"] = str(Path(tempfile.mkdtemp()) / "erp.db")
+os.environ["FEEDS"] = "off"  # the live sources (weather, matches) have their own test: tests/test_feeds.py
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -20,10 +21,12 @@ with TestClient(app) as c:
     by = {r["clientId"]: r for r in f["clients"]}
     s = f["summary"]
     assert s["predicted"] >= 10 and s["upsell"] >= 3 and s["upliftHt"] > 0, s
-    assert {e["id"] for e in f["events"]} >= {"om-psg", "mariages", "marche-noel-2026"}
+    assert {e["id"] for e in f["events"]} >= {"mariages", "marche-noel-2026"}
     ev = {e["id"]: e for e in f["events"]}
-    assert ev["om-psg"]["measured"] is None and ev["om-psg"]["basis"].startswith("estimation")  # no history: labelled
-    assert ev["marche-noel-2026"]["measured"] and ev["marche-noel-2026"]["basis"].startswith("mesuré sur 2")
+    assert ev["mariages"]["measured"] is None and ev["mariages"]["basis"].startswith("estimation")  # no history: labelled
+    # measured on its 2 past occurrences, and too weak to pass the noise test (demand._significant): said as such
+    assert ev["marche-noel-2026"]["measured"]["snacking"]["occurrences"] == 2
+    assert ev["marche-noel-2026"]["basis"] == "pas d'effet mesurable sur l'historique", ev["marche-noel-2026"]["basis"]
     assert f["action"]["calls"] == s["toCall"] and f["action"]["expectedHt"] > 0 and f["action"]["pitch"].startswith(f"Appeler {s['toCall']} clients")
 
     # The calendar is an ERP table: ramadan and the aïds measured from history, per segment.
@@ -50,11 +53,12 @@ with TestClient(app) as c:
         if r["status"] == "upsell":
             assert r["existingOrderId"] and r["addLines"] and all(l["eventId"] for l in r["addLines"])
 
-    # The match boosts a snack's spits; never above what the event allows.
-    snack = next(r for r in f["clients"] if r["status"] == "predicted" and any(l["eventId"] == "om-psg" for l in r["lines"]))
-    for l in snack["lines"]:
-        if l["eventId"] == "om-psg":
-            assert l["baseQty"] < l["qty"] <= l["baseQty"] * 1.4 + 1, l
+    # An estimated event raises a line, never above what the estimate allows.
+    est = {b["productId"]: b["factor"] for b in ev["mariages"]["boosts"]}
+    for r in f["clients"]:
+        for l in [*r.get("lines", []), *r.get("addLines", [])]:
+            if l["eventId"] == "mariages" and l["baseQty"]:
+                assert l["qty"] <= l["baseQty"] * est.get(l["productId"], 4) + 1, l
 
     # Weddings: caterers who already ordered get an add-on call for whole lambs.
     assert any(r["status"] == "upsell" and any(l["productId"] == "prd_0001" for l in r["addLines"]) for r in f["clients"])
@@ -86,9 +90,10 @@ with TestClient(app) as c:
     assert s["toCall"] == len(called) and s["skipped"] == len(rows) - len(called) and s["skipped"] >= 1
 
 
-    # One client, for the agent during an inbound call: the snack facing the match gets its boosted lines
-    sg = c.get(f"/api/radar/clients/{snack['clientId']}/suggestion", params={"date": "2026-11-25"}).json()
-    assert sg["status"] == "predicted" and any(l["eventId"] == "om-psg" for l in sg["lines"]) and sg["events"], sg
+    # One client, for the agent during an inbound call: a butcher during ramadan 2027 gets its boosted lines
+    butcher = next(r for r in rf["clients"] if r["status"] == "predicted" and any(l["eventId"] == "ramadan-2027" for l in r["lines"]))
+    sg = c.get(f"/api/radar/clients/{butcher['clientId']}/suggestion", params={"date": "2027-02-10"}).json()
+    assert sg["status"] == "predicted" and any(l["eventId"] == "ramadan-2027" for l in sg["lines"]) and sg["events"], sg
     assert c.get("/api/radar/clients/cli_0044/suggestion").json()["status"] == "unlikely"  # lost client
     assert c.get("/api/radar/clients/cli_9999/suggestion").status_code == 404
 

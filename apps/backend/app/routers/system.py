@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from app.core.activity import bus, list_events
 from app.core.config import DATA_DIR
 from app.core.datapack import counts, reset_from_pack
+from app.services import feeds
 from app.core.db import get_meta
 from app.core.listing import LIMIT_MAX, ListDep, Page, legacy_limit
 from app.core.utils import int_param
@@ -107,5 +108,6 @@ async def activity_stream():
 async def admin_reset():
     """Wipe the database and reload the data pack from DATA_DIR."""
     source = reset_from_pack()
+    feeds.materialize()  # the live calendar sources survive a reset (their cache is not in the data pack)
     log.info("reset from %s: %s", source, counts())
     return {"ok": True}

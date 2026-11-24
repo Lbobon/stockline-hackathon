@@ -15,8 +15,8 @@ async def radar_suggestion(
 ) -> dict:
     """
     Radar de demande pour un client : ce qu'il commande d'habitude ce jour-là (baseQty, médiane de ses 8 derniers mêmes jours)
-    et ce que l'événement qui approche y ajoute (qty, eventId), mesuré sur l'historique (ramadan, aïd, fêtes…) ou estimé
-    (match, météo). À appeler quand un client passe commande ou demande « l'habituel » : propose UNE fois, en une phrase,
+    et ce que l'événement qui approche y ajoute (qty, eventId), mesuré sur l'historique (ramadan, aïd, match de l'OM,
+    météo…) ou estimé (mariages). À appeler quand un client passe commande ou demande « l'habituel » : propose UNE fois, en une phrase,
     le produit le plus relevé par l'événement, avec la raison. Demand forecast for one client.
     """
     r = await ctx.erp.get(f"/api/radar/clients/{enc(client_id)}/suggestion", {"date": date})

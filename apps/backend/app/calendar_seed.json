@@ -468,39 +468,6 @@
   "source": "calendrier scolaire, zone B"
  },
  {
-  "id": "froid",
-  "kind": "weather",
-  "date": "2026-11-25",
-  "time": null,
-  "title": "Vague de froid : 4 °C le matin",
-  "affects": {
-   "from": "2026-11-25",
-   "to": "2026-11-27"
-  },
-  "segments": [
-   "restaurants"
-  ],
-  "pitch": "avec le froid qui arrive, les tajines et les couscous repartent",
-  "type": "cold",
-  "source": "prévision Météo-France",
-  "estimate": {
-   "boosts": [
-    {
-     "productId": "prd_0007",
-     "factor": 1.25
-    },
-    {
-     "productId": "prd_0008",
-     "factor": 1.25
-    },
-    {
-     "productId": "prd_0030",
-     "factor": 1.2
-    }
-   ]
-  }
- },
- {
   "id": "marche-noel-2026",
   "type": "christmas_market",
   "kind": "local",
@@ -554,47 +521,6 @@
      "productId": "prd_0001",
      "qty": 36,
      "note": "2 agneaux entiers pour le méchoui du samedi : carcasses à commander la veille avant 14 h"
-    }
-   ]
-  }
- },
- {
-  "id": "om-psg",
-  "kind": "sport",
-  "date": "2026-11-25",
-  "time": "21:00",
-  "title": "OM – PSG au Vélodrome",
-  "affects": {
-   "from": "2026-11-25",
-   "to": "2026-11-25"
-  },
-  "segments": [
-   "snacking"
-  ],
-  "pitch": "avec le match OM–PSG demain soir, les snacks tournent à fond",
-  "type": "om_home",
-  "source": "calendrier Ligue 1",
-  "estimate": {
-   "boosts": [
-    {
-     "productId": "prd_0043",
-     "factor": 1.4
-    },
-    {
-     "productId": "prd_0044",
-     "factor": 1.4
-    },
-    {
-     "productId": "prd_0045",
-     "factor": 1.4
-    },
-    {
-     "productId": "prd_0049",
-     "factor": 1.3
-    },
-    {
-     "productId": "prd_0050",
-     "factor": 1.3
     }
    ]
   }

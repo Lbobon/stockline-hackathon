@@ -12,14 +12,17 @@ measured from the order history per client segment.
     event basket  products a client only buys for that event (dates and leben at ramadan): what they bought at its
                   last occurrence, median quantity.
 
-Events with no history to measure (an OM match, a cold snap, the weekend's weddings) carry the team's own `estimate`
-in the calendar instead, and say so.
+OM home matches, weather events and concerts come from live feeds (services/feeds.py) with years of past occurrences:
+they are measured like the rest, and an effect that doesn't beat the day-to-day noise (_significant) counts as ×1.
+Events with no history to measure (the weekend's weddings) carry the team's own `estimate` in the calendar instead,
+and say so.
 """
 
 from __future__ import annotations
 
+import math
 from functools import lru_cache
-from statistics import median
+from statistics import mean, median, stdev
 
 from app import crud
 from app.core.db import Doc, data_version, per_data_version
@@ -86,6 +89,20 @@ def _excluded() -> frozenset[str]:
             while d <= e["affects"]["to"]:
                 out.add(d)
                 d = add_days(d, 1)
+    return frozenset(out)
+
+
+# A weather day, a match or a concert says nothing about itself when it falls in a holiday or a religious window:
+# the canteens closed for the summer would read as « heat ×0.6 ». Those days are left out of its measure.
+SHORT_KINDS = ("weather", "sport", "concert")
+
+
+@per_data_version
+def _seasonal() -> frozenset[str]:
+    out = set()
+    for e in crud.calendar.rows.values():
+        if measured(e) and e.get("kind") not in SHORT_KINDS:
+            out.update(_days(e))
     return frozenset(out)
 
 
@@ -170,10 +187,12 @@ def _uplift(done: tuple[str, ...], _version: int) -> dict[str, dict[str, Doc]]:
                 group.setdefault(segment_of(c), []).append(c["id"])
         for seg, members in group.items():
             ids = tuple(members)
-            a = acc.setdefault((e["type"], seg), {"A": 0.0, "B": 0.0, "n": 0, "occ": set(), "r": {}, "all": []})
+            a = acc.setdefault((e["type"], seg), {"A": 0.0, "B": 0.0, "n": 0, "occ": set(), "r": {}, "all": [], "day": []})
             counted = []
             for d in _days(e):
                 if not e.get("baselineExcluded") and d in _excluded():  # a school-holiday day inside ramadan says nothing about holidays
+                    continue
+                if e.get("kind") in SHORT_KINDS and d in _seasonal():
                     continue
                 base_days = same_weekdays(d, e["affects"]["from"])
                 if len(base_days) < MIN_BASE_DAYS:
@@ -185,6 +204,7 @@ def _uplift(done: tuple[str, ...], _version: int) -> dict[str, dict[str, Doc]]:
                 now_q, now_eur = agg(ids, d)
                 a["A"] += now_eur
                 a["B"] += base_eur
+                a["day"].append(now_eur / base_eur)
                 a["n"] += 1
                 a["occ"].add(e["id"])
                 counted.append(d)
@@ -207,13 +227,26 @@ def _uplift(done: tuple[str, ...], _version: int) -> dict[str, dict[str, Doc]]:
     for (typ, seg), a in acc.items():
         if a["n"] < MIN_BASE_DAYS:
             continue
-        seg_f = _shrunk(a["A"], a["B"], a["n"])
-        line = _clamp(median(a["all"])) if len(a["all"]) >= MIN_BASE_DAYS else 1.0
+        # an effect within noise is no effect: the day-to-day (and line-to-line) spread decides (_significant)
+        seg_sig = _significant([math.log(max(r, 1e-3)) for r in a["day"]])
+        line_sig = _significant([math.log(max(r, 1e-3)) for r in a["all"]])
+        seg_f = _shrunk(a["A"], a["B"], a["n"]) if seg_sig else 1.0
+        line = _clamp(median(a["all"])) if len(a["all"]) >= MIN_BASE_DAYS and line_sig else 1.0
         # a product's own factor, pulled toward the segment's by SHRINK_DAYS pseudo-clients
-        products = {p: _clamp((len(r) * median(r) + SHRINK_DAYS * line) / (len(r) + SHRINK_DAYS)) for p, r in a["r"].items() if len(r) >= 2}
+        products = {p: _clamp((len(r) * median(r) + SHRINK_DAYS * line) / (len(r) + SHRINK_DAYS)) for p, r in a["r"].items()
+                    if len(r) >= 2 and _significant([math.log(max(x, 1e-3)) for x in r])}  # fmt: skip
         out.setdefault(typ, {})[seg] = {"factor": seg_f, "line": line, "products": products,
                                         "days": a["n"], "occurrences": len(a["occ"])}  # fmt: skip
     return out
+
+
+def _significant(logs: list[float], z: float = 3.0) -> bool:
+    """The mean log-ratio is more than `z` standard errors away from 0 (×1): a real effect, not the week's noise.
+    3, not 2: some 60 type × segment effects are tested, at 2 a few would pass by chance."""
+    if len(logs) < MIN_BASE_DAYS:
+        return False
+    sd = stdev(logs)
+    return sd == 0 or abs(mean(logs)) > z * sd / math.sqrt(len(logs))
 
 
 def _shrunk(actual: float, base: float, days: int, toward: float = 1.0) -> float:

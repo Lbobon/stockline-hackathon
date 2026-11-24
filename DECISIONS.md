@@ -28,15 +28,20 @@ Specs : [V1](.plans/night-line-shortage-triage-spec.md) · [V2 Radar](.plans/dem
    - sa **base** : la quantité médiane de chaque produit sur ses **8 derniers mêmes jours de semaine** (un produit compte s'il est sur au moins la moitié de ces commandes ; les jours de ramadan et d'Aïd sont sautés pour ne pas gonfler une semaine normale) ;
    - ses prix négociés.
    Un produit en rupture n'est jamais proposé : on prend son remplaçant habituel, sauf si le client refuse les substitutions.
-2. **Calendrier des événements, dans l'ERP** (table `calendar`, `GET/POST/DELETE /api/radar/calendar`, 39 événements de 2023 à 2027) : ramadan, Aïd el-Fitr, Aïd el-Kébir, vacances scolaires (zone B), fêtes de fin d'année, marché de Noël du Vieux-Port, match OM, vague de froid, mariages du week-end. Ce que fait chaque événement est **mesuré sur l'historique** (29 604 commandes) par type d'événement et par segment de clients (`GET /api/radar/uplift`) :
+2. **Calendrier des événements, dans l'ERP** (table `calendar`, `GET/POST/DELETE /api/radar/calendar`) : ramadan, Aïd el-Fitr, Aïd el-Kébir, vacances scolaires (zone B), fêtes de fin d'année, marché de Noël du Vieux-Port, mariages du week-end, plus trois **sources en direct** (`apps/backend/app/services/feeds.py`, `GET /api/radar/feeds`) :
+   - **météo** Open-Meteo pour Marseille, relevés depuis octobre 2023 et prévision à 16 jours : froid (≤ 11 °C), chaleur (≥ 32 °C), pluie (≥ 10 mm), mistral (≥ 40 km/h), soit 166 épisodes ;
+   - **matchs de l'OM au Vélodrome** (calendrier public de Ligue 1, openfootball) : 68 matchs à domicile depuis 2023, le vrai calendrier remplace le « OM–PSG » inventé (prochains : 22/11 contre Le Mans, 05/12 contre Nice) ;
+   - **agendas ICS** (Le Dôme ou toute salle : variable `CALENDAR_ICS="concert|Le Dôme|https://…"`), rangés en `concert`.
+   Les sources sont mises en cache dans SQLite (une panne réseau garde les dernières données, réessai toutes les 10 min ; `FEEDS=off` coupe le réseau) et survivent à un reset de l'ERP. Ce que fait chaque événement est **mesuré sur l'historique** (29 604 commandes) par type d'événement et par segment de clients (`GET /api/radar/uplift`) :
    - ramadan : boucheries ×3,4, supérettes ×3,8, traiteurs ×2,7, restaurants ×2,0 sur le chiffre d'affaires, mais les snacks ne bougent pas (×0,9) ;
    - Aïd el-Kébir (la semaine d'avant) : boucheries ×4 ;
    - vacances scolaires : cantines ×0,3 (elles ferment), le reste ≈ ×1,1 ;
    - sur une ligne, l'effet n'est pas le même que sur le chiffre d'affaires : au ramadan, un client commande aussi souvent, avec 35 % de lignes en plus et environ 2,5 fois plus par ligne. On mesure donc aussi un facteur par ligne (client par client : quantité médiane pendant l'événement ÷ quantité médiane des 8 semaines d'avant), par produit quand l'échantillon suffit, ramené vers le facteur du segment sinon.
    On ajoute aussi les produits qu'un client ne prend que pour l'événement (dattes, leben, smen au ramadan) : ce qu'il a pris à la dernière occurrence. Seuls les événements **déjà terminés** comptent : le rétro-test ne voit jamais l'événement qu'il note.
-   Le match OM, le froid et les mariages n'ont pas d'historique dans les données : ils gardent une **estimation**, marquée comme telle partout (page, API, phrase de synthèse).
+   Matchs, météo et concerts sont **mesurés** comme le reste, avec deux garde-fous : un jour de météo ou de match qui tombe pendant des vacances ou le ramadan n'entre pas dans sa mesure (sinon les cantines fermées l'été se lisent « chaleur ×0,6 »), et un effet qui ne dépasse pas trois écarts-types du bruit jour à jour compte pour ×1. Résultat honnête : presque rien ne bouge (froid : cantines ×1,5 ; chaleur : traiteurs ×1,3 par ligne ; match OM : boucheries ×1,13 par ligne ; pluie, mistral : rien de mesurable). Seuls les mariages, sans historique, gardent une **estimation**, marquée comme telle partout (page, API, phrase de synthèse).
    Les clients qui ont **déjà** commandé, mais qu'un événement concerne, reçoivent un **appel d'ajout** (« pour vos mariages de samedi, je vous ajoute deux agneaux ? »).
-   Synthèse calculée (`action` dans la prévision) : « Appeler 26 clients, 102 lignes proposées : 19 255 € HT de commandes attendues, dont 1 925 € de hausse mesurée sur l'historique et 4 738 € estimés (match, météo, mariages) ».
+   Synthèse calculée (`action` dans la prévision) : « Appeler 26 clients, 102 lignes proposées : 19 255 € HT de commandes attendues, dont 1 925 € de hausse mesurée sur l'historique et 4 738 € estimés (mariages) ».
+   **Modèle LightGBM** (`apps/backend/app/services/demand_gbm.py`, modèle par défaut, `RADAR_MODEL=radar` pour revenir à « médiane × hausse ») : qui commande reste le rythme sur 12 semaines ; pour chaque produit que le client a pris dans les 90 derniers jours ou à la même période l'an dernier, un classifieur donne la probabilité qu'il soit sur la commande et un régresseur (L1, une médiane) la quantité par rapport à sa base. Variables : historique du client (fréquences, médianes, dernière quantité, jours depuis), jour, mois, segment, produit, catégorie, événements mesurés du jour qui le concernent, météo. Entraîné sur 354 000 lignes (client × jour × produit) **avant le 1er du mois** du jour prévu, donc le rétro-test ne voit jamais ses propres jours ; 3 s de table + 2 s d'entraînement, fait au démarrage. Une ligne qu'il relève porte le nom de l'événement mesuré du jour, pour que l'agent puisse dire pourquoi.
    Pendant un appel entrant, l'agent appelle `radar_suggestion(client)` (`GET /api/radar/clients/{id}/suggestion`) et propose une fois le produit que l'événement relève.
 3. **Priorisation** (PR #49). Les clients **fidèles** passent d'abord (régularité, fréquence sur 90 jours, ancienneté), puis par **€ net attendu** = probabilité × marge − coût du détour du camion. Un client qui coûte plus à livrer qu'il ne rapporte n'est pas appelé, et on lui propose l'enlèvement au quai. Demain : 24 appels (20 fidèles), 2 clients écartés.
 4. **Appels en parallèle** (`apps/ai/app/campaign/`, `POST /ai/campaigns` et un flux SSE). Pour chaque appel :
@@ -93,7 +98,7 @@ Le simulateur (`apps/ai/sim`, `cd apps/ai && uv run python -m sim`) : un modèle
 
 **Appels génériques** (`python -m sim --generic 30 --seed 7`) : pour ne pas sur-ajuster l'agent à nos scénarios, on tire au hasard un vrai client et une des 15 situations courantes (change deux fois une quantité, décrit un produit sans son nom, demande un prix sans commander, réclamation, veut parler à un humain, produit hors catalogue, demande une remise, parle d'autre chose, « oui » ambigu, heure du camion, grosse commande, client pressé, retirer une ligne, client agressif, jour non livré). On ne vérifie que des règles vraies pour tout appel (bon client, rien écrit pour un autre, compte bloqué jamais confirmé, commande seulement si voulue), le juge fait le reste. Même graine = mêmes appels, pour comparer avant / après.
 
-Plus les tests du backend (`apps/backend/tests/` : `test_smart`, `test_shortages`, `test_radar`, `test_radar_backtest`, `test_dispatch`), 125 tests du service IA, et un test sur une **installation propre** (clone neuf + `make setup` + une campagne complète dans l'interface).
+Plus les tests du backend (`apps/backend/tests/` : `test_smart`, `test_shortages`, `test_radar`, `test_radar_backtest`, `test_feeds`, `test_dispatch`), 125 tests du service IA, et un test sur une **installation propre** (clone neuf + `make setup` + une campagne complète dans l'interface).
 
 ## 3. Choix techniques
 
@@ -165,20 +170,22 @@ Les 3 échecs restants des appels génériques changent d'un tirage à l'autre (
 | Scénarios d'appel radar (match, ajout mariages, refus) | 6/6 sur Haiku, juge 3,8 / 4,2 |
 | Jev sur les réponses (oui / modifie / non / rappeler) | 5/5 sur un contrôle manuel, ~300 ms |
 
-**Radar contre la simple moyenne** (rétro-test, chaque jour prévu la veille, `GET /api/radar/backtest` et `/backtest/events`, test `apps/backend/tests/test_radar_backtest.py`). Même liste de clients pour les deux modèles ; seule la quantité change. « Moyenne » = le panier moyen des 60 derniers jours sans événement (ce que faisait le radar avant). Chiffre d'affaires : Σ |prévu − livré| ÷ livré, jour par jour. Quantités : écart moyen sur les lignes proposées et commandées.
+**Trois modèles sur les mêmes jours** (rétro-test, chaque jour prévu la veille, `GET /api/radar/backtest` et `/backtest/events`, test `apps/backend/tests/test_radar_backtest.py`, ici avec les sources en direct). Même liste de clients pour les trois ; seules les lignes et les quantités changent. « Radar » = médiane des 8 mêmes jours × hausse mesurée ; « LightGBM » = le modèle ci-dessus ; « moyenne » = le panier moyen des 60 derniers jours sans événement. CA : Σ |prévu − livré| ÷ livré, jour par jour. Quantités : écart moyen sur les lignes proposées et commandées. Client : Σ |proposé − livré| ÷ livré, client par client.
 
-| Jours testés | Nb | Erreur sur le CA du jour (radar / moyenne) | Erreur sur les quantités | Lignes à ±20 % |
+| Jours testés | Nb | Erreur sur le CA du jour (LightGBM / radar / moyenne) | Quantités | Erreur client par client |
 |---|---|---|---|---|
-| 8 mercredis normaux | 8 | 21 % / 18 % | ±21 % / ±24 % | 62 % / 55 % |
-| Ramadan 2026 (un jour par semaine) | 4 | **26 % / 67 %** | **±23 % / ±42 %** | **56 % / 13 %** |
-| Aïd el-Fitr 2026 | 3 | 30 % / 59 % | ±25 % / ±38 % | 48 % / 22 % |
-| Aïd el-Kébir 2026 (semaine d'avant) | 6 | **23 % / 66 %** | ±23 % / ±36 % | 53 % / 37 % |
-| Vacances scolaires | 16 | 16 % / 27 % | ±22 % / ±30 % | 60 % / 49 % |
-| Marché de Noël 2025 | 4 | 11 % / 10 % | ±19 % / ±19 % | 63 % / 63 % |
-| Fêtes de fin d'année 2025 | 2 | 18 % / 3 % | ±20 % / ±18 % | 61 % / 64 % |
-| **Tous les jours d'événement de l'année** | 32 | **21 % / 47 %** (erreur −55 %) | **±22 % / ±31 %** (−29 %) | 57 % / 43 % |
+| 8 mercredis normaux | 8 | 19 % / 20 % / 18 % | **±19 %** / ±21 % / ±24 % | **0,74** / 0,92 / 0,78 |
+| Ramadan 2026 (un jour par semaine) | 4 | **12 %** / 25 % / 67 % | ±23 % / ±24 % / ±42 % | 0,78 / 0,72 / 0,65 |
+| Aïd el-Fitr 2026 | 3 | **17 %** / 30 % / 59 % | ±23 % / ±26 % / ±38 % | 0,59 / 0,59 / 0,66 |
+| Aïd el-Kébir 2026 (semaine d'avant) | 6 | 38 % / **23 %** / 66 % | ±26 % / ±23 % / ±36 % | 0,72 / 0,74 / 0,81 |
+| Vacances scolaires | 16 | **9 %** / 17 % / 27 % | ±18 % / ±22 % / ±30 % | 0,68 / 0,85 / 0,77 |
+| Matchs de l'OM au Vélodrome | 22 | **15 %** / 23 % / 42 % | ±21 % / ±24 % / ±34 % | 0,85 / 0,95 / 0,76 |
+| Jours de froid / chaleur / pluie / mistral | 69 | 12–19 % / 14–21 % / 13–40 % | ±17–23 % / ±20–28 % / ±23–42 % | 0,64–0,70 / 0,75–0,86 / 0,66–0,87 |
+| Marché de Noël 2025 | 4 | 10 % / 10 % / 10 % | ±17 % / ±18 % / ±19 % | 0,73 / 0,85 / 0,77 |
+| Fêtes de fin d'année 2025 | 2 | 3 % / 18 % / 3 % | ±17 % / ±20 % / ±18 % | 0,70 / 0,98 / 0,68 |
+| **Tous les jours d'événement de l'année** (chaque jour une fois) | ≤ 126 | **17 %** / 19 % / 35 % | **±20 %** / ±22 % / ±30 % | **0,69** / 0,80 / 0,74 |
 
-Lecture honnête : en semaine normale, le radar fait jeu égal avec la moyenne sur le chiffre d'affaires (un mercredi varie de 26 k€ à 52 k€, aucun des deux ne le devine) et il est meilleur sur les quantités. Il gagne nettement là où ça compte : au ramadan et à l'Aïd, il divise l'erreur sur le chiffre d'affaires par 2,5. Noël est un petit échantillon (2 jours), où il fait moins bien. L'erreur client par client reste forte pour les deux modèles (≈ 0,8) : les clients ne prennent pas les mêmes produits chaque semaine, ce que ni une médiane ni une moyenne ne devinent.
+Lecture honnête : en semaine normale, personne ne devine le chiffre d'affaires du jour (≈ 19 % pour les trois : un mercredi varie de 26 k€ à 52 k€), mais LightGBM propose les bonnes lignes et les bonnes quantités plus souvent (erreur client par client 0,74 contre 0,92 pour le radar). Sur les jours d'événement, il fait mieux que le radar presque partout (ramadan : CA à 12 % contre 25 %), sauf la semaine de l'Aïd el-Kébir où la hausse mesurée du radar reste meilleure (23 % contre 38 % : une seule occurrence passée dans ses données d'entraînement). Il est devenu le modèle par défaut parce qu'il gagne sur l'ensemble, pas sur chaque ligne. La météo et les matchs n'expliquent presque rien de la demande d'un grossiste halal : les sources sont branchées et mesurées, et le disent.
 
 Sur ce dernier run, les deux échecs sont : une coupure réseau de l'API (corrigée ensuite par une nouvelle tentative automatique, PR #35) et une remarque du juge sur un prospect. Le coût double avec l'orchestre (agents secondaires), mais reste à 1 centime par appel.
 
