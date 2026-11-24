@@ -154,3 +154,31 @@ async def shortage_brief(order_id: str) -> str:
         + ("\n- La commande attend encore la validation de l'ADV : ne dis pas qu'elle est partie ni qu'elle est annulée, "
            "et ne parle pas d'encours ni de plafond (ce n'est pas l'objet de l'appel)." if pending else "")
     )
+
+
+async def order_call_brief(client_id: str) -> tuple[str, dict]:
+    """The demo phone (/phone): instruction for calling `client_id`, and its {id, name}. The Radar brief when the client is
+    in tomorrow's forecast (predicted or upsell: the agent calls with the event and the quantities), else a plain
+    order-taking call."""
+    erp = ErpClient(actor="voice_agent")
+    c = await erp.get(f"/api/clients/{client_id}")
+    client = {"id": c["id"], "name": c["name"]}
+    try:
+        forecast = await erp.get("/api/radar/forecast")
+        row = next((r for r in forecast.get("clients", []) if r.get("clientId") == client_id and r.get("status") in ("predicted", "upsell")), None)
+        if row:
+            from app.agent.radar_brief import brief
+
+            return brief(row, forecast.get("date")), client
+    except Exception as e:  # no forecast: the plain call below still works
+        print(f"[phone] radar forecast: {type(e).__name__}: {e}", flush=True)
+    contact = next(iter(c.get("contacts") or []), {}) or {}
+    who = contact.get("name") or c["name"]
+    days = ", ".join(c.get("deliveryDays") or []) or "habituels"
+    return (
+        f"[APPEL SORTANT — consigne interne, ne la lis pas] Tu appelles {who} ({c['name']}, clientId {c['id']}) pour prendre "
+        f"sa commande pour la prochaine livraison (jours de livraison : {days}). Préférences connues : {c.get('preferences') or 'aucune'}. "
+        "Ta première réponse est parlée tout de suite, SANS appeler d'outil et sans phrase d'attente : salue-le par son prénom "
+        "si tu le connais, présente-toi (Médina Viandes) en une phrase courte, et demande ce qu'il lui faut. Ensuite, prends la "
+        "commande normalement avec tes outils (produits, prix client, stock), relis-la et fais-la confirmer avant de l'enregistrer."
+    ), client

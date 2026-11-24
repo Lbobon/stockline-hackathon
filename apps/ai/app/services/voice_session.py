@@ -41,7 +41,7 @@ from pydantic import TypeAdapter, ValidationError
 from app.agent import jev, run_agent
 from app.agent.caller import load_caller
 from app.agent.loop import ms_since
-from app.agent.outbound import shortage_brief
+from app.agent.outbound import order_call_brief, shortage_brief
 from app.clients import STTUpdate, TTSClient, get_llm_client, get_stt_client, get_tts_client
 from app.config import settings
 from app.guard import Guard, Verdict, until
@@ -79,6 +79,7 @@ from app.schemas.base import WireModel
 from app.tools import all_tools
 from app.tools.erp import Gate, draft_gate
 
+from . import phone_line
 from .handsfree import MAX_WAIT_S, Listener, backchannel, echo_of, is_complete, same_words
 from .utterance import Utterance
 from .vocabulary import stt_hint
@@ -175,8 +176,9 @@ conversations: dict[str, Conversation] = {}
 class VoiceConnection:
     """One WebSocket connection. Reads client messages; runs each turn as a background task."""
 
-    def __init__(self, ws: WebSocket):
+    def __init__(self, ws: WebSocket, mirror: bool = False):
         self.ws = ws
+        self.mirror = mirror  # the demo phone's session (/phone): every JSON message is copied to the PCs watching it
         self.conversation: Conversation | None = None
         self.recording: Utterance | None = None  # while the key is down
         self.turn: asyncio.Task | None = None
@@ -207,6 +209,8 @@ class VoiceConnection:
         async with self._send_lock:
             with suppress(WebSocketDisconnect, RuntimeError):  # the client is gone: nothing to do
                 if message.get("text") is not None:
+                    if self.mirror:
+                        phone_line.mirror(message["text"])
                     await self.ws.send_text(message["text"])
                 else:
                     await self.ws.send_bytes(message["bytes"])
@@ -244,12 +248,23 @@ class VoiceConnection:
             await self.open()  # no "start" yet: open a fresh conversation
 
         match msg:
-            case StartMessage(session_id=session_id, actor_name=actor_name, outbound_order_id=outbound_order_id, mode=mode):
+            case StartMessage(session_id=session_id, actor_name=actor_name, outbound_order_id=outbound_order_id,
+                              outbound_client_id=outbound_client_id, mode=mode):
                 await self.interrupt()
                 await self.open(session_id, actor_name, mode)
                 if outbound_order_id:  # outbound call: the agent speaks first, from a hidden brief
                     try:
                         self.start_turn(text=await shortage_brief(outbound_order_id), outbound=True)
+                    except Exception as e:
+                        await self.send(VoiceErrorMessage(message=str(e)))
+                elif outbound_client_id and not self.copilot:  # demo phone: the agent calls this client (Radar brief if forecast)
+                    try:
+                        brief, client = await order_call_brief(outbound_client_id)
+                        if self.conversation.call:
+                            self.conversation.call.state.client = client  # known from the start: card, register, voice
+                            if self.listener:  # the phone opened its hands-free mic first
+                                self.conversation.call.filler_after_ms = HANDSFREE_FILLER_MS
+                        self.start_turn(text=brief, outbound=True)
                     except Exception as e:
                         await self.send(VoiceErrorMessage(message=str(e)))
             case AudioStartMessage(mime=mime, hint=hint, speaker=speaker) if self.copilot:

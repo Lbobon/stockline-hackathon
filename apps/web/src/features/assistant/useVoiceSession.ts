@@ -47,9 +47,20 @@ const freshAgents = (): Record<string, AgentLive> =>
 export interface Providers { llm: string; stt: string; tts: string; sessionId: string }
 
 const REC_MIME = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
-const wsUrl = () => `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${AI_BASE}/voice`;
+const wsUrl = (path = "") => `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${AI_BASE}/voice${path}`;
 
-export function useVoiceSession() {
+/** The demo phone line (app/services/phone_line.py): how many phones wait on /phone, and what just happened. */
+export interface PhoneLine { phones: number; event?: string; at: number }
+
+/**
+ * line "phone": this is the demo phone's session (/phone), mirrored live to the PCs watching.
+ * watch: a PC watching the demo phone's call (no mic, no audio): same turns, live, from the mirrored messages.
+ */
+export interface VoiceSessionOptions { line?: "phone"; watch?: boolean }
+
+export function useVoiceSession(opts: VoiceSessionOptions = {}) {
+  const watch = !!opts.watch;
+  const [phoneLine, setPhoneLine] = useState<PhoneLine>();
   const [conn, setConn] = useState<Conn>("connecting");
   const [activity, setActivity] = useState<Activity>("idle");
   const [mic, setMic] = useState<MicState>("unknown");
@@ -153,12 +164,25 @@ export function useVoiceSession() {
     }
     let m: VoiceServerMessage;
     try { m = JSON.parse(ev.data); } catch { return; }
+    const raw = m as unknown as { type: string; phones?: number; event?: string };
+    if (raw.type === "phone_line") { setPhoneLine({ phones: raw.phones ?? 0, event: raw.event, at: Date.now() }); return; }
+    if (watch) {
+      // The phone talks hands-free: its transcripts open rows like ours do (handsFreeRef is on in watch mode). The
+      // agent's opening line has no caller sentence before it: give it a row. No audio on the PC.
+      if ((m.type === "agent_text" || m.type === "agent_tool") && currentTurn.current == null) {
+        newTurn({ text: "Appel sortant…", at: Date.now(), status: "final", typed: true });
+      }
+      if (m.type === "agent_audio_start") { setActivity("speaking"); return; }
+      if (m.type === "agent_audio_end" || m.type === "agent_audio_cut") return;
+      if (m.type === "agent_done") setActivity("idle");
+    }
     const id = currentTurn.current;
     switch (m.type) {
       case "ready":
         sessionId.current = m.sessionId;
         setProviders({ llm: m.llm, stt: m.stt, tts: m.tts, sessionId: m.sessionId });
         setConn("ready");
+        if (watch) { currentTurn.current = undefined; liveTurn.current = undefined; setTurns([]); setReport(undefined); }
         break;
       case "transcript": {
         if (handsFreeRef.current) {
@@ -302,17 +326,20 @@ export function useVoiceSession() {
         setActivity((a) => (a === "thinking" ? "idle" : a));
         break;
     }
-  }, [markPerceived, newTurn, patchTurn, speak, stopPlayback]);
+  }, [markPerceived, newTurn, patchTurn, speak, stopPlayback, watch]);
 
   // ── Connection (auto-reconnect, same sessionId keeps the server-side history) ──
   const connect = useCallback(() => {
     if (!alive.current) return;
     ws.current?.close();
     setConn("connecting");
-    const sock = new WebSocket(wsUrl());
+    const sock = new WebSocket(wsUrl(watch ? "/watch" : opts.line === "phone" ? "?line=phone" : ""));
     sock.binaryType = "arraybuffer";
     ws.current = sock;
-    sock.onopen = () => sock.send(JSON.stringify({ type: "start", sessionId: sessionId.current, actorName: "Agent vocal" } satisfies VoiceClientMessage));
+    sock.onopen = () => {
+      if (watch) { handsFreeRef.current = true; setConn("ready"); return; } // watch: rows follow the phone's hands-free transcripts
+      sock.send(JSON.stringify({ type: "start", sessionId: sessionId.current, actorName: "Agent vocal" } satisfies VoiceClientMessage));
+    };
     sock.onmessage = onMessage;
     sock.onclose = () => {
       if (ws.current !== sock) return;
@@ -327,7 +354,7 @@ export function useVoiceSession() {
       }
       if (alive.current) window.setTimeout(() => { if (ws.current === sock) connect(); }, 3000);
     };
-  }, [onMessage]);
+  }, [onMessage, watch, opts.line]);
 
   useEffect(() => {
     alive.current = true;
@@ -426,6 +453,26 @@ export function useVoiceSession() {
     meter();
   }, [conn, ensureMic, meter, send]);
 
+  /** Demo phone: a fresh conversation where the agent calls this client (Radar brief if forecast) and speaks first. */
+  const callClient = useCallback((clientId: string) => {
+    if (conn !== "ready") return;
+    stopPlayback();
+    setTurns([]);
+    newTurn({ text: "Appel sortant…", at: Date.now(), status: "final", typed: true });
+    send({ type: "start", actorName: "Agent vocal", outboundClientId: clientId });
+    releasedAt.current = performance.now();
+    setActivity("thinking");
+    setLastError(undefined);
+  }, [conn, newTurn, send, stopPlayback]);
+
+  /** Watch mode: make the demo phone ring (it calls `clientId` once answered), or stop it ringing. */
+  const ring = useCallback((clientId: string, clientName: string) => {
+    if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify({ type: "ring", clientId, clientName }));
+  }, []);
+  const cancelRing = useCallback(() => {
+    if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify({ type: "cancel" }));
+  }, []);
+
   const stopHandsFree = useCallback(() => {
     if (!handsFreeRef.current) return;
     handsFreeRef.current = false;
@@ -512,5 +559,6 @@ export function useVoiceSession() {
     agents, feed, profile, notes, report, lanes, dismissReport: () => setReport(undefined),
     verdicts, guardAlert, dismissGuardAlert: () => setGuardAlert(undefined),
     startTalking, stopTalking, handsFree, startHandsFree, stopHandsFree, sendText, callOutbound, stopPlayback, reset, hangup, reconnect: connect,
+    callClient, ensureMic, phoneLine, ring, cancelRing,
   };
 }

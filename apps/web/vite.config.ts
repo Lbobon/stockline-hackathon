@@ -18,6 +18,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port,
       strictPort: true,
+      allowedHosts: [".trycloudflare.com"], // phone demo through a cloudflared quick tunnel
       host: env.WEB_HOST || "localhost", // 0.0.0.0 in Docker
       // Docker Desktop bind mounts don't always forward file events: poll there.
       watch: env.CHOKIDAR_USEPOLLING === "true" ? { usePolling: true, interval: 300 } : undefined,

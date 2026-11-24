@@ -22,6 +22,7 @@ class StartMessage(WireModel):
     session_id: str | None = None
     actor_name: str | None = None
     outbound_order_id: str | None = None  # outbound shortage call: the agent calls this order's client and speaks first
+    outbound_client_id: str | None = None  # demo phone (/phone): the agent calls this client and speaks first
     mode: Literal["agent", "copilot"] = "agent"  # copilot: Leïla speaks, the agents listen and whisper (orchestra/copilot.py)
 
 
