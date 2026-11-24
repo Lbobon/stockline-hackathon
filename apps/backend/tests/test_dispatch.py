@@ -31,6 +31,17 @@ with TestClient(app) as c:
     for r in p["optimized"]:
         assert r["loadKg"] <= r["capacityKg"], r["route"]
         assert mins(r["lastEta"]) <= mins("11:00"), (r["route"], r["lastEta"])
+        # OR-Tools plan: every client inside their window, nothing longer in the van than the cold chain allows
+        assert r["lateStops"] == 0 and r["maxInVanMin"] <= p["constraints"]["coldChainMaxMin"], r
+    assert p["solver"] == "or-tools" and p["roads"] in ("osrm", "estimate"), p["roads"]
+    assert sum(r["costEur"] for r in p["optimized"]) <= t["before"]["costEur"]
+
+    # A client's own window (« livraison avant 10h » in their file) is a hard constraint
+    from app.services import optimize
+
+    assert optimize.window("cli_0009") == (6 * 60 + 30, 10 * 60)
+    eta = {s["clientId"]: s["eta"] for r in p["optimized"] for s in r["stops"]}
+    assert all(mins(e) <= optimize.window(cid)[1] for cid, e in eta.items())
     assert any("below_minimum" in s["flags"] for s in p["costToServe"])  # Snack Nordine, 108 € HT
 
     # Centre truck (overloaded in the seed) breaks after 4 stops: every remaining stop is rescued or has a fallback.
