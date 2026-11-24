@@ -81,4 +81,10 @@ with TestClient(app) as c:
     assert c.post("/api/orders/ord_029513/lines", json={"productId": "prd_0004", "qty": 5}, headers=H).json()["status"] == "confirmed"
     assert c.post("/api/orders/ord_029513/lines", json={"productId": "prd_0020", "qty": 50}, headers={"x-actor": "user"}).json()["status"] == "confirmed"
 
+    # Delivery dates come from the ERP: a client's own days + its zone's truck + its lead time (canteens: D-3).
+    assert [d["label"] for d in c.get("/api/clients/cli_0040").json()["nextDeliveries"]][0] == "jeudi 26 novembre"  # mon/tue/thu
+    assert c.get("/api/clients/cli_0041").json()["nextDeliveries"][0]["date"] == "2026-12-02"  # canteen, Wednesdays, D-3
+    canteen = new_order("cli_0041", [{"productId": "prd_0026", "qty": 40}])  # for tomorrow: too late for a canteen
+    assert "lead_time" in {x["code"] for x in c.get(f"/api/gates/orders/{canteen}").json()["reasons"]}
+
 print("gates + retention OK")

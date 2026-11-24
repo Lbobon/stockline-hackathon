@@ -67,7 +67,8 @@ export type GateReasonCode =
   | "new_product"
   | "special_cut_late"
   | "below_minimum" // under the 120 € HT delivery minimum: complete it, or pickup at the dock
-  | "short_stock"; // stock + incoming deliveries can't cover the quantity
+  | "short_stock" // stock + incoming deliveries can't cover the quantity
+  | "lead_time"; // canteens order at D-3 before noon
 
 export interface GateReason {
   code: GateReasonCode;

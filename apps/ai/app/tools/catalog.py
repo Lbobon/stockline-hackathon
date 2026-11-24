@@ -25,7 +25,7 @@ async def search(
     return [pick(r, "type", "id", "label", "sublabel") for r in results[:8]]
 
 
-CLIENT_FIELDS = ("id", "name", "type", "status", "city", "deliveryDays", "paymentTermsDays", "creditLimit", "outstanding", "overdue", "contacts", "preferences")  # fmt: skip
+CLIENT_FIELDS = ("id", "name", "type", "status", "city", "deliveryDays", "paymentTermsDays", "creditLimit", "outstanding", "overdue", "contacts", "preferences", "nextDeliveries")  # fmt: skip
 
 
 @tool

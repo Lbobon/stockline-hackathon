@@ -239,6 +239,8 @@ export interface ClientDetail extends ClientSummary {
   usual: UsualBasketLine[];
   recentEvents: ClientEvent[]; // latest 10
   eventStats: { total: number; open: number; complaints12m: number; returns12m: number; since?: IsoDate };
+  /** The client's next real delivery dates (its days, its zone's truck, its lead time); label is spoken (« jeudi 26 novembre »). */
+  nextDeliveries: { date: IsoDate; label: string }[];
 }
 
 export interface SupplierDetail extends Supplier {

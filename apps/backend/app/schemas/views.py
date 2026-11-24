@@ -194,6 +194,11 @@ class ClientEventSummary(ClientEvent):
     invoice_number: str | None = None  # FAC-… of the linked invoice
 
 
+class NextDelivery(Schema):
+    date: str
+    label: str  # spoken: « jeudi 26 novembre »
+
+
 class ClientDetail(ClientSummary):
     prices: list[ClientPriceView]
     recent_orders: list[OrderSummary]  # latest 20 (all: GET /api/orders?clientId=)
@@ -203,6 +208,7 @@ class ClientDetail(ClientSummary):
     usual: list[UsualBasketLine]
     recent_events: list[ClientEventSummary]  # latest 10
     event_stats: ClientEventStats
+    next_deliveries: list[NextDelivery]  # the client's next real delivery dates (its days, its zone's truck, its lead time)
 
 
 # ───────── Suppliers & products ─────────

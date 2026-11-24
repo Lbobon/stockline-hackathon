@@ -20,13 +20,13 @@ from app import crud
 from app.core.activity import Ctx, log_event, today
 from app.core.db import Doc, get_meta, per_data_version, transactional
 from app.core.utils import add_days, fr_num
-from app.services import orders, routing
+from app.services import clients, orders, routing
 from app.services.stock import stock_levels
 
 BLOCKING_WARNINGS = {"client_blocked", "credit_limit", "too_late"}
 MIN_ORDER_HT = 120.0  # house rule (01-entreprise.md): below, pickup at the Arnavaux dock, no delivery
 # Re-checked when a confirmed order is edited (an add-on call may rightly add a new product or more than usual).
-HARD_REASONS = {"client_blocked", "credit_limit", "too_late", "special_cut_late", "below_minimum", "short_stock"}
+HARD_REASONS = {"client_blocked", "credit_limit", "too_late", "special_cut_late", "below_minimum", "short_stock", "lead_time"}
 UNUSUAL_FACTOR = 3
 CARCASS_CUTOFF_HOUR = 14  # "Carcasses entières et découpes spéciales : la veille avant 14h"
 
@@ -67,6 +67,12 @@ def check(order_id: str, recap_confirmed: bool = True) -> Doc:
     reasons = [{"code": w["code"], "message": w["message"]} for w in orders.order_warnings(order) if w["code"] in BLOCKING_WARNINGS]
     if not recap_confirmed:
         reasons.append({"code": "recap_not_confirmed", "message": "Le client n'a pas clairement validé le récapitulatif"})
+    client = crud.clients.require(order["clientId"])
+    placed_today = (order.get("createdAt") or "")[:10] >= today()  # the seed's older orders were placed on time
+    if clients.is_canteen(client) and placed_today and order["deliveryDate"] < clients.earliest_delivery(client):
+        nxt = clients.next_deliveries(client, 1)
+        reasons.append({"code": "lead_time", "message": "Cantine : commande à passer à J-3 avant midi"
+                        + (f" ; prochaine livraison possible : {nxt[0]['label']}" if nxt else "")})  # fmt: skip
     if order["lines"] and order["totalHt"] < MIN_ORDER_HT:
         reasons.append({"code": "below_minimum", "message": f"Commande de {fr_num(round(order['totalHt'], 2))} € HT, sous le minimum de "
                         f"{fr_num(MIN_ORDER_HT)} € HT pour la livraison : compléter, ou enlèvement au quai des Arnavaux"})  # fmt: skip
