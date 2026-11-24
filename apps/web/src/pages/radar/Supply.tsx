@@ -1,6 +1,8 @@
 /**
- * Radar fournisseurs: the other side of the radar. The clients' forecast, added up over the next days, against the
- * stock: what will run out because of the events, and the suppliers to call to buy it.
+ * Radar d'approvisionnement (the radar's main view): we predict the spike in sales, we call the suppliers in advance.
+ *   ① the clients' forecast added up day by day: the spike the events (weddings, Christmas market…) bring
+ *   ② against the stock: what the depot will run out of, and from which day
+ *   ③ the suppliers to call, on a map of where they ship from, each arc turning green as the order is sent.
  * « Appeler les fournisseurs » rings every supplier in parallel (POST /ai/campaigns {kind:"supply"}): the voice agent
  * is Médina's buyer, and each yes writes and sends a real purchase order. Data: GET /api/radar/supply.
  */
@@ -13,20 +15,26 @@ import { cn } from "@/lib/cn";
 import { fmtMoney, fmtQty } from "@/lib/format";
 import { AI_BASE, API_BASE } from "@/lib/api";
 import { Count } from "./Panel";
+import { SupplierMap } from "./SupplierMap";
 
 // ── data ──
 
 export interface SupplyLine {
   productId: string; productName: string; unit: string; needQty: number; eventQty: number; available: number; incoming: number;
   shortQty: number; firstDay: string; clients: number; events: string[]; qty?: number; unitPrice?: number; totalHt?: number;
+  /** the part of each day's demand the stock can no longer serve, one value per day of `timeline` */
+  shortByDay?: number[];
 }
 export interface SupplierNeed {
-  supplierId: string; name: string; city?: string; contactName?: string; phone?: string; leadTimeDays?: number; minOrderAmount?: number;
+  supplierId: string; name: string; city?: string; lat?: number | null; lng?: number | null; contactName?: string; phone?: string;
+  leadTimeDays?: number; minOrderAmount?: number;
   lines: SupplyLine[]; totalHt: number; eventHt: number; events: string[]; deliverBy: string; arrives: string; onTime: boolean;
   belowMinimum: boolean; reason: string;
 }
+export interface SupplyDay { date: string; orderedHt: number; needHt: number; normalHt: number; eventHt: number; shortHt: number; events: string[] }
 export interface Supply {
-  from: string; to: string; days: number; products: SupplyLine[]; suppliers: SupplierNeed[];
+  from: string; to: string; days: number; depot: { name: string; lat: number; lng: number }; timeline: SupplyDay[];
+  products: SupplyLine[]; suppliers: SupplierNeed[];
   summary: { suppliers: number; lines: number; totalHt: number; eventHt: number; shortProducts: number };
 }
 
@@ -141,15 +149,24 @@ export function SupplyView({ date, actionsSlot }: { date: string; actionsSlot: (
   const coverage = shown.summary.totalHt ? Math.min(1, bought / shown.summary.totalHt) : 0;
   const sup = shown.suppliers.find((s) => s.supplierId === selected);
   const short = shown.products.filter((p) => p.shortQty > 0);
+  const timeline = shown.timeline ?? [];
+  const eventTotal = timeline.reduce((s, d) => s + d.eventHt, 0);
+  const peak = timeline.reduce<SupplyDay | undefined>((b, d) => (!b || d.eventHt > b.eventHt ? d : b), undefined);
+  const firstShort = shown.suppliers.length ? shown.suppliers.map((s) => s.deliverBy).sort()[0] : undefined;
+  const covered = coveredByDay(shown, state);
+  const pins = shown.suppliers.map((s) => ({
+    id: s.supplierId, name: s.name, city: s.city, lat: s.lat, lng: s.lng, leadTimeDays: s.leadTimeDays, totalHt: s.totalHt,
+    orderedHt: state.calls[s.supplierId]?.totalHt ?? 0, status: state.calls[s.supplierId]?.status ?? "queued",
+  }));
 
   return (
     <>
       <div className="grid shrink-0 grid-cols-2 border-b border-border md:grid-cols-4">
-        <Kpi i={0} label="À acheter cette semaine" sub={`${shown.summary.shortProducts} produits vont manquer`}>
-          <Count value={shown.summary.totalHt} format={(v) => fmtMoney(v, { compact: true })} />
+        <Kpi i={0} label="Pic de ventes prévu (événements)" sub={peak?.events.length ? `pic ${dayLabel(peak.date)} : ${peak.events.map(shortEvent).join(", ")}` : "sur les 7 prochains jours"} accent>
+          <Count value={eventTotal} format={(v) => `+${fmtMoney(v, { compact: true })}`} />
         </Kpi>
-        <Kpi i={1} label="Dont à cause des événements" sub="mariages, marché de Noël, matchs…" accent>
-          <Count value={shown.summary.eventHt} format={(v) => `+${fmtMoney(v, { compact: true })}`} />
+        <Kpi i={1} label="À commander pour tenir" sub={`${shown.summary.shortProducts} produits manqueront${firstShort ? ` dès ${dayLabel(firstShort)}` : ""}`}>
+          <Count value={shown.summary.totalHt} format={(v) => fmtMoney(v, { compact: true })} />
         </Kpi>
         <Kpi i={2} label="Commandé aux fournisseurs" sub={state.phase === "idle" ? `${shown.suppliers.length} fournisseurs à appeler` : `${answered}/${shown.suppliers.length} appels`}>
           <Count value={bought} format={(v) => fmtMoney(v, { compact: true })} />
@@ -160,44 +177,41 @@ export function SupplyView({ date, actionsSlot }: { date: string; actionsSlot: (
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1 overflow-y-auto px-6 py-5">
-          <div className="mb-3 flex items-baseline gap-2">
-            <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Ce qui va manquer au dépôt</h2>
-            <span className="text-[12px] text-muted-foreground">du {dayLabel(shown.from)} au {dayLabel(shown.to)} · prévisions clients additionnées, face au stock</span>
-          </div>
+        <div className="w-[440px] shrink-0 overflow-y-auto border-r border-border px-5 py-4">
+          <Step n={1} title="On prévoit le pic de ventes" sub="les prévisions de chaque client, additionnées jour par jour" />
+          <SpikeChart days={timeline} covered={covered} />
+
+          <Step n={2} title="On voit ce qui va manquer au dépôt" sub={`stock + marchandise en route, face à la demande du ${dayLabel(shown.from)} au ${dayLabel(shown.to)}`} className="mt-6" />
           <Legend />
-          <ul className="mt-3 flex flex-col gap-2.5">
+          <ul className="mt-2.5 flex flex-col gap-2">
             {short.map((p, i) => <ShortRow key={p.productId} p={p} i={i} covered={coveredQty(state, p.productId)} />)}
           </ul>
         </div>
 
-        <aside className="flex w-[420px] shrink-0 flex-col border-l border-border bg-background">
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-            <AnimatePresence mode="wait" initial={false}>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex shrink-0 items-start justify-between gap-3 px-5 pt-4">
+            <Step n={3} title="On appelle les fournisseurs à l'avance"
+              sub="l'agent vocal appelle chaque fournisseur en même temps, comme acheteur de Médina Viandes, et envoie le bon de commande s'il dit oui" />
+          </div>
+          <div className="relative min-h-[260px] flex-1">
+            <SupplierMap depot={shown.depot} pins={pins} selected={selected} onSelect={setSelected} />
+            <AnimatePresence>
               {sup ? (
-                <motion.div key={sup.supplierId} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} transition={{ duration: 0.18 }}>
+                <motion.div key={sup.supplierId} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24 }} transition={{ duration: 0.2 }}
+                  className="absolute bottom-3 right-3 top-3 z-30 w-[360px] max-w-[calc(100%-24px)] overflow-y-auto rounded-xl border border-border bg-background/95 p-4 shadow-pop backdrop-blur">
                   <SupplierDetail s={sup} call={state.calls[sup.supplierId]} onBack={() => setSelected(undefined)} />
                 </motion.div>
-              ) : (
-                <motion.div key="list" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.18 }}>
-                  <h2 className="mb-1 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
-                    Fournisseurs à appeler <span className="num normal-case">{shown.suppliers.length}</span>
-                  </h2>
-                  <p className="mb-2.5 text-[12px] leading-4 text-muted-foreground">
-                    L'agent appelle chaque fournisseur en même temps, comme acheteur de Médina Viandes, et passe la commande s'il dit oui.
-                  </p>
-                  <ul className="flex flex-col gap-1.5">
-                    {shown.suppliers.map((s, i) => (
-                      <motion.li key={s.supplierId} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 0.2 + i * 0.05 }}>
-                        <SupplierCard s={s} call={state.calls[s.supplierId]} onClick={() => setSelected(s.supplierId)} />
-                      </motion.li>
-                    ))}
-                  </ul>
-                </motion.div>
-              )}
+              ) : null}
             </AnimatePresence>
           </div>
-        </aside>
+          <ul className="grid shrink-0 grid-flow-col auto-cols-[minmax(230px,1fr)] gap-2 overflow-x-auto border-t border-border px-4 py-3">
+            {shown.suppliers.map((s, i) => (
+              <motion.li key={s.supplierId} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 0.2 + i * 0.05 }}>
+                <SupplierCard s={s} call={state.calls[s.supplierId]} selected={selected === s.supplierId} onClick={() => setSelected(selected === s.supplierId ? undefined : s.supplierId)} />
+              </motion.li>
+            ))}
+          </ul>
+        </div>
       </div>
     </>
   );
@@ -205,6 +219,132 @@ export function SupplyView({ date, actionsSlot }: { date: string; actionsSlot: (
 
 function coveredQty(s: BuyState, productId: string) {
   return Object.values(s.calls).reduce((a, c) => a + c.lines.filter((l) => l.productId === productId).reduce((x, l) => x + l.qty, 0), 0);
+}
+
+/** € of each day's shortfall now covered by the purchase orders: the ordered qty fills the earliest missing days first. */
+function coveredByDay(sup: Supply, s: BuyState): number[] {
+  const out = (sup.timeline ?? []).map(() => 0);
+  for (const p of sup.products) {
+    let left = coveredQty(s, p.productId);
+    (p.shortByDay ?? []).forEach((miss, d) => {
+      const take = Math.min(left, miss);
+      left -= take;
+      out[d] += take * (p.unitPrice ?? 0);
+    });
+  }
+  return out;
+}
+
+const shortEvent = (t: string) => t.split(/ (?:du|au) /)[0];
+const kEur = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10_000 ? 0 : 1).replace(".", ",")} k€` : `${Math.round(v)} €`);
+const dayShort = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" }).replace(".", "");
+
+function Step({ n, title, sub, className }: { n: number; title: string; sub?: string; className?: string }) {
+  return (
+    <div className={cn("mb-2.5 flex items-start gap-2.5", className)}>
+      <span className="num mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full bg-foreground text-[11px] font-semibold text-background">{n}</span>
+      <div className="min-w-0">
+        <h2 className="text-[14px] font-semibold leading-5 tracking-[-0.01em]">{title}</h2>
+        {sub ? <p className="text-[11.5px] leading-4 text-muted-foreground">{sub}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The spike: what the depot will sell each day (at purchase price), stacked as already ordered / a normal day / what the
+ * events add. The thin bar on the right of each day is the part the stock can't serve: red, turning green as the
+ * suppliers say yes.
+ */
+function SpikeChart({ days, covered }: { days: SupplyDay[]; covered: number[] }) {
+  const [hover, setHover] = useState<number>();
+  if (!days.length) return null;
+  const W = 420, H = 190, top = 34, bottom = 22, left = 34;
+  const max = Math.max(...days.map((d) => d.orderedHt + d.needHt), 1);
+  const nice = Math.ceil(max / 10_000) * 10_000;
+  const y = (v: number) => top + (H - top - bottom) * (1 - v / nice);
+  const slot = (W - left) / days.length;
+  const bw = Math.min(30, slot * 0.5);
+  const peak = days.reduce((b, d, i) => (d.eventHt > days[b].eventHt ? i : b), 0);
+  const tip = hover !== undefined ? days[hover] : undefined;
+  return (
+    <div className="relative">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Ventes prévues par jour, avec la part due aux événements et la part que le stock ne couvre pas">
+        {[0, 0.5, 1].map((k) => (
+          <g key={k}>
+            <line x1={left} x2={W} y1={y(nice * k)} y2={y(nice * k)} stroke="hsl(var(--border))" strokeWidth={1} />
+            <text x={left - 6} y={y(nice * k) + 3.5} textAnchor="end" className="fill-muted-foreground text-[9.5px]">{kEur(nice * k)}</text>
+          </g>
+        ))}
+        {days.map((d, i) => {
+          const cx = left + slot * i + slot / 2;
+          const x = cx - bw / 2 - 5;
+          const ord = d.orderedHt, norm = d.normalHt, ev = d.eventHt;
+          const y0 = y(0), y1 = y(ord), y2 = y(ord + norm), y3 = y(ord + norm + ev);
+          const miss = d.shortHt, cov = Math.min(miss, covered[i] ?? 0);
+          const closed = ord + d.needHt < 1;
+          return (
+            <g key={d.date} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(undefined)}>
+              <rect x={cx - slot / 2} y={top - 30} width={slot} height={H - top + 30} fill="transparent" />
+              {hover === i ? <rect x={cx - slot / 2 + 2} y={top - 6} width={slot - 4} height={H - top - bottom + 6} rx={6} fill="hsl(var(--muted))" opacity={0.6} /> : null}
+              {closed ? <text x={cx} y={y0 - 6} textAnchor="middle" className="fill-muted-foreground text-[9.5px]">fermé</text> : (
+                <>
+                  <motion.g initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ duration: 0.6, delay: 0.1 + i * 0.06, ease: "easeOut" }} style={{ transformOrigin: `${x}px ${y0}px` }}>
+                    {ord > 0 ? <rect x={x} y={y1} width={bw} height={y0 - y1} fill="hsl(var(--foreground) / .45)" /> : null}
+                    <rect x={x} y={y2} width={bw} height={Math.max(0, y1 - y2 - (ord > 0 ? 1.5 : 0))} fill="hsl(var(--foreground) / .2)" />
+                    {ev > 0 ? <rect x={x} y={y3} width={bw} height={Math.max(0, y2 - y3 - 1.5)} rx={3} fill="hsl(var(--chart-3))" /> : null}
+                  </motion.g>
+                  {miss > 1 ? (
+                    <g>
+                      <rect x={x + bw + 3} y={y(miss)} width={7} height={y0 - y(miss)} rx={2} fill="hsl(var(--destructive) / .75)" />
+                      <motion.rect x={x + bw + 3} width={7} rx={2} fill="hsl(var(--primary))" initial={false}
+                        animate={{ y: y(cov), height: y0 - y(cov) }} transition={{ duration: 0.6 }} />
+                    </g>
+                  ) : null}
+                  {ev >= 500 ? (
+                    <text x={cx - 5} y={y3 - 6} textAnchor="middle" className="fill-foreground text-[10px] font-semibold">+{kEur(ev)}</text>
+                  ) : null}
+                </>
+              )}
+              <text x={cx} y={H - 6} textAnchor="middle" className={cn("text-[10px]", i === peak ? "fill-foreground font-semibold" : "fill-muted-foreground")}>{dayShort(d.date)}</text>
+            </g>
+          );
+        })}
+        {days[peak].eventHt > 0 ? (() => {
+          const cx = left + slot * peak + slot / 2;
+          return (
+            <motion.g initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
+              <text x={Math.min(Math.max(cx, left + 60), W - 60)} y={11} textAnchor="middle" className="fill-chart-3 text-[10.5px] font-semibold">
+                ▲ pic : {days[peak].events.slice(0, 2).map(shortEvent).join(" + ")}
+              </text>
+            </motion.g>
+          );
+        })() : null}
+      </svg>
+      {tip ? (
+        <div className="pointer-events-none absolute z-10 w-[210px] rounded-lg border border-border bg-card px-2.5 py-2 text-[11.5px] shadow-pop"
+          style={{ left: `${Math.min(68, Math.max(0, ((hover! + 0.5) / days.length) * 100 - 20))}%`, top: 0 }}>
+          <div className="mb-1 font-medium first-letter:uppercase">{dayLabel(tip.date)}</div>
+          {tip.orderedHt > 0 ? <Row k="Déjà commandé" v={kEur(tip.orderedHt)} /> : null}
+          <Row k="Prévu, jour normal" v={kEur(tip.normalHt)} />
+          <Row k="En plus (événements)" v={`+${kEur(tip.eventHt)}`} />
+          {tip.events.length ? <div className="mt-0.5 text-[11px] text-muted-foreground">{tip.events.join(" · ")}</div> : null}
+          <div className="mt-1 border-t border-border pt-1"><Row k="Le stock ne suit plus" v={kEur(tip.shortHt)} /></div>
+        </div>
+      ) : null}
+      <div className="mt-1 flex flex-wrap gap-x-3.5 gap-y-1 text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-foreground/45" />déjà commandé</span>
+        <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-foreground/20" />prévu, jour normal</span>
+        <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-chart-3" />en plus à cause des événements</span>
+        <span className="flex items-center gap-1.5"><span className="h-2.5 w-1.5 rounded-sm bg-destructive/75" />manque</span>
+        <span className="flex items-center gap-1.5"><span className="h-2.5 w-1.5 rounded-sm bg-primary" />commandé au fournisseur</span>
+      </div>
+    </div>
+  );
+}
+
+function Row({ k, v }: { k: string; v: string }) {
+  return <div className="flex justify-between gap-3"><span className="text-muted-foreground">{k}</span><span className="num font-medium">{v}</span></div>;
 }
 
 function Legend() {
@@ -229,7 +369,6 @@ function ShortRow({ p, i, covered }: { p: SupplyLine; i: number; covered: number
       <div className="flex items-center gap-2 text-[12.5px]">
         <PackageX size={14} className={cn("shrink-0", gap > 0 ? "text-destructive" : "text-primary")} />
         <span className="min-w-0 flex-1 truncate font-medium">{p.productName}</span>
-        {p.events.map((e) => <span key={e} className="hidden rounded-full bg-chart-3/15 px-2 py-px text-[10.5px] font-medium text-chart-3 lg:inline">{e}</span>)}
         <span className={cn("num whitespace-nowrap font-semibold", gap > 0 ? "text-destructive" : "text-primary")}>
           {gap > 0 ? `−${fmtQty(Math.round(gap), p.unit)}` : <span className="flex items-center gap-1"><Check size={12} />couvert</span>}
         </span>
@@ -242,7 +381,7 @@ function ShortRow({ p, i, covered }: { p: SupplyLine; i: number; covered: number
       </div>
       <p className="mt-1.5 text-[11.5px] text-muted-foreground">
         Les clients vont demander <b className="num text-foreground">{fmtQty(Math.round(p.needQty), p.unit)}</b> ({p.clients} clients)
-        {p.eventQty > 1 ? <>, dont <b className="num text-chart-3">{fmtQty(Math.round(p.eventQty), p.unit)}</b> à cause des événements</> : null}
+        {p.eventQty > 1 ? <>, dont <b className="num text-foreground">{fmtQty(Math.round(p.eventQty), p.unit)}</b> en plus à cause {p.events.length ? `de : ${p.events.map(shortEvent).join(", ")}` : "des événements"}</> : null}
         {" · "}rupture à partir de <b className="text-foreground">{dayLabel(p.firstDay)}</b>
       </p>
     </motion.li>
@@ -260,15 +399,15 @@ const STATUS: Record<Status, { label: string; icon: typeof Check; cls: string }>
   failed: { label: "Échec", icon: PhoneOff, cls: "text-destructive" },
 };
 
-function SupplierCard({ s, call, onClick }: { s: SupplierNeed; call?: BuyCall; onClick: () => void }) {
+function SupplierCard({ s, call, selected, onClick }: { s: SupplierNeed; call?: BuyCall; selected?: boolean; onClick: () => void }) {
   const st = STATUS[call?.status ?? "queued"];
   const Icon = st.icon;
   const live = call?.status === "ringing" || call?.status === "talking";
   const last = call?.transcript.slice(-1)[0];
   return (
     <button type="button" onClick={onClick}
-      className={cn("relative w-full overflow-hidden rounded-lg border bg-card px-3 py-2.5 text-left transition-colors hover:border-border-hover",
-        live ? "border-agent-voice/50" : "border-border")}>
+      className={cn("relative h-full w-full overflow-hidden rounded-lg border bg-card px-3 py-2.5 text-left transition-colors hover:border-border-hover",
+        live ? "border-agent-voice/50" : selected ? "border-foreground/40" : "border-border")}>
       {live ? <motion.span className="absolute inset-y-0 left-0 w-[3px] bg-agent-voice" initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} /> : null}
       <div className="flex items-center gap-2">
         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground"><Factory size={14} /></span>
@@ -349,11 +488,11 @@ function Kpi({ label, sub, children, i, accent }: { label: string; sub: string; 
   );
 }
 
-/** « Clients | Fournisseurs » switch for the radar header. */
+/** « Approvisionnement | Clients » switch for the radar header. */
 export function RadarSwitch({ value, onChange }: { value: "clients" | "supply"; onChange: (v: "clients" | "supply") => void }) {
   return (
     <div className="flex rounded-lg border border-border bg-muted/50 p-0.5 text-[12.5px]">
-      {([["clients", "Clients"], ["supply", "Fournisseurs"]] as const).map(([v, label]) => (
+      {([["supply", "Approvisionnement"], ["clients", "Clients"]] as const).map(([v, label]) => (
         <button key={v} type="button" onClick={() => onChange(v)}
           className={cn("relative rounded-md px-3 py-1 font-medium transition-colors", value === v ? "text-foreground" : "text-muted-foreground hover:text-foreground")}>
           {value === v ? <motion.span layoutId="radar-switch" className="absolute inset-0 rounded-md bg-card shadow-sm" transition={spring} /> : null}
