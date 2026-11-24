@@ -10,7 +10,7 @@
  */
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useUrlState } from "@/lib/url-state";
-import { MicOff, Mic, PhoneOff, RotateCcw, Send, VolumeX } from "lucide-react";
+import { Headphones, MicOff, Mic, PhoneOff, RotateCcw, Send, VolumeX } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button, Dot, IconButton, Input, Kbd, Page, PageHeader, Spinner, Tabs } from "@/ui";
 import { useVoiceSession, type Activity, type Conn } from "@/features/assistant/useVoiceSession";
@@ -144,13 +144,23 @@ function CallMode({ modeSwitch }: { modeSwitch: ReactNode }) {
           ) : null}
 
           <div className="flex shrink-0 items-center gap-4 border-t border-border px-5 py-3">
-            <TalkButton activity={v.activity} disabled={!ready} onDown={() => void v.startTalking()} onUp={v.stopTalking} />
+            <TalkButton activity={v.activity} disabled={!ready || v.handsFree} onDown={() => void v.startTalking()} onUp={v.stopTalking} />
+            <Button
+              size="sm"
+              variant={v.handsFree ? "primary" : "default"}
+              icon={Headphones}
+              disabled={!ready}
+              onClick={() => (v.handsFree ? v.stopHandsFree() : void v.startHandsFree())}
+              title="Micro ouvert pendant tout l'appel : l'agent répond quand l'appelant a fini sa phrase, et se tait s'il lui coupe la parole"
+            >
+              {v.handsFree ? "Mains libres : on" : "Mains libres"}
+            </Button>
             <div className="flex shrink-0 flex-col gap-1 xl:w-[180px]">
               <span className={cn("flex items-center gap-1.5 text-[13px] font-medium", v.activity !== "idle" && "text-violet")}>
                 {v.activity === "thinking" ? <Spinner size={12} /> : v.activity !== "idle" ? <Dot tone="violet" pulse /> : null}
                 {ready ? STATE_LABEL[v.activity] : v.conn === "connecting" ? "Connexion…" : "Hors ligne"}
               </span>
-              {v.activity === "recording" ? (
+              {v.activity === "recording" || v.handsFree ? (
                 <LevelBars level={v.level} />
               ) : (
                 <span className="hidden items-center gap-1 text-[11.5px] text-muted-foreground xl:flex"><Kbd>Espace</Kbd> maintenir pour parler</span>

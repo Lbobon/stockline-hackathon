@@ -117,6 +117,15 @@ Plus les tests du backend (`apps/backend/tests/` : `test_smart`, `test_shortages
 - **Modèle** : Claude **Haiku 5.5** (effort bas, réflexion par défaut) plutôt que Sonnet 5.5. Il est plus rapide, environ 10× moins cher et meilleur au simulateur (mesures §4).
 - **Outils composites** (`tools/fast.py`) : `find_client` (recherche + fiche + contexte) et `check_product` (recherche + stock + prix client). Ils font un seul aller-retour modèle au lieu de trois.
 - **Pas de date réelle** : tout est ancré sur l'horloge du jeu de données (24/11, 05 h 30), y compris l'heure limite des carcasses.
+- **Mode mains libres** (page Voix, bouton « Mains libres » ; `services/handsfree.py`). Le micro reste ouvert tout l'appel, un seul flux Soniox. Comment ça marche :
+  - **Fin de phrase.** Le jeton `<end>` de Soniox, réglé à 500 ms au plus après le dernier mot. Sans lui, 0,9 s sans mot nouveau.
+  - **Phrase finie ?** Elle ne l'est pas si elle se termine par « de », « et », « pour », « euh »… Elle l'est si Soniox l'a ponctuée. Sinon Jev tranche en ≈ 140 ms.
+  - **Départ anticipé.** Le tour démarre dès la pause, en brouillon. Il réfléchit, lit l'ERP et synthétise, mais rien n'est envoyé, dit ou écrit dans l'ERP tant que la phrase n'est pas jugée finie (`Gate` dans `tools/erp.py`).
+  - **Brouillon jeté.** Si l'appelant reprend avant, le brouillon est jeté et l'historique remis en état. Sa phrase continue.
+  - **Interruption.** Si l'appelant parle par-dessus l'agent, l'audio est coupé sur le navigateur (`agent_audio_cut`) et le tour annulé.
+  - **Ce qui ne coupe pas.** Un « oui oui » ou l'écho de l'agent dans le micro ne coupent pas. L'écho, c'est une suite de mots de l'agent dans le même ordre ; l'annulation d'écho du navigateur reste activée.
+  - **Voix mot à mot.** Les mots partent vers ElevenLabs au fil de l'écriture (WebSocket `stream-input`), avec un vidage à chaque fin de phrase. Mesuré : premier audio 155 ms après le premier mot, sans attendre la fin de la phrase. Désactivé en mode blocage du Garde-fou, qui doit entendre une phrase entière avant qu'elle soit dite, et avec `TTS_STREAM=0`.
+  - **Phrase d'attente.** En mains libres, elle part 200 ms après la fin de phrase, même pendant que l'Éclaireur précharge.
 - **Robustesse** : une étape du modèle que l'API coupe avant toute réponse est relancée une fois (PR #35). La transcription n'attend plus que 0,8 s la confirmation finale de Soniox ; au-delà, les mots déjà entendus en direct sont utilisés. En mode blocage du Garde-fou, une interruption du client (barge-in) s'arrêtait en erreur : corrigé.
 
 ## 4. Mesures
@@ -149,6 +158,17 @@ Les 3 échecs restants des appels génériques changent d'un tirage à l'autre (
 | Jev sur les réponses (oui / modifie / non / rappeler) | 5/5 sur un contrôle manuel, ~300 ms |
 
 Sur ce dernier run, les deux échecs sont : une coupure réseau de l'API (corrigée ensuite par une nouvelle tentative automatique, PR #35) et une remarque du juge sur un prospect. Le coût double avec l'orchestre (agents secondaires), mais reste à 1 centime par appel.
+
+**Latence en mains libres** (bout en bout, vrais services : voix d'appelant ElevenLabs envoyée en temps réel à WS /voice, Soniox, Sonnet 5.5, ElevenLabs ; mesurée depuis le dernier échantillon parlé). Premier son de l'agent :
+
+| Type de phrase | Premier son |
+|---|---|
+| Question (« Il vous reste de l'épaule d'agneau pour demain ? ») | **0,66 à 0,81 s** |
+| Affirmation (« Bon, mettez-moi vingt kilos d'épaule pour jeudi. ») | **≈ 1,2 s** |
+| Phrase avec une pause sur une virgule | **≈ 1,8 s** |
+| Phrase coupée (« Et je voudrais aussi du ») | **≈ 2,3 s**, attendu (on lui laisse 1,2 s pour finir) |
+
+Le plancher, c'est Soniox : le dernier mot apparaît ≈ 0,5 s après avoir été dit. La fin de phrase arrive ≈ 0,2 s plus tard. Le premier vrai mot de l'agent dépend toujours du modèle et des outils (2 à 6 s avec Sonnet). Le micro réel du navigateur n'a pas été testé dans cet environnement : le navigateur de test bloque le micro.
 
 **Latence en appel réel** (page Voix, push-to-talk, Soniox + ElevenLabs). Un appel entrant le 24/11 au soir : premier son **1,9 s** (la phrase d'attente), dont 1,9 s de transcription après le relâchement, puis **5,4 s** avant le premier vrai mot de l'agent (premier tour : il a cherché le client, relu la commande, vérifié deux produits, avec la réflexion de Haiku à chaque étape). Reproduit dans le processus : 11 à 14 s au premier tour, 3,5 s sur un simple « ouais c'est bon ». Corrigé depuis : transcription plafonnée à 0,8 s. La réflexion du modèle est mesurée ci-dessous.
 

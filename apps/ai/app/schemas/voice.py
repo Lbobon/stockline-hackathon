@@ -26,10 +26,12 @@ class StartMessage(WireModel):
 
 
 class AudioStartMessage(WireModel):
-    """Caller pressed the talk key; binary frames follow."""
+    """Caller pressed the talk key; binary frames follow. continuous: hands-free, the mic stays open for the whole call
+    and the server finds the end of each sentence itself (services/handsfree.py); audio_end closes the mic."""
 
     type: Literal["audio_start"] = "audio_start"
     mime: str
+    continuous: bool = False
     hint: str | None = None  # optional STT hint (vocabulary; mock STT: the transcript), like x-mock-text on POST /command
     speaker: Literal["client", "leila"] = "client"  # copilot mode: whose voice this is (agent mode: always the caller)
 
@@ -120,6 +122,13 @@ class AgentAudioEndMessage(WireModel):
     type: Literal["agent_audio_end"] = "agent_audio_end"
 
 
+class AgentAudioCutMessage(WireModel):
+    """Hands-free barge-in: the caller is talking over the agent. Stop playing its audio now (what is already queued
+    on the client too); the turn is cancelled on the server."""
+
+    type: Literal["agent_audio_cut"] = "agent_audio_cut"
+
+
 class AgentDoneMessage(WireModel):
     type: Literal["agent_done"] = "agent_done"
     text: str
@@ -159,6 +168,7 @@ VoiceServerMessage = Annotated[
         AgentToolMessage,
         AgentAudioStartMessage,
         AgentAudioEndMessage,
+        AgentAudioCutMessage,
         AgentDoneMessage,
         OrchestraMessage,
         CallReportMessage,

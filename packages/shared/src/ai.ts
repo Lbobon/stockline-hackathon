@@ -103,7 +103,7 @@ export interface GuardSummary {
 
 export type VoiceClientMessage =
   | { type: "start"; sessionId?: string; actorName?: string; outboundOrderId?: string; mode?: VoiceMode } // opens a conversation (outboundOrderId: the agent calls that order's client and speaks first)
-  | { type: "audio_start"; mime: string; hint?: string; speaker?: CopilotSpeaker } // caller pressed space (hint: optional STT vocabulary; mock STT returns it)
+  | { type: "audio_start"; mime: string; hint?: string; speaker?: CopilotSpeaker; continuous?: boolean } // caller pressed space (hint: optional STT vocabulary; mock STT returns it). continuous: hands-free, the mic stays open and the server finds each sentence end
   | { type: "audio_end" } // caller released space; binary frames sent in between (every 100–250 ms) are the utterance, streamed to the STT as they arrive
   | { type: "text"; text: string; speaker?: CopilotSpeaker; demoError?: boolean } // typed instead of spoken (debug); demoError: Garde-fou demo, the agent states one wrong figure
   | { type: "reset" }
@@ -132,6 +132,7 @@ export type VoiceServerMessage =
   | { type: "agent_tool"; name: string; ok?: boolean; ms?: number; args?: Record<string, unknown> }
   | { type: "agent_audio_start"; mime: string } // binary frames follow
   | { type: "agent_audio_end" }
+  | { type: "agent_audio_cut" } // hands-free barge-in: the caller talks over the agent, stop its audio now
   | { type: "agent_done"; text: string; timings: TurnTimings }
   | { type: "orchestra"; event: OrchestraEvent } // the agents working around the voice agent (live view)
   | { type: "call_report"; id: string; status: "writing" | "ready" | "error"; headline?: string }

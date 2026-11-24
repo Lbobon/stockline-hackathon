@@ -198,11 +198,23 @@ class CallSession:
 
         # 3. Give the scout a moment to land what it was fetching, then brief the voice agent
         before = st.now()
+        filled = False
         if self.side:
+            settling = asyncio.create_task(self.scout.settle(heard))
             try:
-                await self.scout.settle(heard)
+                ticked = asyncio.create_task(q.get())
+                await asyncio.wait({settling, ticked}, return_when=asyncio.FIRST_COMPLETED)
+                if ticked.done():  # the filler is due before the scout is done (hands-free: 200 ms): say it now
+                    filled = True
+                    cur["filler"] = self.filler()
+                    cur["firstSoundMs"] = st.now() - t_end
+                    yield FillerEvent(cur["filler"])
+                else:
+                    ticked.cancel()
+                await settling
             except asyncio.CancelledError:  # barge-in before the agent started: what was heard stays known
                 clock.cancel()
+                settling.cancel()
                 self.history = trim([*self.history, ChatMessage(role="user", content=heard)])
                 raise
         cur["settleMs"] = st.now() - before
@@ -223,7 +235,7 @@ class CallSession:
         span = st.span("voice", "réponse", f"« {heard[:60]} »")
         await span.__aenter__()
         producer = asyncio.create_task(produce())
-        spoken, step_text, said, filled, committed, calls = "", "", False, False, False, {}
+        spoken, step_text, said, committed, calls = "", "", False, False, {}
         try:
             while (ev := await q.get()) is not None:
                 if ev is tick:

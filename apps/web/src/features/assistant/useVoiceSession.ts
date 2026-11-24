@@ -86,6 +86,10 @@ export function useVoiceSession() {
   const discardAudio = useRef(false); // audio of an interrupted turn still draining
   const releasedAt = useRef<number>();
   const turnHasAudio = useRef(false);
+  // hands-free: the mic stays open, the server finds the end of each sentence (apps/ai/app/services/handsfree.py)
+  const [handsFree, setHandsFree] = useState(false);
+  const handsFreeRef = useRef(false);
+  const liveTurn = useRef<number>(); // the row showing the caller's words in progress (not yet answered)
 
   const patchTurn = useCallback((id: number | undefined, fn: (t: VoiceTurn) => VoiceTurn) => {
     if (id == null) return;
@@ -157,6 +161,33 @@ export function useVoiceSession() {
         setConn("ready");
         break;
       case "transcript": {
+        if (handsFreeRef.current) {
+          let live = liveTurn.current;
+          if (!m.final) {
+            if (live == null) {
+              live = ++turnSeq.current;
+              liveTurn.current = live;
+              const row: VoiceTurn = { id: live, caller: { text: m.text, stable: m.stable ?? "", at: Date.now(), status: "recording" }, agent: { text: "", tools: [], done: false } };
+              setTurns((ts) => [...ts, row]);
+            } else patchTurn(live, (t) => ({ ...t, caller: { ...t.caller, text: m.text, stable: m.stable ?? "" } }));
+            break;
+          }
+          // The server kept the sentence: this row is the turn it answers now (the agent's messages go to it).
+          liveTurn.current = undefined;
+          if (live == null) newTurn({ text: m.text, at: Date.now(), status: "final" });
+          else {
+            const prev = currentTurn.current;
+            currentTurn.current = live;
+            turnHasAudio.current = false;
+            audioMime.current = undefined;
+            discardAudio.current = true;
+            setTurns((ts) => ts.map((t) => t.id === live ? { ...t, caller: { ...t.caller, text: m.text, status: "final" } }
+              : t.id === prev && !t.agent.done ? { ...t, agent: { ...t.agent, done: true, interrupted: true } } : t));
+          }
+          releasedAt.current = performance.now(); // perceived latency: from the kept sentence (≈ 0.5 s after the caller stopped)
+          setActivity("thinking");
+          break;
+        }
         const turn = id;
         if (!m.final) {
           // Live partial while the caller speaks (or just after the release): never over a final text.
@@ -199,6 +230,10 @@ export function useVoiceSession() {
           });
           player.current = p;
         }
+        break;
+      case "agent_audio_cut": // hands-free: the caller talks over the agent, silence it now
+        discardAudio.current = true;
+        stopPlayback();
         break;
       case "agent_audio_end":
         // An interrupted turn's segment closes after the new turn started: drop it.
@@ -283,6 +318,13 @@ export function useVoiceSession() {
       if (ws.current !== sock) return;
       setConn("offline");
       setActivity((a) => (a === "speaking" ? a : "idle"));
+      if (handsFreeRef.current) { // the server's stream is gone with the socket: the caller turns hands-free on again
+        handsFreeRef.current = false;
+        setHandsFree(false);
+        liveTurn.current = undefined;
+        try { recorder.current?.stop(); } catch { /* ignore */ }
+        recorder.current = undefined;
+      }
       if (alive.current) window.setTimeout(() => { if (ws.current === sock) connect(); }, 3000);
     };
   }, [onMessage]);
@@ -340,7 +382,7 @@ export function useVoiceSession() {
   }, []);
 
   const startTalking = useCallback(async () => {
-    if (pressed.current || conn !== "ready") return;
+    if (pressed.current || conn !== "ready" || handsFreeRef.current) return;
     pressed.current = true;
     stopPlayback();
     const s = await ensureMic();
@@ -363,6 +405,38 @@ export function useVoiceSession() {
     setLastError(undefined);
     meter();
   }, [conn, ensureMic, meter, newTurn, send, stopPlayback]);
+
+  /** Hands-free: one open mic for the call, no key to hold. Echo cancellation stays on (ensureMic), so the agent's
+   *  voice in the speakers is not taken for the caller; the server also ignores what sounds like its own words. */
+  const startHandsFree = useCallback(async () => {
+    if (handsFreeRef.current || conn !== "ready") return;
+    const s = await ensureMic();
+    if (!s) return;
+    const mime = REC_MIME.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
+    const rec = new MediaRecorder(s, mime ? { mimeType: mime } : undefined);
+    recorder.current = rec;
+    handsFreeRef.current = true;
+    setHandsFree(true);
+    send({ type: "audio_start", mime: rec.mimeType || mime || "audio/webm", continuous: true });
+    rec.ondataavailable = (e) => { if (e.data.size && ws.current?.readyState === WebSocket.OPEN) ws.current.send(e.data); };
+    rec.onstop = () => send({ type: "audio_end" });
+    void audioCtx.current?.resume();
+    rec.start(100);
+    setLastError(undefined);
+    meter();
+  }, [conn, ensureMic, meter, send]);
+
+  const stopHandsFree = useCallback(() => {
+    if (!handsFreeRef.current) return;
+    handsFreeRef.current = false;
+    setHandsFree(false);
+    liveTurn.current = undefined;
+    if (raf.current) cancelAnimationFrame(raf.current);
+    setLevel(0);
+    const rec = recorder.current;
+    recorder.current = undefined;
+    if (rec && rec.state !== "inactive") rec.stop();
+  }, []);
 
   const stopTalking = useCallback(() => {
     if (!pressed.current) return;
@@ -418,23 +492,25 @@ export function useVoiceSession() {
   }, []);
 
   const reset = useCallback(() => {
+    stopHandsFree();
     stopPlayback();
     send({ type: "reset" });
     clearCall();
     setReport(undefined);
-  }, [clearCall, send, stopPlayback]);
+  }, [clearCall, send, stopHandsFree, stopPlayback]);
 
   /** End the call: the Rapporteur writes the report (call_report "writing" → "ready"), a new call starts. */
   const hangup = useCallback(() => {
+    stopHandsFree();
     stopPlayback();
     send({ type: "hangup" });
     clearCall();
-  }, [clearCall, send, stopPlayback]);
+  }, [clearCall, send, stopHandsFree, stopPlayback]);
 
   return {
     conn, activity, mic, providers, turns, level, lastError,
     agents, feed, profile, notes, report, lanes, dismissReport: () => setReport(undefined),
     verdicts, guardAlert, dismissGuardAlert: () => setGuardAlert(undefined),
-    startTalking, stopTalking, sendText, callOutbound, stopPlayback, reset, hangup, reconnect: connect,
+    startTalking, stopTalking, handsFree, startHandsFree, stopHandsFree, sendText, callOutbound, stopPlayback, reset, hangup, reconnect: connect,
   };
 }

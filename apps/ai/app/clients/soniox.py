@@ -16,7 +16,8 @@ The browser's WebM/Opus is accepted as is ("audio_format": "auto" detects webm, 
     ← on error: {"error_code": 401, "error_type": "...", "error_message": "..."} then close
 
 Control tokens: <fin> answers a finalize; <end> marks the end of a sentence when the speaker pauses (endpoint
-detection — the hook for hands-free mode, see GUIDE-VOIX.md 4.2). Neither is spoken text.
+detection): STTUpdate.endpoint, the cue of the hands-free mode (services/handsfree.py). Neither is spoken text.
+In hands-free mode the stream stays open for the whole call: no finalize until the mic closes.
 """
 
 import json
@@ -44,6 +45,7 @@ class SonioxSTT(STTClient):
             "audio_format": "auto",
             "language_hints": [self.language],
             "enable_endpoint_detection": True,  # final words at each pause, not only at the end
+            "max_endpoint_delay_ms": 500,  # hands-free: <end> at most 0.5 s after the last word (default 2 s)
         }
         terms, size = [], 0
         for t in (t.strip() for t in (hint or "").split(",")):
@@ -71,12 +73,14 @@ class SonioxSTT(STTClient):
                         raise provider_error(
                             "soniox stt", msg["error_code"], f"{msg.get('error_type', '')}: {msg.get('error_message', '')}"
                         )
-                    provisional, finalized = "", False  # provisional tokens: the whole current guess, every message
+                    provisional, finalized, endpoint = "", False, False  # provisional: the whole current guess, every message
                     for tok in msg.get("tokens") or []:
                         text = tok.get("text") or ""
                         if text == "<fin>":
                             finalized = True
-                        elif text.startswith("<"):  # <end>: a pause (endpoint), not a word
+                        elif text == "<end>":  # the speaker paused at the end of a sentence: the words before are final
+                            endpoint = True
+                        elif text.startswith("<"):
                             continue
                         elif tok.get("is_final"):
                             final += text
@@ -85,5 +89,5 @@ class SonioxSTT(STTClient):
                     if finalized or msg.get("finished"):
                         yield STTUpdate(final.strip(), final=True, stable=final.strip())
                         return  # leaving the blocks closes the socket
-                    yield STTUpdate((final + provisional).strip(), stable=final.strip())
+                    yield STTUpdate((final + provisional).strip(), stable=final.strip(), endpoint=endpoint)
         raise provider_error("soniox stt", "closed", "connection closed before the final words")
