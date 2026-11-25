@@ -1,6 +1,7 @@
 """Supplier campaign: the same parallel calls as the client radar, but Médina Viandes BUYS.
 
-GET /api/radar/supply says what the depot will run short of over the next days (the client forecast added up, events
+GET /api/radar/supply says what the depot will run short of over the next days (or, with `weeks`, /supply/ahead: the
+demand spikes of the coming weeks, booked ahead from the week-level model) (the client forecast added up, events
 included, against stock + incoming) and who sells it. Here the voice agent calls each of those suppliers as Médina's
 buyer, against a simulated supplier played from its persona card (data/context/suppliers), and writes the purchase
 order it agreed on (create_purchase_order → send_purchase_order). A sent order counts as incoming stock, so the
@@ -77,6 +78,9 @@ def brief(row: dict) -> str:
         f"{row['supplierId']}, expectedDate {row['deliverBy']} ou avant, les quantités convenues, unitPrice seulement si négocié), "
         "puis send_purchase_order, puis un récapitulatif très court et au revoir. S'il refuse ou veut être rappelé : remercie et "
         "termine poliment. Ta première réponse est parlée tout de suite, sans outil ni phrase d'attente."
+        + (" C'est une RÉSERVATION À L'AVANCE pour un pic de demande prévu par nos ventes : dis-le (« on réserve dès maintenant "
+           "pour être sûrs d'être servis »), livraison le jour indiqué et pas avant (produit frais), expectedDate exactement "
+           f"{row['deliverBy']}." if row.get("ahead") else "")
     )
 
 
@@ -212,8 +216,9 @@ async def run(c: Campaign, rows: list[dict], concurrency: int) -> None:
     emit(c, {"type": "done", "totals": c.totals})
 
 
-async def start(date: str | None, supplier_ids: list[str] | None, concurrency: int = 6) -> Campaign:
-    needs = await ErpClient("voice_agent", "Radar").get("/api/radar/supply", {"date": date})
+async def start(date: str | None, supplier_ids: list[str] | None, concurrency: int = 6, weeks: int | None = None) -> Campaign:
+    erp = ErpClient("voice_agent", "Radar")
+    needs = await (erp.get("/api/radar/supply/ahead", {"weeks": weeks}) if weeks else erp.get("/api/radar/supply", {"date": date}))
     # one supplier round per date at a time: a second click joins the running one instead of ordering everything twice
     running = next((x for x in engine.CAMPAIGNS.values() if x.kind == "supply" and x.date == needs["from"] and x.status == "running"), None)
     if running:

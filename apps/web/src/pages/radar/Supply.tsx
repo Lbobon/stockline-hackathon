@@ -70,7 +70,9 @@ function reduce(s: BuyState, a: { type: "reset" } | { type: "start"; id: string;
   return st;
 }
 
-function useSupplyCampaign(supply?: Supply) {
+const SUPPLY_KEY = ["radar", "supply"];
+
+export function useSupplyCampaign(supply?: Pick<Supply, "from" | "suppliers">, weeks?: number, queryKey: string[] = SUPPLY_KEY) {
   const [state, dispatch] = useReducer(reduce, INIT);
   const es = useRef<EventSource | null>(null);
   const qc = useQueryClient();
@@ -85,7 +87,7 @@ function useSupplyCampaign(supply?: Supply) {
     let id: string;
     try {
       const r = await fetch(`${AI_BASE}/campaigns`, { method: "POST", headers: { "content-type": "application/json", "x-actor": "user" },
-        body: JSON.stringify({ kind: "supply", date: supply.from, concurrency: 6 }) });
+        body: JSON.stringify({ kind: "supply", date: supply.from, concurrency: 6, weeks }) });
       if (!r.ok) throw new Error(`${r.status}`);
       ({ id } = await r.json());
     } finally {
@@ -103,10 +105,10 @@ function useSupplyCampaign(supply?: Supply) {
       if (!timer) timer = window.setTimeout(() => {
         timer = 0; const events = queue; queue = [];
         dispatch({ type: "events", events });
-        if (events.some((e) => e.type === "done")) { src.close(); qc.invalidateQueries({ queryKey: ["radar", "supply"] }); }
+        if (events.some((e) => e.type === "done")) { src.close(); qc.invalidateQueries({ queryKey }); }
       }, 50);
     };
-  }, [supply, qc]);
+  }, [supply, qc, weeks, queryKey]);
   const reset = useCallback(() => { es.current?.close(); dispatch({ type: "reset" }); }, []);
   return { state, start, reset };
 }
@@ -404,6 +406,8 @@ function ShortRow({ p, i, covered }: { p: SupplyLine; i: number; covered: number
   );
 }
 
+export type { BuyCall, BuyState };
+
 const STATUS: Record<Status, { label: string; icon: typeof Check; cls: string }> = {
   queued: { label: "À appeler", icon: Clock, cls: "text-muted-foreground" },
   ringing: { label: "Ça sonne", icon: PhoneCall, cls: "text-agent-voice" },
@@ -415,7 +419,7 @@ const STATUS: Record<Status, { label: string; icon: typeof Check; cls: string }>
   failed: { label: "Échec", icon: PhoneOff, cls: "text-destructive" },
 };
 
-function SupplierCard({ s, call, selected, onClick }: { s: SupplierNeed; call?: BuyCall; selected?: boolean; onClick: () => void }) {
+export function SupplierCard({ s, call, selected, onClick }: { s: SupplierNeed; call?: BuyCall; selected?: boolean; onClick: () => void }) {
   const st = STATUS[call?.status ?? "queued"];
   const Icon = st.icon;
   const live = call?.status === "ringing" || call?.status === "talking";
@@ -445,7 +449,8 @@ function SupplierCard({ s, call, selected, onClick }: { s: SupplierNeed; call?: 
   );
 }
 
-function SupplierDetail({ s, date, call, onBack }: { s: SupplierNeed; date: string; call?: BuyCall; onBack: () => void }) {
+/** `date`: the week view's first day, for « Pourquoi commander » (explained on the 7-day plan); the 12-week view has none. */
+export function SupplierDetail({ s, date, call, onBack }: { s: SupplierNeed; date?: string; call?: BuyCall; onBack: () => void }) {
   const st = STATUS[call?.status ?? "queued"];
   const [explain, setExplain] = useState(false);
   return (
@@ -461,7 +466,7 @@ function SupplierDetail({ s, date, call, onBack }: { s: SupplierNeed; date: stri
         <p className="flex items-start gap-1.5"><Sparkles size={13} className="mt-0.5 shrink-0 text-chart-3" />{s.reason}.</p>
         <p className="mt-1 text-muted-foreground">À livrer avant {dayLabel(s.deliverBy)} · {s.onTime ? "le délai du fournisseur le permet" : "délai serré : à confirmer au téléphone"}</p>
       </div>
-      {!explain ? (
+      {!explain && date ? (
         <motion.button type="button" onClick={() => setExplain(true)}
           initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 0.1 }}
           whileHover={{ y: -1 }} whileTap={{ scale: 0.985 }}
@@ -477,7 +482,7 @@ function SupplierDetail({ s, date, call, onBack }: { s: SupplierNeed; date: stri
         </motion.button>
       ) : null}
       <AnimatePresence initial={false}>
-        {explain ? <SupplyExplain key="explain" supplierId={s.supplierId} date={date} onClose={() => setExplain(false)} /> : null}
+        {explain && date ? <SupplyExplain key="explain" supplierId={s.supplierId} date={date} onClose={() => setExplain(false)} /> : null}
       </AnimatePresence>
       <div>
         <h3 className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">{call?.orderId ? `Commande ${call.number ?? ""} envoyée` : "Ce qu'on va commander"}</h3>
@@ -512,7 +517,7 @@ function SupplierDetail({ s, date, call, onBack }: { s: SupplierNeed; date: stri
   );
 }
 
-function Kpi({ label, sub, children, i, accent }: { label: string; sub: string; children: React.ReactNode; i: number; accent?: boolean }) {
+export function Kpi({ label, sub, children, i, accent }: { label: string; sub: string; children: React.ReactNode; i: number; accent?: boolean }) {
   return (
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 380, damping: 32, delay: 0.05 + i * 0.05 }}
       className={cn("min-w-0 px-5 py-3", i > 0 && "md:border-l md:border-border", i % 2 === 1 && "border-l border-border md:border-l")}>

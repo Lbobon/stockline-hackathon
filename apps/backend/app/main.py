@@ -67,7 +67,17 @@ async def lifespan(_: FastAPI):
 def warm_up() -> None:
     """Build the derived indexes once at boot (movement index, sorted lists, stock levels) so the first
     list request after a start doesn't pay for them."""
-    from app.services import dashboard, demand_gbm, invoices, orders, radar, stock
+    import threading
+
+    from app.services import (
+        dashboard,
+        demand_gbm,
+        demand_weekly,
+        invoices,
+        orders,
+        radar,
+        stock,
+    )
 
     stock.list_movements(limit=1)
     orders.orders_newest_first()
@@ -75,6 +85,8 @@ def warm_up() -> None:
     dashboard.dashboard()
     if radar.MODEL == "gbm":  # the radar's model: trained now (~5 s) rather than on a caller's first question
         demand_gbm.warm()
+    demand_weekly.warm()  # the supplier radar's 12-week model (~6 s)
+    threading.Thread(target=demand_weekly.backtest, daemon=True).start()  # its year of backtest (~30 s), off the boot path
 
 
 app = FastAPI(

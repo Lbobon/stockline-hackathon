@@ -17,6 +17,7 @@ class CampaignIn(BaseModel):
     clientIds: list[str] | None = None
     concurrency: int = 8
     kind: str = "clients"  # "supply": call the suppliers instead (campaign/supply.py); clientIds then = supplierIds
+    weeks: int | None = None  # supply only: book the spikes of the next `weeks` weeks (/api/radar/supply/ahead) instead of this week's shortfalls
 
 
 class DeliveriesIn(BaseModel):
@@ -33,7 +34,7 @@ def _get(cid: str) -> engine.Campaign:
 @router.post("/campaigns")
 async def start_campaign(body: CampaignIn) -> dict:
     if body.kind == "supply":
-        c = await supply.start(body.date, body.clientIds, min(body.concurrency, 6))
+        c = await supply.start(body.date, body.clientIds, min(body.concurrency, 6), body.weeks)
     else:
         c = await engine.start(body.date, body.clientIds, body.concurrency)
     return {"id": c.id, "kind": c.kind, "date": c.date, "calls": len(c.calls)}
