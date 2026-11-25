@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, BarChart3, Check, ChevronRight, Clock, Factory, PackageX, PhoneCall, PhoneOff, RotateCcw, Sparkles, X } from "lucide-react";
+import { ArrowLeft, BarChart3, Check, ChevronRight, Clock, CloudSun, Factory, Moon, PackageX, PhoneCall, PhoneOff, RotateCcw, Sparkles, Trophy, Users, X, type LucideIcon } from "lucide-react";
 import { Button, Spinner } from "@/ui";
 import { cn } from "@/lib/cn";
 import { fmtMoney, fmtQty } from "@/lib/format";
@@ -32,10 +32,12 @@ export interface SupplierNeed {
   lines: SupplyLine[]; totalHt: number; eventHt: number; events: string[]; deliverBy: string; arrives: string; onTime: boolean;
   belowMinimum: boolean; reason: string;
 }
+/** One event of the week, with its ERP calendar kind and the € of demand it adds (GET /api/radar/supply `events`). */
+export interface SupplyEvent { id: string; title: string; kind: string; days: string[]; extraHt: number }
 export interface SupplyDay { date: string; orderedHt: number; needHt: number; normalHt: number; eventHt: number; shortHt: number; events: string[] }
 export interface Supply {
   from: string; to: string; days: number; depot: { name: string; lat: number; lng: number }; timeline: SupplyDay[];
-  products: SupplyLine[]; suppliers: SupplierNeed[];
+  products: SupplyLine[]; suppliers: SupplierNeed[]; events?: SupplyEvent[];
   summary: { suppliers: number; lines: number; totalHt: number; eventHt: number; shortProducts: number };
 }
 
@@ -198,6 +200,7 @@ export function SupplyView({ date, actionsSlot }: { date: string; actionsSlot: (
         <div className="w-[440px] shrink-0 overflow-y-auto border-r border-border px-5 py-4">
           <Step n={1} title="On prévoit le pic de ventes" sub="les prévisions de chaque client, additionnées jour par jour" />
           <SpikeChart days={timeline} covered={covered} />
+          {shown.events ? <EventFamilies events={shown.events} /> : null}
 
           <Step n={2} title="On voit ce qui va manquer au dépôt" sub={`stock + marchandise en route, face à la demande du ${dayLabel(shown.from)} au ${dayLabel(shown.to)}`} className="mt-6" />
           <Legend />
@@ -251,6 +254,40 @@ function coveredByDay(sup: Supply, s: BuyState): number[] {
     });
   }
   return out;
+}
+
+/** The 4 families the radar sorts events into; the ERP calendar kinds map onto them. */
+const FAMILIES: { key: string; label: string; icon: LucideIcon; kinds: string[]; tone: string }[] = [
+  { key: "weather", label: "Météo", icon: CloudSun, kinds: ["weather"], tone: "text-chart-2 bg-chart-2/10" },
+  { key: "fetes", label: "Fêtes", icon: Moon, kinds: ["religious", "holiday"], tone: "text-chart-1 bg-chart-1/10" },
+  { key: "social", label: "Événements sociaux", icon: Users, kinds: ["wedding", "local", "concert"], tone: "text-chart-5 bg-chart-5/10" },
+  { key: "sport", label: "Sport", icon: Trophy, kinds: ["sport"], tone: "text-chart-4 bg-chart-4/10" },
+];
+
+function EventFamilies({ events }: { events: SupplyEvent[] }) {
+  return (
+    <div className="mt-3 rounded-lg border border-border bg-card p-2.5">
+      <p className="mb-1.5 text-[11.5px] font-medium uppercase tracking-wide text-muted-foreground">Cette semaine à Marseille</p>
+      <ul className="flex flex-col gap-1.5">
+        {FAMILIES.map((f, i) => {
+          const evs = events.filter((e) => f.kinds.includes(e.kind));
+          const eur = evs.reduce((a, e) => a + e.extraHt, 0);
+          const Icon = f.icon;
+          return (
+            <motion.li key={f.key} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 0.15 + i * 0.05 }}
+              className={cn("flex items-start gap-2", !evs.length && "opacity-55")}>
+              <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-md", f.tone)}><Icon size={13} strokeWidth={1.9} /></span>
+              <span className="min-w-0 flex-1 text-[12.5px] leading-[18px]">
+                <b className="font-medium text-foreground">{f.label}</b>
+                <span className="text-muted-foreground"> · {evs.length ? evs.map((e) => shortEvent(e.title)).join(", ") : "rien de prévu"}</span>
+              </span>
+              {eur >= 1 ? <span className="num shrink-0 text-[12.5px] font-medium text-foreground">+{kEur(eur)}</span> : null}
+            </motion.li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
 
 const shortEvent = (t: string) => t.split(/ (?:du|au) /)[0];

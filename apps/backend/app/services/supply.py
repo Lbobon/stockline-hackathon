@@ -110,10 +110,15 @@ def supply(date: str | None = None, days: int = 7) -> Doc:
         return prices[pid]
 
     titles: dict[str, str] = {}
+    kinds: dict[str, str] = {}
+    event_ht: dict[str, float] = {}  # event → € of demand it adds over the week
+    event_days: dict[str, set[str]] = {}
     clients: dict[str, set[str]] = {}
     for day, f in zip(dates, _forecasts(dates)):
         for e in f["events"]:
             titles[e["id"]] = e["title"]
+            kinds[e["id"]] = e.get("kind", "local")
+            event_days.setdefault(e["id"], set()).add(day)
         for c in f["clients"]:
             if c["status"] in ("ordered", "upsell"):  # already ordered: reserved in the stock, only shown in the chart
                 ordered_ht[day] += sum(l["qty"] * _price(l["productId"]) for l in c["lines"])
@@ -133,6 +138,7 @@ def supply(date: str | None = None, days: int = 7) -> Doc:
                     event_qty[pid] = event_qty.get(pid, 0.0) + extra
                     events.setdefault(pid, set()).add(l["eventId"])
                     day_events[day][l["eventId"]] = day_events[day].get(l["eventId"], 0.0) + extra
+                    event_ht[l["eventId"]] = event_ht.get(l["eventId"], 0.0) + extra * _price(pid)
 
     levels = stock_levels()
     due = _incoming(dates[-1])
@@ -206,6 +212,8 @@ def supply(date: str | None = None, days: int = 7) -> Doc:
     return {
         "from": dates[0], "to": dates[-1], "days": len(dates), "depot": geo.DEPOT, "timeline": timeline,
         "products": products, "suppliers": suppliers,
+        "events": sorted(({"id": e, "title": t, "kind": kinds[e], "days": sorted(event_days[e]), "extraHt": round2(event_ht.get(e, 0.0))}
+                          for e, t in titles.items()), key=lambda x: -x["extraHt"]),
         "summary": {"suppliers": len(suppliers), "lines": sum(len(s["lines"]) for s in suppliers),
                     "totalHt": round2(sum(s["totalHt"] for s in suppliers)),
                     "eventHt": round2(sum(s["eventHt"] for s in suppliers)),
