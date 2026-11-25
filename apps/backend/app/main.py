@@ -69,7 +69,15 @@ def warm_up() -> None:
     list request after a start doesn't pay for them."""
     import threading
 
-    from app.services import dashboard, demand_gbm, demand_weekly, invoices, orders, radar, stock
+    from app.services import (
+        dashboard,
+        demand_gbm,
+        demand_weekly,
+        invoices,
+        orders,
+        radar,
+        stock,
+    )
 
     stock.list_movements(limit=1)
     orders.orders_newest_first()

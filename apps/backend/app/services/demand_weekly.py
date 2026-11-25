@@ -190,7 +190,7 @@ def _table(fp: tuple) -> Doc:
             cl_now = avg(lambda m, p=p: n_clients.get((p, m), 0), o, 1, 8)
             clients_growth = cl_now / (avg(lambda m, p=p: n_clients.get((p, m), 0), o, 53, 60) or math.nan)
 
-            def ratio(back: int, t: Date) -> tuple[float, float]:
+            def ratio(back: int, t: Date, o: Date = o) -> tuple[float, float]:
                 base = [q(o - W * (back + i)) for i in range(1, NORMAL_WEEKS + 1)]
                 if any(math.isnan(v) for v in base) or not mean(base) > 0:
                     return math.nan, math.nan

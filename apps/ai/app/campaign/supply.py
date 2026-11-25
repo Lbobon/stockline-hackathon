@@ -219,6 +219,10 @@ async def run(c: Campaign, rows: list[dict], concurrency: int) -> None:
 async def start(date: str | None, supplier_ids: list[str] | None, concurrency: int = 6, weeks: int | None = None) -> Campaign:
     erp = ErpClient("voice_agent", "Radar")
     needs = await (erp.get("/api/radar/supply/ahead", {"weeks": weeks}) if weeks else erp.get("/api/radar/supply", {"date": date}))
+    # one supplier round per date at a time: a second click joins the running one instead of ordering everything twice
+    running = next((x for x in engine.CAMPAIGNS.values() if x.kind == "supply" and x.date == needs["from"] and x.status == "running"), None)
+    if running:
+        return running
     rows = [s for s in needs["suppliers"] if not supplier_ids or s["supplierId"] in supplier_ids]
     c = Campaign(id=f"sup_{uuid.uuid4().hex[:8]}", date=needs["from"], forecast=needs, kind="supply")
     c.totals.update({"neededHt": round(sum(r["totalHt"] for r in rows), 2), "coverage": 0.0})

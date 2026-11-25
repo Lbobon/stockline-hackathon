@@ -21,8 +21,10 @@ import { AheadView, HorizonSwitch } from "./Ahead";
 
 const DATE = "2026-11-25";
 
+// The radar opens on supply: we predict the spike in sales, then call the suppliers in advance. The client calls are the
+// second tab (?view=clients).
 type View = "clients" | "supply";
-const urlView = (): View => (new URLSearchParams(location.search).get("view") === "supply" ? "supply" : "clients");
+const urlView = (): View => (new URLSearchParams(location.search).get("view") === "clients" ? "clients" : "supply");
 const urlHorizon = () => (new URLSearchParams(location.search).get("horizon") === "ahead" ? "ahead" : "week");
 
 export default function RadarPage() {
@@ -40,7 +42,7 @@ export default function RadarPage() {
   };
   const setView = (v: View) => {
     const u = new URL(location.href);
-    if (v === "supply") u.searchParams.set("view", "supply");
+    if (v === "clients") u.searchParams.set("view", "clients");
     else u.searchParams.delete("view");
     history.replaceState(history.state, "", u);
     setView_(v);
@@ -49,7 +51,7 @@ export default function RadarPage() {
   if (view === "supply") {
     return (
       <Page>
-        <PageHeader title="Radar fournisseurs" icon={<Radar size={15} strokeWidth={1.75} />}
+        <PageHeader title="Radar d'approvisionnement" icon={<Radar size={15} strokeWidth={1.75} />}
           meta={<div className="flex items-center gap-2">{toggle}<HorizonSwitch value={horizon} onChange={setHorizon} /></div>} actions={supplyActions} />
         {horizon === "ahead" ? <AheadView actionsSlot={setSupplyActions} /> : <SupplyView date={DATE} actionsSlot={setSupplyActions} />}
       </Page>

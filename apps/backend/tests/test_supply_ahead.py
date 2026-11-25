@@ -13,9 +13,9 @@ os.environ["DB_PATH"] = str(Path(tempfile.mkdtemp()) / "erp.db")
 os.environ["FEEDS"] = "off"  # no weather: the climate column is empty, the model still works without it
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi.testclient import TestClient
 
-from app.main import app  # noqa: E402
+from app.main import app
 
 with TestClient(app) as c:
     a = c.get("/api/radar/supply/ahead", params={"weeks": 12}).json()
