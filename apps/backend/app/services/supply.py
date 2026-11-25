@@ -8,7 +8,8 @@ product's main supplier, so the depot has it before the clients ask.
     need        Σ over the days of P(order) × predicted qty (predicted clients) + the add-on qty (upsell clients);
                 orders already placed are already reserved in the stock, so they are not counted twice
     eventQty    the part of `need` that only exists because of an event (qty − usual qty on event lines)
-    cover       available + incoming (a sent purchase order counts as stock on its way)
+    cover       available + incoming (a sent purchase order due by the last day counts as stock on its way; a booking
+                for a later week, such as the 12-week view's, does not)
     short       need − cover, when positive
     orderQty    short + a safety margin, rounded up to a round quantity (kg by 5, pieces/boxes by 1)
 
@@ -44,6 +45,17 @@ CITY = {
     "Ancenis": (47.366, -1.177), "Vitrolles": (43.460, 5.248), "Marseille 15e": (43.360, 5.360),
     "Saint-Martin-de-Crau": (43.640, 4.813), "Les Pennes-Mirabeau": (43.410, 5.310), "Marseille 1er": (43.300, 5.380),
 }  # fmt: skip
+
+
+def _incoming(until: str) -> dict[str, float]:
+    """Per product, what sent purchase orders due by `until` still have to deliver. stock_levels' « incoming » counts every
+    sent order; here a booking for February (12-week view) must not look like stock arriving this week."""
+    out: dict[str, float] = {}
+    for po in crud.purchase_orders.rows.values():
+        if po["status"] in ("sent", "partially_received") and (po.get("expectedDate") or "") <= until:
+            for l in po["lines"]:
+                out[l["productId"]] = out.get(l["productId"], 0.0) + max(0.0, l["qty"] - l.get("receivedQty", 0))
+    return out
 
 
 def _round_up(qty: float, unit: str) -> float:
@@ -123,6 +135,7 @@ def supply(date: str | None = None, days: int = 7) -> Doc:
                     day_events[day][l["eventId"]] = day_events[day].get(l["eventId"], 0.0) + extra
 
     levels = stock_levels()
+    due = _incoming(dates[-1])
     products: list[Doc] = []
     by_supplier: dict[str, list[Doc]] = {}
     tl = {d: {"needHt": 0.0, "normalHt": 0.0, "shortHt": 0.0} for d in dates}
@@ -132,7 +145,7 @@ def supply(date: str | None = None, days: int = 7) -> Doc:
             continue
         lv = levels.get(pid) or {}
         available = max(0.0, float(lv.get("available") or 0))
-        incoming = float(lv.get("incoming") or 0)
+        incoming = due.get(pid, 0.0)
         short = q - available - incoming
         sid = prod.get("mainSupplierId")
         price = _price(pid)
@@ -396,6 +409,8 @@ def supply_explain(supplier_id: str, date: str | None = None, days: int = 7) -> 
     on_way: dict[str, list[Doc]] = {pid: [] for pid in pids}
     for po in crud.purchase_orders.rows.values():
         if po["status"] not in ("sent", "partially_received"):
+            continue
+        if (po.get("expectedDate") or "") > dates[-1]:  # booked for a later week: not on its way for this window
             continue
         for l in po["lines"]:
             if l["productId"] in pids and l["qty"] - l.get("receivedQty", 0) > 0:

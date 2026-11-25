@@ -45,4 +45,14 @@ with TestClient(app) as c:
     allh = bt["horizons"]["tout"]
     assert allh["patternsOnly"]["error"] < allh["normal"]["error"] and allh["patternsOnly"]["error"] < allh["lastYear"]["error"], allh
     assert allh["model"]["extraCaught"] > allh["lastYear"]["extraCaught"], allh
+    # A booking for February (what the 12-week calls send) is not stock arriving this week: the 7-day plan keeps its
+    # suppliers. Before the fix every sent order counted as « en route » and the week showed a single supplier.
+    week = c.get("/api/radar/supply").json()
+    top = week["suppliers"][0]
+    po = c.post("/api/purchase-orders", json={"supplierId": top["supplierId"], "expectedDate": "2027-02-13",
+                                             "lines": [{"productId": l["productId"], "qty": l["qty"] * 20} for l in top["lines"]]}).json()  # fmt: skip
+    c.post(f"/api/purchase-orders/{po['id']}/send")
+    after = c.get("/api/radar/supply").json()
+    assert [s["supplierId"] for s in after["suppliers"]] == [s["supplierId"] for s in week["suppliers"]], (week["summary"], after["summary"])
+    assert len(week["suppliers"]) >= 5, week["summary"]
     print("supply ahead OK:", a["summary"], "| backtest:", {k: allh[k]["error"] for k in ("model", "patternsOnly", "lastYear", "normal")})
