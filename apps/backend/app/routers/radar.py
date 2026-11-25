@@ -5,7 +5,7 @@ from fastapi import APIRouter, Query
 from app.core.activity import today
 from app.dependencies import CtxDep, iso_date_query
 from app.schemas.inputs import CalendarEventCreate
-from app.services import calendar, demand, demand_daily, feeds, radar, radar_backtest, supply
+from app.services import calendar, demand, demand_daily, demand_weekly, feeds, radar, radar_backtest, supply
 
 router = APIRouter(prefix="/api/radar", tags=["radar"])
 
@@ -34,6 +34,22 @@ async def supply_needs(date: str | None = Query(None, description="YYYY-MM-DD, f
     purchase to make from each product's main supplier, with the events behind it. The supplier campaign calls these."""
     await feeds.ensure()
     return supply.supply(iso_date_query(date), days)
+
+
+@router.get("/supply/ahead")
+async def supply_ahead(weeks: int = Query(12, ge=2, le=12)):
+    """The demand spikes of the next `weeks` weeks per product (week-level model, services/demand_weekly.py: season, last
+    year, trend, climate, holidays and the event calendar), and the call to book each supplier ahead of its next spike."""
+    await feeds.ensure()
+    return supply.ahead(weeks)
+
+
+@router.get("/supply/ahead/backtest")
+async def supply_ahead_backtest(weeks: int = Query(52, ge=8, le=52)):
+    """The week-level model replayed on the last `weeks` weeks (walk-forward, each forecast made with only the weeks before
+    it): € error per horizon, spike recall / precision, vs « comme les dernières semaines » and « comme l'an dernier »,
+    and the same model without the event calendar (broad patterns only)."""
+    return demand_weekly.backtest(weeks)
 
 
 @router.get("/clients/{client_id}/suggestion")

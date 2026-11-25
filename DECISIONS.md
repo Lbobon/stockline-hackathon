@@ -74,6 +74,13 @@ Quand les fêtes font monter la demande des restaurants, c'est le dépôt qui ri
 
 Essai sur la semaine du 25 novembre : 12 produits allaient manquer (39 923 € à acheter, dont 4 359 € à cause des événements). 5 fournisseurs appelés en même temps, 5 réponses, 1 commande complète et 4 partielles (« je n'ai que 580 kg d'épaule »), **33 552 € commandés, 84 % du manque couvert**. Comme côté clients, **les fournisseurs qui répondent sont simulés** à partir de leur fiche persona (`data/context/suppliers`).
 
+**Les 12 prochaines semaines** (retour de la démo : prévoir les pics de ventes, pas seulement les jours d'événement, pour appeler les fournisseurs à l'avance). Sur /radar, Fournisseurs → « 12 semaines » :
+1. **Le modèle** (`services/demand_weekly.py`, `GET /api/radar/supply/ahead`) : un LightGBM sur 3 ans de ventes **produit par produit et semaine par semaine** (≈ 118 000 lignes : 66 produits × 150 semaines de départ × 12 horizons). Il prévoit la quantité de chaque semaine à venir divisée par la « semaine normale » (moyenne des 8 dernières semaines). Ce qu'il regarde, au-delà des événements : la semaine de l'année et le mois, l'an dernier et il y a deux ans à la même semaine (et le pic autour), la tendance (4 semaines, 6 mois), la **croissance du produit sur un an**, le **nombre de clients** qui l'achètent comparé à l'an dernier, l'élan de sa catégorie, la **normale de température** de la semaine (étés de barbecue, d'après l'historique Open-Meteo), les jours fériés (le dépôt ne livre pas le 1er janvier, le 1er mai et le 25 décembre) et le début de mois. Le calendrier (ramadan, aïds, fêtes, marché de Noël, vacances) entre par sa **position** : jours de la semaine dedans, jours avant le début, pour la semaine visée et pour la même semaine l'an dernier (sinon le pic de l'an dernier, dû au ramadan qui a bougé, serait pris pour une saison). Météo du jour, matchs et concerts n'y sont pas : on ne les connaît pas des semaines à l'avance.
+2. **Le pic** : une semaine prévue à +25 % de la normale et au moins 150 € au-dessus. Chaque pic dit pourquoi en français : l'événement, « saison : +81 % l'an dernier à la même semaine », « en croissance : +115 % sur un an », « plus de clients qu'il y a un an », la tendance, l'été.
+3. **Les réservations** : pour chaque fournisseur, sa semaine au plus gros pic (en € au-dessus de la normale) ; la quantité en plus de l'habitude + 10 %, livrée le samedi d'avant (la viande fraîche ne se stocke pas des semaines). Les autres pics sont nommés dans la raison, pour un appel plus tard. Mêmes appels parallèles (`POST /ai/campaigns {kind: "supply", weeks: 12}`), l'agent dit « on réserve dès maintenant pour être sûrs d'être servis ».
+
+Au 24 novembre : Noël sous la normale (−23 % et −26 %, cantines fermées et jours fériés), janvier légèrement au-dessus, puis le ramadan 2027 (+154 % les semaines du 8 et du 15 février) ; 10 fournisseurs à réserver pour ≈ 290 k€. Le filtre « Hors événements » montre les pics qu'aucun événement n'explique : nuggets (+115 % sur un an, 50 % de clients en plus), escalope de veau, filet de bœuf, barquettes et harissa en janvier.
+
 ## 1 ter. « Le Garde-fou » : l'agent ne peut pas inventer un chiffre (PR #47)
 
 Chaque phrase que l'agent va prononcer est vérifiée contre l'ERP **avant** d'être dite (`apps/ai/app/guard/`) :
@@ -107,7 +114,7 @@ Le simulateur (`apps/ai/sim`, `cd apps/ai && uv run python -m sim`) : un modèle
 
 **Appels génériques** (`python -m sim --generic 30 --seed 7`) : pour ne pas sur-ajuster l'agent à nos scénarios, on tire au hasard un vrai client et une des 15 situations courantes (change deux fois une quantité, décrit un produit sans son nom, demande un prix sans commander, réclamation, veut parler à un humain, produit hors catalogue, demande une remise, parle d'autre chose, « oui » ambigu, heure du camion, grosse commande, client pressé, retirer une ligne, client agressif, jour non livré). On ne vérifie que des règles vraies pour tout appel (bon client, rien écrit pour un autre, compte bloqué jamais confirmé, commande seulement si voulue), le juge fait le reste. Même graine = mêmes appels, pour comparer avant / après.
 
-Plus les tests du backend (`apps/backend/tests/` : `test_smart`, `test_shortages`, `test_radar`, `test_radar_backtest`, `test_feeds`, `test_dispatch`), 125 tests du service IA, et un test sur une **installation propre** (clone neuf + `make setup` + une campagne complète dans l'interface).
+Plus les tests du backend (`apps/backend/tests/` : `test_smart`, `test_shortages`, `test_radar`, `test_radar_backtest`, `test_feeds`, `test_dispatch`, `test_demand_daily`, `test_supply_ahead`), 125 tests du service IA, et un test sur une **installation propre** (clone neuf + `make setup` + une campagne complète dans l'interface).
 
 ## 3. Choix techniques
 
@@ -214,6 +221,17 @@ Rétro-test mois par mois sur les 12 derniers mois (entraîné sur tout ce qui p
 | Froid / chaleur / marché de Noël | 22–26 | 13–17 % | 10–15 % | 10–15 % | 14–30 % |
 
 Lecture honnête : il gagne nettement là où l'argent se joue (ramadan, aïds, vacances), pas sur les petits événements (froid, chaleur, marché de Noël : la médiane fait aussi bien). Sur les 3 derniers mois seuls (septembre–novembre, sans grand événement), la médiane des 8 semaines fait mieux (13 % contre 15 %). Il sous-estime d'environ 7 % en moyenne. La météo passée utilisée dans le rétro-test est la météo observée, un léger avantage sur une vraie prévision de la veille. `GET /api/radar/outlook` donne les 14 prochains jours de livraison, par segment, comparés à une semaine normale, avec les événements en cours et à venir.
+
+**Prévision des 12 prochaines semaines, produit par produit** (`demand_weekly.py`, `GET /api/radar/supply/ahead/backtest`, test `apps/backend/tests/test_supply_ahead.py`). Rétro-test glissant sur les 52 dernières semaines : chaque semaine de départ ne connaît que les semaines d'avant, modèle réentraîné toutes les 4 semaines, 36 000 prévisions produit × semaine. Écart = Σ |prévu − vendu| en € ÷ vendu. « Pics vus venir » = part des € au-dessus de la normale, dans les vrais pics, que la prévision avait annoncée.
+
+| Prévision | 1-2 sem. | 5-8 sem. | 9-12 sem. | Pics vus venir |
+|---|---|---|---|---|
+| **Notre modèle** | **22 %** | **23 %** | **23 %** | **67 %** |
+| Le même sans le calendrier d'événements | 30 % | 31 % | 32 % | 53 % |
+| Comme l'an dernier, même semaine (ramené au niveau actuel) | 39 % | 37 % | 37 % | 50 % |
+| Comme les 8 dernières semaines | 43 % | 45 % | 48 % | 0 % |
+
+Lecture honnête : l'erreur est **deux fois plus petite** qu'avec la règle « comme d'habitude », et elle ne grossit presque pas à 12 semaines, parce que ce qui fait les pics (saison, calendrier) se connaît à l'avance. Sans aucun événement, les tendances seules (saison, an dernier, croissance, clients, température) battent déjà les deux règles simples : le modèle ne se contente pas d'apprendre le ramadan. Les pics détectés sont justes à 66 % mais n'en attrapent que 38 % en nombre : beaucoup de « pics » d'une semaine sur un petit produit sont du bruit ; en €, là où ça compte, 67 % sont vus. Une limite : un produit qui n'a qu'une saison d'historique (nouveau) n'a pas de « l'an dernier ».
 
 Sur ce dernier run, les deux échecs sont : une coupure réseau de l'API (corrigée ensuite par une nouvelle tentative automatique, PR #35) et une remarque du juge sur un prospect. Le coût double avec l'orchestre (agents secondaires), mais reste à 1 centime par appel.
 

@@ -61,7 +61,9 @@ function reduce(s: BuyState, a: { type: "reset" } | { type: "start"; id: string;
   return st;
 }
 
-function useSupplyCampaign(supply?: Supply) {
+const SUPPLY_KEY = ["radar", "supply"];
+
+export function useSupplyCampaign(supply?: Pick<Supply, "from" | "suppliers">, weeks?: number, queryKey: string[] = SUPPLY_KEY) {
   const [state, dispatch] = useReducer(reduce, INIT);
   const es = useRef<EventSource | null>(null);
   const qc = useQueryClient();
@@ -70,7 +72,7 @@ function useSupplyCampaign(supply?: Supply) {
     if (!supply) return;
     es.current?.close();
     const r = await fetch(`${AI_BASE}/campaigns`, { method: "POST", headers: { "content-type": "application/json", "x-actor": "user" },
-      body: JSON.stringify({ kind: "supply", date: supply.from, concurrency: 6 }) });
+      body: JSON.stringify({ kind: "supply", date: supply.from, concurrency: 6, weeks }) });
     if (!r.ok) throw new Error(`${r.status}`);
     const { id } = await r.json();
     dispatch({ type: "start", id, calls: supply.suppliers.map((s, i) => ({ callId: `buy_${String(i + 1).padStart(2, "0")}`, supplierId: s.supplierId, name: s.name,
@@ -85,10 +87,10 @@ function useSupplyCampaign(supply?: Supply) {
       if (!timer) timer = window.setTimeout(() => {
         timer = 0; const events = queue; queue = [];
         dispatch({ type: "events", events });
-        if (events.some((e) => e.type === "done")) { src.close(); qc.invalidateQueries({ queryKey: ["radar", "supply"] }); }
+        if (events.some((e) => e.type === "done")) { src.close(); qc.invalidateQueries({ queryKey }); }
       }, 50);
     };
-  }, [supply, qc]);
+  }, [supply, qc, weeks, queryKey]);
   const reset = useCallback(() => { es.current?.close(); dispatch({ type: "reset" }); }, []);
   return { state, start, reset };
 }
@@ -249,6 +251,8 @@ function ShortRow({ p, i, covered }: { p: SupplyLine; i: number; covered: number
   );
 }
 
+export type { BuyCall, BuyState };
+
 const STATUS: Record<Status, { label: string; icon: typeof Check; cls: string }> = {
   queued: { label: "À appeler", icon: Clock, cls: "text-muted-foreground" },
   ringing: { label: "Ça sonne", icon: PhoneCall, cls: "text-agent-voice" },
@@ -260,7 +264,7 @@ const STATUS: Record<Status, { label: string; icon: typeof Check; cls: string }>
   failed: { label: "Échec", icon: PhoneOff, cls: "text-destructive" },
 };
 
-function SupplierCard({ s, call, onClick }: { s: SupplierNeed; call?: BuyCall; onClick: () => void }) {
+export function SupplierCard({ s, call, onClick }: { s: SupplierNeed; call?: BuyCall; onClick: () => void }) {
   const st = STATUS[call?.status ?? "queued"];
   const Icon = st.icon;
   const live = call?.status === "ringing" || call?.status === "talking";
@@ -290,7 +294,7 @@ function SupplierCard({ s, call, onClick }: { s: SupplierNeed; call?: BuyCall; o
   );
 }
 
-function SupplierDetail({ s, call, onBack }: { s: SupplierNeed; call?: BuyCall; onBack: () => void }) {
+export function SupplierDetail({ s, call, onBack }: { s: SupplierNeed; call?: BuyCall; onBack: () => void }) {
   const st = STATUS[call?.status ?? "queued"];
   return (
     <div className="flex flex-col gap-4">
@@ -338,7 +342,7 @@ function SupplierDetail({ s, call, onBack }: { s: SupplierNeed; call?: BuyCall; 
   );
 }
 
-function Kpi({ label, sub, children, i, accent }: { label: string; sub: string; children: React.ReactNode; i: number; accent?: boolean }) {
+export function Kpi({ label, sub, children, i, accent }: { label: string; sub: string; children: React.ReactNode; i: number; accent?: boolean }) {
   return (
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 380, damping: 32, delay: 0.05 + i * 0.05 }}
       className={cn("min-w-0 px-5 py-3", i > 0 && "md:border-l md:border-border", i % 2 === 1 && "border-l border-border md:border-l")}>
